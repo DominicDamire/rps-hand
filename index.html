@@ -11,7 +11,8 @@
   #app { display: grid; grid-template-rows: 1fr 1fr; height: 100%; }
   @media (orientation: landscape) { #app { grid-template-rows: 1fr; grid-template-columns: 1fr 1fr; } }
   .pane { position: relative; overflow: hidden; }
-  video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); background: #000; }
+  video, #ov, #still { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); background: #000; }
+  #ov { position: absolute; inset: 0; background: none; pointer-events: none; }
   #gl { width: 100%; height: 100%; display: block; background: #1c212e; }
   .hud { position: absolute; left: 12px; right: 12px; pointer-events: none; text-shadow: 0 0 6px #000, 0 0 2px #000; font-weight: 700; }
   #top { top: 10px; } #bottom { bottom: 12px; }
@@ -26,7 +27,8 @@
 <div id="app">
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
-    <div class="hud" id="top"><div id="gesture">GESTURE: -</div><div id="move">MOVE: ?</div></div>
+    <canvas id="ov"></canvas>
+    <div class="hud" id="top"><div id="gesture">GESTURE: -</div><div id="move">MOVE: ?</div><div id="stats" style="font-size:13px;color:#9aa4b8">tracker: -</div></div>
     <div class="hud" id="bottom"><div id="score">SCORE you 0 : 0 cpu</div><div id="game">Tap PLAY for a round</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
@@ -49,6 +51,7 @@ const LENGTH = {1:.040,2:.035,3:.030,4:.025, 5:.092,6:.040,7:.025,8:.022, 9:.088
                 13:.082,14:.040,15:.026,16:.022, 17:.076,18:.032,19:.020,20:.020};
 const PALM = [0, 5, 9, 13, 17];
 const PALM_EDGES = [[5, 9], [9, 13], [13, 17]];
+const CONNECTIONS = Object.entries(PARENT).map(([j, p]) => [+p, +j]).concat(PALM_EDGES);
 const MOVE_OF_GESTURE = { Closed_Fist: "ROCK", Open_Palm: "PAPER", Victory: "SCISSORS" };
 const BEATS = { ROCK: "SCISSORS", PAPER: "ROCK", SCISSORS: "PAPER" };
 
@@ -108,6 +111,30 @@ const palm = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMa
 palm.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3 * 3 * 3), 3)); // 3 triangles of the 5-point palm fan
 hand.add(palm);
 const UP = new THREE.Vector3(0, 1, 0);
+// skeleton lines drawn on top of the capsules so every tracked joint is visible on the model too
+const skel = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x78ff78, depthTest: false }));
+skel.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CONNECTIONS.length * 2 * 3), 3));
+skel.renderOrder = 1; hand.add(skel);
+const dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xffffff, size: 0.008, depthTest: false }));
+dots.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(21 * 3), 3));
+dots.renderOrder = 2; hand.add(dots);
+
+// 2D overlay on the camera: dots + bone lines from the normalised image landmarks
+const ov = $("ov"), octx = ov.getContext("2d");
+function drawOverlay(lm, src) {
+  const w = src.videoWidth || src.naturalWidth || 0, h = src.videoHeight || src.naturalHeight || 0;
+  if (ov.width !== w || ov.height !== h) { ov.width = w; ov.height = h; }
+  octx.clearRect(0, 0, w, h);
+  if (!lm) return;
+  octx.lineWidth = Math.max(2, w / 240); octx.strokeStyle = "#78ff78"; octx.lineCap = "round";
+  octx.beginPath();
+  for (const [a, b] of CONNECTIONS) { octx.moveTo(lm[a].x * w, lm[a].y * h); octx.lineTo(lm[b].x * w, lm[b].y * h); }
+  octx.stroke();
+  lm.forEach((p, i) => {
+    octx.beginPath(); octx.arc(p.x * w, p.y * h, [4, 8, 12, 16, 20].includes(i) ? w / 90 : w / 140, 0, Math.PI * 2);
+    octx.fillStyle = i === 0 ? "#ff7878" : [4, 8, 12, 16, 20].includes(i) ? "#ffe678" : "#fff"; octx.fill();
+  });
+}
 
 function placeCylinder(mesh, a, b, r) {
   const d = b.clone().sub(a); const L = d.length();
@@ -125,6 +152,11 @@ function drawHand(pts, visible) {
   const pos = palm.geometry.attributes.position; let k = 0;
   for (const [i1, i2] of [[5, 9], [9, 13], [13, 17]]) for (const i of [0, i1, i2]) { pos.setXYZ(k++, pts[i].x, pts[i].y, pts[i].z); }
   pos.needsUpdate = true; palm.geometry.computeVertexNormals(); palm.material.color.copy(mat.color);
+  const sp = skel.geometry.attributes.position; let q = 0;
+  for (const [a, b] of CONNECTIONS) for (const i of [a, b]) sp.setXYZ(q++, pts[i].x, pts[i].y, pts[i].z);
+  sp.needsUpdate = true;
+  const dp = dots.geometry.attributes.position;
+  pts.forEach((p, i) => dp.setXYZ(i, p.x, p.y, p.z)); dp.needsUpdate = true;
   hand.visible = true;
 }
 
@@ -159,7 +191,7 @@ async function main() {
   const imgSrc = new URLSearchParams(location.search).get("img");  // ?img=victory.jpg = self-check without a camera
   if (imgSrc) {
     const img = new Image(); img.src = imgSrc; await img.decode();
-    img.style.cssText = "width:100%;height:100%;object-fit:cover"; video.replaceWith(img); video = img;
+    img.id = "still"; video.replaceWith(img); video = img;
   } else try {
     video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
     await new Promise(r => video.onloadedmetadata = r);
@@ -175,13 +207,16 @@ async function main() {
   if (!rec) { $("status").textContent = "Hand tracker failed to load. Check the connection and reload."; return; }
   $("status").remove();
 
-  let pose = null, lastT = -1, label = "-", move = null, visible = false, ts = 0;
+  let pose = null, lastT = -1, label = "-", move = null, visible = false, ts = 0, frames = 0, fpsT = performance.now();
   const loop = () => {
     const now = performance.now();
     if (imgSrc || (video.currentTime !== lastT && video.readyState >= 2)) {
       lastT = video.currentTime;
       ts = Math.max(ts + 1, Math.floor(now));
       const res = rec.recognizeForVideo(video, ts);
+      const ms = performance.now() - now;
+      frames++; if (now - fpsT > 1000) { $("stats").textContent = `tracker: ${ms.toFixed(0)} ms  |  ${frames} fps  |  hands: ${res.landmarks?.length ?? 0}`; frames = 0; fpsT = now; }
+      drawOverlay(res.landmarks?.[0], video);
       visible = res.worldLandmarks?.length > 0;
       if (visible) {
         const target = retarget(toGL(res.worldLandmarks[0]));
@@ -201,7 +236,7 @@ async function main() {
   };
   loop();
 }
-main().catch(e => { $("status").textContent = "Error: " + e.message; console.error(e); });
+main().catch(e => { console.error(e); const s = $("status"); if (s) s.textContent = "Error: " + e.message; else $("game").textContent = "Error: " + e.message; });
 </script>
 </body>
 </html>
