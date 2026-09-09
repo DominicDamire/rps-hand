@@ -16,11 +16,14 @@
   #gl { width: 100%; height: 100%; display: block; background: #1c212e; }
   .hud { position: absolute; left: 12px; right: 12px; pointer-events: none; text-shadow: 0 0 6px #000, 0 0 2px #000; font-weight: 700; }
   #top { top: 10px; } #bottom { bottom: 12px; }
-  #gesture { color: #c8dcff; font-size: 15px; } #move { color: #78ff78; font-size: 26px; }
+  #hand { color: #c8dcff; font-size: 15px; } #move { color: #78ff78; font-size: 26px; }
+  #stats { font-size: 13px; color: #9aa4b8; white-space: pre-line; }
   #game { color: #ffe678; font-size: 22px; } #score { font-size: 15px; }
-  #status { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; background: #0f1116; font-size: 18px; }
-  #play { position: absolute; right: 12px; bottom: 12px; padding: 12px 22px; font: inherit; font-weight: 700; border: 0; border-radius: 999px; background: #78ff78; color: #000; }
+  #status { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; background: #0f1116; font-size: 18px; white-space: pre-line; }
+  button { position: absolute; padding: 12px 22px; font: inherit; font-weight: 700; border: 0; border-radius: 999px; }
+  #play { right: 12px; bottom: 12px; background: #78ff78; color: #000; }
   #play:disabled { opacity: .4; }
+  #mode { left: 12px; bottom: 12px; background: #2a3145; color: #fff; padding: 10px 16px; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -28,12 +31,13 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="gesture">GESTURE: -</div><div id="move">MOVE: ?</div><div id="stats" style="font-size:13px;color:#9aa4b8">tracker: -</div></div>
+    <div class="hud" id="top"><div id="hand">HAND: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading</div></div>
     <div class="hud" id="bottom"><div id="score">SCORE you 0 : 0 cpu</div><div id="game">Tap PLAY for a round</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
     <canvas id="gl"></canvas>
+    <button id="mode">MODE: predict</button>
     <button id="play">PLAY</button>
   </div>
 </div>
@@ -41,85 +45,184 @@
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js" } }</script>
 <script type="module">
 import * as THREE from "three";
-import { FilesetResolver, GestureRecognizer } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs";
 
 const $ = id => document.getElementById(id);
+const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1";
+const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
+// Lower presence/tracking thresholds = the tracker holds on longer through motion blur before giving up.
+const TRACKER_OPTS = { runningMode: "VIDEO", numHands: 1, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.3, minTrackingConfidence: 0.3 };
 
-// --- same skeleton + canonical bone lengths as rps_hand.py -------------------------------------
+// --- skeleton + canonical bone lengths (same as rps_hand.py) ------------------------------------
 const PARENT = {1:0,2:1,3:2,4:3, 5:0,6:5,7:6,8:7, 9:0,10:9,11:10,12:11, 13:0,14:13,15:14,16:15, 17:0,18:17,19:18,20:19};
 const LENGTH = {1:.040,2:.035,3:.030,4:.025, 5:.092,6:.040,7:.025,8:.022, 9:.088,10:.045,11:.028,12:.022,
                 13:.082,14:.040,15:.026,16:.022, 17:.076,18:.032,19:.020,20:.020};
 const PALM = [0, 5, 9, 13, 17];
 const PALM_EDGES = [[5, 9], [9, 13], [13, 17]];
 const CONNECTIONS = Object.entries(PARENT).map(([j, p]) => [+p, +j]).concat(PALM_EDGES);
-const MOVE_OF_GESTURE = { Closed_Fist: "ROCK", Open_Palm: "PAPER", Victory: "SCISSORS" };
 const BEATS = { ROCK: "SCISSORS", PAPER: "ROCK", SCISSORS: "PAPER" };
-
 const V = () => new THREE.Vector3();
 
-// MediaPipe world landmarks (x right, y down, z away). Mirror x so the replica matches the mirrored video.
-const toGL = lm => lm.map(l => new THREE.Vector3(-l.x, -l.y, -l.z));
+// MediaPipe world landmarks (x right, y down, z away) -> flat GL array, x mirrored to match the mirrored video.
+function toGL(lm) { const a = new Float32Array(63); lm.forEach((l, i) => { a[3*i] = -l.x; a[3*i+1] = -l.y; a[3*i+2] = -l.z; }); return a; }
+const vec = (a, i) => new THREE.Vector3(a[3*i], a[3*i+1], a[3*i+2]);
 
-function retarget(pts) {
+function retarget(a) {
+  const pts = Array.from({ length: 21 }, (_, i) => vec(a, i));
   const out = pts.map(() => V());
   for (let j = 1; j < 21; j++) {
-    const p = PARENT[j];
-    const d = pts[j].clone().sub(pts[p]);
-    const n = d.length() || 1e-9;
+    const p = PARENT[j], d = pts[j].clone().sub(pts[p]), n = d.length() || 1e-9;
     out[j].copy(out[p]).addScaledVector(d, LENGTH[j] / n);
   }
-  const c = V();
-  for (const i of PALM) c.add(out[i]);
-  c.multiplyScalar(1 / PALM.length);
+  const c = V(); for (const i of PALM) c.add(out[i]); c.multiplyScalar(1 / PALM.length);
   return out.map(v => v.sub(c));
 }
 
-function moveFromLandmarks(pts) {
+// Extended finger = tip further from the wrist than its middle joint. Thumb ignored (unreliable and irrelevant for RPS).
+function fingersUp(pts) {
   const w = pts[0];
-  const ext = [[8, 6], [12, 10], [16, 14], [20, 18]].map(([tip, pip]) => pts[tip].distanceTo(w) > pts[pip].distanceTo(w));
+  return [[8, 6], [12, 10], [16, 14], [20, 18]].map(([tip, pip]) => pts[tip].distanceTo(w) > pts[pip].distanceTo(w));
+}
+function moveFromFingers(ext) {
   const n = ext.filter(Boolean).length;
   if (n === 0) return "ROCK";
-  if (n === 4) return "PAPER";
+  if (n >= 3) return "PAPER";
   if (ext[0] && ext[1] && !ext[2] && !ext[3]) return "SCISSORS";
   return null;
+}
+
+// --- One Euro filter over the 63 world coordinates, with velocity prediction ----------------------
+// Casiez et al. 2012: low cutoff when still (no jitter), cutoff rises with speed (no lag). Units are metres,
+// so beta is much larger than the pixel-space defaults: at 1 m/s the cutoff is minCutoff + beta.
+class OneEuro {
+  constructor(n, minCutoff = 1.5, beta = 15, dCutoff = 3) { this.x = null; this.dx = new Float32Array(n); this.t = 0; this.minCutoff = minCutoff; this.beta = beta; this.dCutoff = dCutoff; }
+  alpha(cut, dt) { const tau = 1 / (2 * Math.PI * cut); return 1 / (1 + tau / dt); }
+  push(x, t) {                     // t in seconds (capture time of the frame)
+    if (!this.x) { this.x = Float32Array.from(x); this.t = t; return; }
+    const dt = Math.max(1e-3, t - this.t); this.t = t;
+    const ad = this.alpha(this.dCutoff, dt);
+    for (let i = 0; i < x.length; i++) {
+      const dx = (x[i] - this.x[i]) / dt;
+      this.dx[i] += ad * (dx - this.dx[i]);
+      const a = this.alpha(this.minCutoff + this.beta * Math.abs(this.dx[i]), dt);
+      this.x[i] += a * (x[i] - this.x[i]);
+    }
+  }
+  predict(lead) {                  // extrapolate along the filtered velocity, lead in seconds
+    const out = new Float32Array(this.x.length);
+    for (let i = 0; i < out.length; i++) out[i] = this.x[i] + this.dx[i] * lead;
+    return out;
+  }
+}
+const MAX_LEAD = 0.15;             // never extrapolate more than 150 ms ahead
+const HOLD_MS = 250;               // keep the hand alive this long after tracking drops (dead reckoning), then grey it out
+
+// --- tracker: HandLandmarker in a Web Worker so rendering never waits on inference -----------------
+const WORKER_SRC = `
+import { FilesetResolver, HandLandmarker } from "${MP}/vision_bundle.mjs";
+let lm, delegate;
+onmessage = async e => {
+  if (e.data.init) {
+    const vision = await FilesetResolver.forVisionTasks("${MP}/wasm", true);  // true = ES-module loader, required inside a module worker
+    for (delegate of ["GPU", "CPU"]) {
+      try { lm = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: ${JSON.stringify(MODEL)}, delegate }, ...e.data.opts }); postMessage({ ready: true, delegate }); return; }
+      catch (err) { console.warn(delegate + " failed in worker", err); }
+    }
+    postMessage({ ready: false }); return;
+  }
+  const t = performance.now();
+  const r = lm.detectForVideo(e.data.frame, e.data.ts);
+  e.data.frame.close();
+  postMessage({ id: e.data.id, ms: performance.now() - t, landmarks: r.landmarks[0] ?? null, world: r.worldLandmarks[0] ?? null, hand: r.handedness[0]?.[0]?.categoryName ?? null });
+};`;
+
+async function makeTracker() {
+  // 1) worker (preferred). 2) main-thread fallback if the worker cannot start (old Safari, no OffscreenCanvas).
+  try {
+    const w = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], { type: "text/javascript" })), { type: "module" });
+    const ready = await new Promise((res, rej) => {
+      w.onmessage = e => res(e.data); w.onerror = e => rej(e.message || "worker error");
+      w.postMessage({ init: true, opts: TRACKER_OPTS });
+      setTimeout(() => rej("worker init timeout"), 60000);
+    });
+    if (!ready.ready) throw new Error("no delegate in worker");
+    const waiting = new Map(); let id = 0;
+    w.onmessage = e => { waiting.get(e.data.id)?.(e.data); waiting.delete(e.data.id); };
+    return {
+      where: "worker/" + ready.delegate,
+      async detect(src, ts) {
+        const frame = await createImageBitmap(src);
+        return new Promise(res => { const my = ++id; waiting.set(my, res); w.postMessage({ id: my, frame, ts }, [frame]); });
+      },
+    };
+  } catch (e) {
+    console.warn("worker unavailable, tracking on main thread:", e);
+    const { FilesetResolver, HandLandmarker } = await import(`${MP}/vision_bundle.mjs`);
+    const vision = await FilesetResolver.forVisionTasks(`${MP}/wasm`);
+    for (const delegate of ["GPU", "CPU"]) {
+      try {
+        const lm = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: MODEL, delegate }, ...TRACKER_OPTS });
+        return { where: "main/" + delegate, async detect(src, ts) {
+          const t = performance.now(); const r = lm.detectForVideo(src, ts);
+          return { ms: performance.now() - t, landmarks: r.landmarks[0] ?? null, world: r.worldLandmarks[0] ?? null, hand: r.handedness[0]?.[0]?.categoryName ?? null };
+        } };
+      } catch (err) { console.warn(delegate + " failed", err); }
+    }
+    throw new Error("Hand tracker failed to load. Check the connection and reload.");
+  }
 }
 
 // --- 3D replica ---------------------------------------------------------------------------------
 const canvas = $("gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1c212e);
-const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 5);
-camera.position.set(0.13, 0.11, 0.5);
-camera.lookAt(0, -0.02, 0);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x1c212e);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 5); camera.position.set(0.13, 0.11, 0.5); camera.lookAt(0, -0.02, 0);
 scene.add(new THREE.HemisphereLight(0xfff8ee, 0x4a5570, 1.2));
 const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(0.4, 0.8, 1); scene.add(key);
 const SKIN = new THREE.MeshStandardMaterial({ color: 0xdead8f, roughness: 0.6 });
 const GHOST = new THREE.MeshStandardMaterial({ color: 0x73788a, roughness: 0.8 });
-const hand = new THREE.Group(); scene.add(hand);
-const cyl = new THREE.CylinderGeometry(1, 1, 1, 14, 1);
-const sph = new THREE.SphereGeometry(1, 14, 10);
-const bones = [];   // {mesh, a, b, r}
-const joints = [];  // sphere per landmark
+const hand = new THREE.Group(); hand.visible = false; scene.add(hand);
+const cyl = new THREE.CylinderGeometry(1, 1, 1, 14, 1), sph = new THREE.SphereGeometry(1, 14, 10);
+const bones = [];
 for (const [j, p] of Object.entries(PARENT)) bones.push({ a: +p, b: +j, r: +j <= 4 ? 0.011 : +p === 0 ? 0.014 : 0.009 });
 for (const [a, b] of PALM_EDGES) bones.push({ a, b, r: 0.014 });
 for (const bn of bones) { bn.mesh = new THREE.Mesh(cyl, SKIN); hand.add(bn.mesh); }
-for (let i = 0; i < 21; i++) { const m = new THREE.Mesh(sph, SKIN); joints.push(m); hand.add(m); }
+const joints = Array.from({ length: 21 }, () => { const m = new THREE.Mesh(sph, SKIN); hand.add(m); return m; });
+const jointR = joints.map((_, i) => bones.find(b => b.b === i)?.r ?? 0.02);
 const forearm = new THREE.Mesh(cyl, SKIN); hand.add(forearm);
 const palm = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0xdead8f, roughness: 0.6, side: THREE.DoubleSide }));
-palm.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3 * 3 * 3), 3)); // 3 triangles of the 5-point palm fan
-hand.add(palm);
-const UP = new THREE.Vector3(0, 1, 0);
-// skeleton lines drawn on top of the capsules so every tracked joint is visible on the model too
+palm.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(27), 3)); hand.add(palm);
 const skel = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x78ff78, depthTest: false }));
-skel.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CONNECTIONS.length * 2 * 3), 3));
-skel.renderOrder = 1; hand.add(skel);
+skel.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CONNECTIONS.length * 6), 3)); skel.renderOrder = 1; hand.add(skel);
 const dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xffffff, size: 0.008, depthTest: false }));
-dots.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(21 * 3), 3));
-dots.renderOrder = 2; hand.add(dots);
+dots.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(63), 3)); dots.renderOrder = 2; hand.add(dots);
+const UP = new THREE.Vector3(0, 1, 0);
 
-// 2D overlay on the camera: dots + bone lines from the normalised image landmarks
+function placeCylinder(mesh, a, b, r) {
+  const d = b.clone().sub(a), L = d.length();
+  mesh.position.copy(a).addScaledVector(d, 0.5); mesh.scale.set(r, L, r); mesh.quaternion.setFromUnitVectors(UP, d.normalize());
+}
+function drawHand(pts, visible) {
+  const mat = visible ? SKIN : GHOST;
+  for (const bn of bones) { placeCylinder(bn.mesh, pts[bn.a], pts[bn.b], bn.r); bn.mesh.material = mat; }
+  joints.forEach((m, i) => { m.position.copy(pts[i]); m.scale.setScalar(jointR[i]); m.material = mat; });
+  const fore = pts[0].clone().sub(pts[9]).normalize();
+  placeCylinder(forearm, pts[0], pts[0].clone().addScaledVector(fore, 0.16), 0.024); forearm.material = mat;
+  const pos = palm.geometry.attributes.position; let k = 0;
+  for (const [i1, i2] of PALM_EDGES) for (const i of [0, i1, i2]) pos.setXYZ(k++, pts[i].x, pts[i].y, pts[i].z);
+  pos.needsUpdate = true; palm.geometry.computeVertexNormals(); palm.material.color.copy(mat.color);
+  const sp = skel.geometry.attributes.position; let q = 0;
+  for (const [a, b] of CONNECTIONS) for (const i of [a, b]) sp.setXYZ(q++, pts[i].x, pts[i].y, pts[i].z);
+  sp.needsUpdate = true;
+  const dp = dots.geometry.attributes.position; pts.forEach((p, i) => dp.setXYZ(i, p.x, p.y, p.z)); dp.needsUpdate = true;
+  hand.visible = true;
+}
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio();
+  if (canvas.width !== (w * pr | 0) || canvas.height !== (h * pr | 0)) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+}
+
+// --- 2D overlay on the camera (raw landmarks, unfiltered, so you can compare against the 3D hand) -------
 const ov = $("ov"), octx = ov.getContext("2d");
 function drawOverlay(lm, src) {
   const w = src.videoWidth || src.naturalWidth || 0, h = src.videoHeight || src.naturalHeight || 0;
@@ -130,41 +233,11 @@ function drawOverlay(lm, src) {
   octx.beginPath();
   for (const [a, b] of CONNECTIONS) { octx.moveTo(lm[a].x * w, lm[a].y * h); octx.lineTo(lm[b].x * w, lm[b].y * h); }
   octx.stroke();
+  const tips = [4, 8, 12, 16, 20];
   lm.forEach((p, i) => {
-    octx.beginPath(); octx.arc(p.x * w, p.y * h, [4, 8, 12, 16, 20].includes(i) ? w / 90 : w / 140, 0, Math.PI * 2);
-    octx.fillStyle = i === 0 ? "#ff7878" : [4, 8, 12, 16, 20].includes(i) ? "#ffe678" : "#fff"; octx.fill();
+    octx.beginPath(); octx.arc(p.x * w, p.y * h, tips.includes(i) ? w / 90 : w / 140, 0, Math.PI * 2);
+    octx.fillStyle = i === 0 ? "#ff7878" : tips.includes(i) ? "#ffe678" : "#fff"; octx.fill();
   });
-}
-
-function placeCylinder(mesh, a, b, r) {
-  const d = b.clone().sub(a); const L = d.length();
-  mesh.position.copy(a).addScaledVector(d, 0.5);
-  mesh.scale.set(r, L, r);
-  mesh.quaternion.setFromUnitVectors(UP, d.normalize());
-}
-
-function drawHand(pts, visible) {
-  const mat = visible ? SKIN : GHOST;
-  for (const bn of bones) { placeCylinder(bn.mesh, pts[bn.a], pts[bn.b], bn.r); bn.mesh.material = mat; }
-  joints.forEach((m, i) => { m.position.copy(pts[i]); const r = bones.find(b => b.b === i)?.r ?? 0.02; m.scale.setScalar(r); m.material = mat; });
-  const fore = pts[0].clone().sub(pts[9]).normalize();
-  placeCylinder(forearm, pts[0], pts[0].clone().addScaledVector(fore, 0.16), 0.024); forearm.material = mat;
-  const pos = palm.geometry.attributes.position; let k = 0;
-  for (const [i1, i2] of [[5, 9], [9, 13], [13, 17]]) for (const i of [0, i1, i2]) { pos.setXYZ(k++, pts[i].x, pts[i].y, pts[i].z); }
-  pos.needsUpdate = true; palm.geometry.computeVertexNormals(); palm.material.color.copy(mat.color);
-  const sp = skel.geometry.attributes.position; let q = 0;
-  for (const [a, b] of CONNECTIONS) for (const i of [a, b]) sp.setXYZ(q++, pts[i].x, pts[i].y, pts[i].z);
-  sp.needsUpdate = true;
-  const dp = dots.geometry.attributes.position;
-  pts.forEach((p, i) => dp.setXYZ(i, p.x, p.y, p.z)); dp.needsUpdate = true;
-  hand.visible = true;
-}
-
-function resize() {
-  const w = canvas.clientWidth, h = canvas.clientHeight;
-  if (canvas.width !== w * renderer.getPixelRatio() | 0 || canvas.height !== h * renderer.getPixelRatio() | 0) {
-    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
-  }
 }
 
 // --- game ---------------------------------------------------------------------------------------
@@ -185,7 +258,11 @@ function updateGame(now, move) {
   } else $("game").textContent = "Tap PLAY for a round";
 }
 
-// --- tracking loop --------------------------------------------------------------------------------
+// --- main ---------------------------------------------------------------------------------------
+const MODES = ["predict", "smooth", "raw"];   // predict = filter + velocity lead, smooth = filter only, raw = latest tracker result
+let mode = 0;
+$("mode").onclick = () => { mode = (mode + 1) % MODES.length; $("mode").textContent = "MODE: " + MODES[mode]; };
+
 async function main() {
   let video = $("cam");
   const imgSrc = new URLSearchParams(location.search).get("img");  // ?img=victory.jpg = self-check without a camera
@@ -193,45 +270,51 @@ async function main() {
     const img = new Image(); img.src = imgSrc; await img.decode();
     img.id = "still"; video.replaceWith(img); video = img;
   } else try {
-    video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+    video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } }, audio: false });
     await new Promise(r => video.onloadedmetadata = r);
   } catch (e) { $("status").textContent = "Camera blocked: " + e.message + "\nAllow the camera and reload."; return; }
 
-  const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm");
-  const modelAssetPath = "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task";
-  let rec;
-  for (const delegate of ["GPU", "CPU"]) {
-    try { rec = await GestureRecognizer.createFromOptions(vision, { baseOptions: { modelAssetPath, delegate }, runningMode: "VIDEO", numHands: 1 }); break; }
-    catch (e) { console.warn(delegate + " delegate failed", e); }
-  }
-  if (!rec) { $("status").textContent = "Hand tracker failed to load. Check the connection and reload."; return; }
+  const tracker = await makeTracker();
   $("status").remove();
 
-  let pose = null, lastT = -1, label = "-", move = null, visible = false, ts = 0, frames = 0, fpsT = performance.now();
+  const filt = new OneEuro(63);
+  let raw = null, lastSeen = -1e9, lastT = -1, ts = 0, inflight = false, move = null, ext = [0, 0, 0, 0], handName = "-";
+  let stat = { ms: 0, lat: 0, n: 0, t: performance.now() };
+
+  const pump = async () => {
+    const fresh = imgSrc || (video.currentTime !== lastT && video.readyState >= 2);
+    if (inflight || !fresh) return;
+    inflight = true; lastT = video.currentTime;
+    const cap = performance.now(); ts = Math.max(ts + 1, Math.floor(cap));
+    const r = await tracker.detect(video, ts);
+    inflight = false;
+    const recv = performance.now();
+    stat.ms += r.ms; stat.lat += recv - cap; stat.n++;
+    drawOverlay(r.landmarks, video);
+    if (r.world) {
+      raw = toGL(r.world); filt.push(raw, cap / 1000); lastSeen = recv; handName = r.hand ?? "-";
+      ext = fingersUp(retarget(filt.x)); move = moveFromFingers(ext);
+    } else { move = null; handName = "-"; }
+  };
+
   const loop = () => {
     const now = performance.now();
-    if (imgSrc || (video.currentTime !== lastT && video.readyState >= 2)) {
-      lastT = video.currentTime;
-      ts = Math.max(ts + 1, Math.floor(now));
-      const res = rec.recognizeForVideo(video, ts);
-      const ms = performance.now() - now;
-      frames++; if (now - fpsT > 1000) { $("stats").textContent = `tracker: ${ms.toFixed(0)} ms  |  ${frames} fps  |  hands: ${res.landmarks?.length ?? 0}`; frames = 0; fpsT = now; }
-      drawOverlay(res.landmarks?.[0], video);
-      visible = res.worldLandmarks?.length > 0;
-      if (visible) {
-        const target = retarget(toGL(res.worldLandmarks[0]));
-        pose = pose ? pose.map((v, i) => v.lerp(target[i], 0.55)) : target;
-        label = res.gestures?.[0]?.[0]?.categoryName ?? "-";
-        move = MOVE_OF_GESTURE[label] ?? moveFromLandmarks(pose);
-      } else { label = "-"; move = null; }
-      $("gesture").textContent = "GESTURE: " + label;
-      $("move").textContent = "MOVE: " + (move ?? "?");
-      $("move").style.color = move ? "#78ff78" : "#ffc850";
+    pump();
+    const visible = now - lastSeen < HOLD_MS;
+    if (!visible) { move = null; }
+    if (filt.x) {
+      const lead = Math.min(MAX_LEAD, Math.max(0, (now - lastSeen) / 1000 + 0.02));
+      const pts = MODES[mode] === "predict" ? filt.predict(visible ? lead : 0) : MODES[mode] === "smooth" ? filt.x : raw;
+      drawHand(retarget(pts), visible);
     }
+    if (now - stat.t > 1000) {
+      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms\n${tracker.where} | mode ${MODES[mode]}`;
+      stat = { ms: 0, lat: 0, n: 0, t: now };
+    }
+    $("hand").textContent = `HAND: ${visible ? handName : "-"}  fingers up: ${visible ? ext.filter(Boolean).length : "-"}`;
+    $("move").textContent = "MOVE: " + (move ?? "?"); $("move").style.color = move ? "#78ff78" : "#ffc850";
     updateGame(now, move);
-    resize();
-    if (pose) drawHand(pose, visible);
-    renderer.render(scene, camera);
+    resize(); renderer.render(scene, camera);
     requestAnimationFrame(loop);
   };
   loop();
