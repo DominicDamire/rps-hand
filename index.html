@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RPS Hand</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0f1116; color: #fff; font: 16px/1.3 system-ui, sans-serif; overflow: hidden; }
+  #app { display: grid; grid-template-rows: 1fr 1fr; height: 100%; }
+  @media (orientation: landscape) { #app { grid-template-rows: 1fr; grid-template-columns: 1fr 1fr; } }
+  .pane { position: relative; overflow: hidden; }
+  video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); background: #000; }
+  #gl { width: 100%; height: 100%; display: block; background: #1c212e; }
+  .hud { position: absolute; left: 12px; right: 12px; pointer-events: none; text-shadow: 0 0 6px #000, 0 0 2px #000; font-weight: 700; }
+  #top { top: 10px; } #bottom { bottom: 12px; }
+  #gesture { color: #c8dcff; font-size: 15px; } #move { color: #78ff78; font-size: 26px; }
+  #game { color: #ffe678; font-size: 22px; } #score { font-size: 15px; }
+  #status { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; background: #0f1116; font-size: 18px; }
+  #play { position: absolute; right: 12px; bottom: 12px; padding: 12px 22px; font: inherit; font-weight: 700; border: 0; border-radius: 999px; background: #78ff78; color: #000; }
+  #play:disabled { opacity: .4; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="pane">
+    <video id="cam" autoplay muted playsinline></video>
+    <div class="hud" id="top"><div id="gesture">GESTURE: -</div><div id="move">MOVE: ?</div></div>
+    <div class="hud" id="bottom"><div id="score">SCORE you 0 : 0 cpu</div><div id="game">Tap PLAY for a round</div></div>
+    <div id="status">Loading hand tracker…</div>
+  </div>
+  <div class="pane">
+    <canvas id="gl"></canvas>
+    <button id="play">PLAY</button>
+  </div>
+</div>
+
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js" } }</script>
+<script type="module">
+import * as THREE from "three";
+import { FilesetResolver, GestureRecognizer } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs";
+
+const $ = id => document.getElementById(id);
+
+// --- same skeleton + canonical bone lengths as rps_hand.py -------------------------------------
+const PARENT = {1:0,2:1,3:2,4:3, 5:0,6:5,7:6,8:7, 9:0,10:9,11:10,12:11, 13:0,14:13,15:14,16:15, 17:0,18:17,19:18,20:19};
+const LENGTH = {1:.040,2:.035,3:.030,4:.025, 5:.092,6:.040,7:.025,8:.022, 9:.088,10:.045,11:.028,12:.022,
+                13:.082,14:.040,15:.026,16:.022, 17:.076,18:.032,19:.020,20:.020};
+const PALM = [0, 5, 9, 13, 17];
+const PALM_EDGES = [[5, 9], [9, 13], [13, 17]];
+const MOVE_OF_GESTURE = { Closed_Fist: "ROCK", Open_Palm: "PAPER", Victory: "SCISSORS" };
+const BEATS = { ROCK: "SCISSORS", PAPER: "ROCK", SCISSORS: "PAPER" };
+
+const V = () => new THREE.Vector3();
+
+// MediaPipe world landmarks (x right, y down, z away). Mirror x so the replica matches the mirrored video.
+const toGL = lm => lm.map(l => new THREE.Vector3(-l.x, -l.y, -l.z));
+
+function retarget(pts) {
+  const out = pts.map(() => V());
+  for (let j = 1; j < 21; j++) {
+    const p = PARENT[j];
+    const d = pts[j].clone().sub(pts[p]);
+    const n = d.length() || 1e-9;
+    out[j].copy(out[p]).addScaledVector(d, LENGTH[j] / n);
+  }
+  const c = V();
+  for (const i of PALM) c.add(out[i]);
+  c.multiplyScalar(1 / PALM.length);
+  return out.map(v => v.sub(c));
+}
+
+function moveFromLandmarks(pts) {
+  const w = pts[0];
+  const ext = [[8, 6], [12, 10], [16, 14], [20, 18]].map(([tip, pip]) => pts[tip].distanceTo(w) > pts[pip].distanceTo(w));
+  const n = ext.filter(Boolean).length;
+  if (n === 0) return "ROCK";
+  if (n === 4) return "PAPER";
+  if (ext[0] && ext[1] && !ext[2] && !ext[3]) return "SCISSORS";
+  return null;
+}
+
+// --- 3D replica ---------------------------------------------------------------------------------
+const canvas = $("gl");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1c212e);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 5);
+camera.position.set(0.13, 0.11, 0.5);
+camera.lookAt(0, -0.02, 0);
+scene.add(new THREE.HemisphereLight(0xfff8ee, 0x4a5570, 1.2));
+const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(0.4, 0.8, 1); scene.add(key);
+const SKIN = new THREE.MeshStandardMaterial({ color: 0xdead8f, roughness: 0.6 });
+const GHOST = new THREE.MeshStandardMaterial({ color: 0x73788a, roughness: 0.8 });
+const hand = new THREE.Group(); scene.add(hand);
+const cyl = new THREE.CylinderGeometry(1, 1, 1, 14, 1);
+const sph = new THREE.SphereGeometry(1, 14, 10);
+const bones = [];   // {mesh, a, b, r}
+const joints = [];  // sphere per landmark
+for (const [j, p] of Object.entries(PARENT)) bones.push({ a: +p, b: +j, r: +j <= 4 ? 0.011 : +p === 0 ? 0.014 : 0.009 });
+for (const [a, b] of PALM_EDGES) bones.push({ a, b, r: 0.014 });
+for (const bn of bones) { bn.mesh = new THREE.Mesh(cyl, SKIN); hand.add(bn.mesh); }
+for (let i = 0; i < 21; i++) { const m = new THREE.Mesh(sph, SKIN); joints.push(m); hand.add(m); }
+const forearm = new THREE.Mesh(cyl, SKIN); hand.add(forearm);
+const palm = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0xdead8f, roughness: 0.6, side: THREE.DoubleSide }));
+palm.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3 * 3 * 3), 3)); // 3 triangles of the 5-point palm fan
+hand.add(palm);
+const UP = new THREE.Vector3(0, 1, 0);
+
+function placeCylinder(mesh, a, b, r) {
+  const d = b.clone().sub(a); const L = d.length();
+  mesh.position.copy(a).addScaledVector(d, 0.5);
+  mesh.scale.set(r, L, r);
+  mesh.quaternion.setFromUnitVectors(UP, d.normalize());
+}
+
+function drawHand(pts, visible) {
+  const mat = visible ? SKIN : GHOST;
+  for (const bn of bones) { placeCylinder(bn.mesh, pts[bn.a], pts[bn.b], bn.r); bn.mesh.material = mat; }
+  joints.forEach((m, i) => { m.position.copy(pts[i]); const r = bones.find(b => b.b === i)?.r ?? 0.02; m.scale.setScalar(r); m.material = mat; });
+  const fore = pts[0].clone().sub(pts[9]).normalize();
+  placeCylinder(forearm, pts[0], pts[0].clone().addScaledVector(fore, 0.16), 0.024); forearm.material = mat;
+  const pos = palm.geometry.attributes.position; let k = 0;
+  for (const [i1, i2] of [[5, 9], [9, 13], [13, 17]]) for (const i of [0, i1, i2]) { pos.setXYZ(k++, pts[i].x, pts[i].y, pts[i].z); }
+  pos.needsUpdate = true; palm.geometry.computeVertexNormals(); palm.material.color.copy(mat.color);
+  hand.visible = true;
+}
+
+function resize() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== w * renderer.getPixelRatio() | 0 || canvas.height !== h * renderer.getPixelRatio() | 0) {
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+}
+
+// --- game ---------------------------------------------------------------------------------------
+const game = { phase: "idle", t0: 0, you: null, cpu: null, score: [0, 0] };
+$("play").onclick = () => { if (game.phase === "idle") { game.phase = "count"; game.t0 = performance.now(); } };
+function updateGame(now, move) {
+  if (game.phase === "count" && now - game.t0 >= 3000) {
+    game.you = move; game.cpu = Object.keys(BEATS)[Math.floor(Math.random() * 3)]; game.phase = "result"; game.t0 = now;
+    if (game.you && BEATS[game.you] === game.cpu) game.score[0]++;
+    else if (game.you && BEATS[game.cpu] === game.you) game.score[1]++;
+  } else if (game.phase === "result" && now - game.t0 >= 3000) game.phase = "idle";
+  $("play").disabled = game.phase !== "idle";
+  $("score").textContent = `SCORE you ${game.score[0]} : ${game.score[1]} cpu`;
+  if (game.phase === "count") $("game").textContent = `SHOOT IN ${3 - Math.floor((now - game.t0) / 1000)}`;
+  else if (game.phase === "result") {
+    const v = !game.you ? "NO MOVE SEEN" : game.you === game.cpu ? "DRAW" : BEATS[game.you] === game.cpu ? "YOU WIN" : "CPU WINS";
+    $("game").textContent = `YOU ${game.you ?? "?"} vs CPU ${game.cpu} - ${v}`;
+  } else $("game").textContent = "Tap PLAY for a round";
+}
+
+// --- tracking loop --------------------------------------------------------------------------------
+async function main() {
+  let video = $("cam");
+  const imgSrc = new URLSearchParams(location.search).get("img");  // ?img=victory.jpg = self-check without a camera
+  if (imgSrc) {
+    const img = new Image(); img.src = imgSrc; await img.decode();
+    img.style.cssText = "width:100%;height:100%;object-fit:cover"; video.replaceWith(img); video = img;
+  } else try {
+    video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+    await new Promise(r => video.onloadedmetadata = r);
+  } catch (e) { $("status").textContent = "Camera blocked: " + e.message + "\nAllow the camera and reload."; return; }
+
+  const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm");
+  const modelAssetPath = "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task";
+  let rec;
+  for (const delegate of ["GPU", "CPU"]) {
+    try { rec = await GestureRecognizer.createFromOptions(vision, { baseOptions: { modelAssetPath, delegate }, runningMode: "VIDEO", numHands: 1 }); break; }
+    catch (e) { console.warn(delegate + " delegate failed", e); }
+  }
+  if (!rec) { $("status").textContent = "Hand tracker failed to load. Check the connection and reload."; return; }
+  $("status").remove();
+
+  let pose = null, lastT = -1, label = "-", move = null, visible = false, ts = 0;
+  const loop = () => {
+    const now = performance.now();
+    if (imgSrc || (video.currentTime !== lastT && video.readyState >= 2)) {
+      lastT = video.currentTime;
+      ts = Math.max(ts + 1, Math.floor(now));
+      const res = rec.recognizeForVideo(video, ts);
+      visible = res.worldLandmarks?.length > 0;
+      if (visible) {
+        const target = retarget(toGL(res.worldLandmarks[0]));
+        pose = pose ? pose.map((v, i) => v.lerp(target[i], 0.55)) : target;
+        label = res.gestures?.[0]?.[0]?.categoryName ?? "-";
+        move = MOVE_OF_GESTURE[label] ?? moveFromLandmarks(pose);
+      } else { label = "-"; move = null; }
+      $("gesture").textContent = "GESTURE: " + label;
+      $("move").textContent = "MOVE: " + (move ?? "?");
+      $("move").style.color = move ? "#78ff78" : "#ffc850";
+    }
+    updateGame(now, move);
+    resize();
+    if (pose) drawHand(pose, visible);
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  };
+  loop();
+}
+main().catch(e => { $("status").textContent = "Error: " + e.message; console.error(e); });
+</script>
+</body>
+</html>
