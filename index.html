@@ -47,6 +47,10 @@
 import * as THREE from "three";
 
 const $ = id => document.getElementById(id);
+const Q = new URLSearchParams(location.search);
+// Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
+// it; only the absolute depth scale does, so a wrong guess still gives one-for-one relative motion.
+const HFOV = (+Q.get("fov") || 60) * Math.PI / 180;
 const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
 // Lower presence/tracking thresholds = the tracker holds on longer through motion blur before giving up.
@@ -62,10 +66,34 @@ const CONNECTIONS = Object.entries(PARENT).map(([j, p]) => [+p, +j]).concat(PALM
 const BEATS = { ROCK: "SCISSORS", PAPER: "ROCK", SCISSORS: "PAPER" };
 const V = () => new THREE.Vector3();
 
-// MediaPipe world landmarks (x right, y down, z away) -> flat GL array, x mirrored to match the mirrored video.
-function toGL(lm) { const a = new Float32Array(63); lm.forEach((l, i) => { a[3*i] = -l.x; a[3*i+1] = -l.y; a[3*i+2] = -l.z; }); return a; }
-const vec = (a, i) => new THREE.Vector3(a[3*i], a[3*i+1], a[3*i+2]);
+// Where is the hand in 3D? World landmarks give the hand's metric shape already oriented to the camera but
+// centred on the hand; image landmarks say where each joint appears on screen. With a pinhole camera of the
+// assumed FOV, the unknown translation T solves a linear least squares (exact for the pinhole model):
+//   for each joint  -Tx + xu*Tz = X - xu*Z   and   -Ty + yv*Tz = Y - yv*Z     (xu, yv = normalised image coords)
+// Returns [Tx, Ty, Tz] in metres (camera frame: x right, y down, z away) and the reprojection error as a
+// fraction of the frame width (a large value means the pose and the picture disagree).
+function locate(world, image, W, H) {
+  const k = 2 * Math.tan(HFOV / 2), n = 21;
+  const xu = new Float32Array(n), yv = new Float32Array(n);
+  let Sx = 0, Sy = 0, Sxx = 0, Sbu = 0, Sbv = 0, Sxb = 0;
+  for (let i = 0; i < n; i++) {
+    xu[i] = (image[i].x - 0.5) * k; yv[i] = (image[i].y - 0.5) * k * H / W;
+    const bu = world[i].x - xu[i] * world[i].z, bv = world[i].y - yv[i] * world[i].z;
+    Sx += xu[i]; Sy += yv[i]; Sxx += xu[i] * xu[i] + yv[i] * yv[i]; Sbu += bu; Sbv += bv; Sxb += xu[i] * bu + yv[i] * bv;
+  }
+  const Tz = (Sxb - (Sx * Sbu + Sy * Sbv) / n) / (Sxx - (Sx * Sx + Sy * Sy) / n);
+  const Tx = (Sx * Tz - Sbu) / n, Ty = (Sy * Tz - Sbv) / n;
+  let err = 0;
+  for (let i = 0; i < n; i++) { const z = world[i].z + Tz; err += Math.hypot((world[i].x + Tx) / z - xu[i], (world[i].y + Ty) / z - yv[i]); }
+  return [[Tx, Ty, Tz], err / n / k];
+}
 
+// Camera-frame points (x right, y down, z away) + translation -> flat GL array (y up, z toward viewer), x mirrored to match the mirrored video.
+function toGL(lm, T) { const a = new Float32Array(63); lm.forEach((l, i) => { a[3*i] = -(l.x + T[0]); a[3*i+1] = -(l.y + T[1]); a[3*i+2] = -(l.z + T[2]); }); return a; }
+const vec = (a, i) => new THREE.Vector3(a[3*i], a[3*i+1], a[3*i+2]);
+const palmCentre = pts => { const c = V(); for (const i of PALM) c.add(pts[i]); return c.multiplyScalar(1 / PALM.length); };
+
+// Canonical bone lengths, tracked bone directions, placed so the palm centre sits where the tracked palm is.
 function retarget(a) {
   const pts = Array.from({ length: 21 }, (_, i) => vec(a, i));
   const out = pts.map(() => V());
@@ -73,8 +101,8 @@ function retarget(a) {
     const p = PARENT[j], d = pts[j].clone().sub(pts[p]), n = d.length() || 1e-9;
     out[j].copy(out[p]).addScaledVector(d, LENGTH[j] / n);
   }
-  const c = V(); for (const i of PALM) c.add(out[i]); c.multiplyScalar(1 / PALM.length);
-  return out.map(v => v.sub(c));
+  const shift = palmCentre(pts).sub(palmCentre(out));
+  return out.map(v => v.add(shift));
 }
 
 // Extended finger = tip further from the wrist than its middle joint. Thumb ignored (unreliable and irrelevant for RPS).
@@ -176,7 +204,11 @@ const canvas = $("gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x1c212e);
-const camera = new THREE.PerspectiveCamera(40, 1, 0.05, 5); camera.position.set(0.13, 0.11, 0.5); camera.lookAt(0, -0.02, 0);
+// The virtual camera sits where the phone camera is (origin, looking down -z) with the same field of view, so the
+// replica appears at the same place and size on its pane as your hand does on the video pane.
+const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 5); camera.position.set(0, 0, 0); camera.lookAt(0, 0, -1);
+let frameW = 640, frameH = 480;   // camera frame size, set once the video is known
+const grid = new THREE.GridHelper(3, 30, 0x3a4560, 0x2a3145); grid.position.set(0, -0.35, -0.8); scene.add(grid);   // depth cue
 scene.add(new THREE.HemisphereLight(0xfff8ee, 0x4a5570, 1.2));
 const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(0.4, 0.8, 1); scene.add(key);
 const SKIN = new THREE.MeshStandardMaterial({ color: 0xdead8f, roughness: 0.6 });
@@ -219,7 +251,14 @@ function drawHand(pts, visible) {
 }
 function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio();
-  if (canvas.width !== (w * pr | 0) || canvas.height !== (h * pr | 0)) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  if (canvas.width !== (w * pr | 0) || canvas.height !== (h * pr | 0)) {
+    renderer.setSize(w, h, false); camera.aspect = w / h;
+    // Match the video pane's object-fit:cover crop: a pane taller than the frame shows the full frame height,
+    // a wider pane shows the full frame width.
+    const t = Math.tan(HFOV / 2);
+    camera.fov = 2 * Math.atan(w / h < frameW / frameH ? t * frameH / frameW : t / (w / h)) * 180 / Math.PI;
+    camera.updateProjectionMatrix();
+  }
 }
 
 // --- 2D overlay on the camera (raw landmarks, unfiltered, so you can compare against the 3D hand) -------
@@ -265,7 +304,7 @@ $("mode").onclick = () => { mode = (mode + 1) % MODES.length; $("mode").textCont
 
 async function main() {
   let video = $("cam");
-  const imgSrc = new URLSearchParams(location.search).get("img");  // ?img=victory.jpg = self-check without a camera
+  const imgSrc = Q.get("img");  // ?img=victory.jpg = self-check without a camera
   if (imgSrc) {
     const img = new Image(); img.src = imgSrc; await img.decode();
     img.id = "still"; video.replaceWith(img); video = img;
@@ -274,11 +313,12 @@ async function main() {
     await new Promise(r => video.onloadedmetadata = r);
   } catch (e) { $("status").textContent = "Camera blocked: " + e.message + "\nAllow the camera and reload."; return; }
 
+  frameW = video.videoWidth || video.naturalWidth || frameW; frameH = video.videoHeight || video.naturalHeight || frameH;
   const tracker = await makeTracker();
   $("status").remove();
 
   const filt = new OneEuro(63);
-  let raw = null, lastSeen = -1e9, lastT = -1, ts = 0, inflight = false, move = null, ext = [0, 0, 0, 0], handName = "-";
+  let raw = null, lastSeen = -1e9, lastT = -1, ts = 0, inflight = false, move = null, ext = [0, 0, 0, 0], handName = "-", fit = 0;
   let stat = { ms: 0, lat: 0, n: 0, t: performance.now() };
 
   const pump = async () => {
@@ -291,8 +331,9 @@ async function main() {
     const recv = performance.now();
     stat.ms += r.ms; stat.lat += recv - cap; stat.n++;
     drawOverlay(r.landmarks, video);
-    if (r.world) {
-      raw = toGL(r.world); filt.push(raw, cap / 1000); lastSeen = recv; handName = r.hand ?? "-";
+    if (r.world && r.landmarks) {
+      let T; [T, fit] = locate(r.world, r.landmarks, frameW, frameH);
+      raw = toGL(r.world, T); filt.push(raw, cap / 1000); lastSeen = recv; handName = r.hand ?? "-";
       ext = fingersUp(retarget(filt.x)); move = moveFromFingers(ext);
     } else { move = null; handName = "-"; }
   };
@@ -311,7 +352,8 @@ async function main() {
       $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms\n${tracker.where} | mode ${MODES[mode]}`;
       stat = { ms: 0, lat: 0, n: 0, t: now };
     }
-    $("hand").textContent = `HAND: ${visible ? handName : "-"}  fingers up: ${visible ? ext.filter(Boolean).length : "-"}`;
+    const depth = filt.x ? -palmCentre(Array.from({ length: 21 }, (_, i) => vec(filt.x, i))).z : 0;
+    $("hand").textContent = visible ? `HAND: ${handName}  fingers up: ${ext.filter(Boolean).length}  depth ${depth.toFixed(2)} m  fit ${(fit * 100).toFixed(1)}%` : "HAND: -";
     $("move").textContent = "MOVE: " + (move ?? "?"); $("move").style.color = move ? "#78ff78" : "#ffc850";
     updateGame(now, move);
     resize(); renderer.render(scene, camera);
