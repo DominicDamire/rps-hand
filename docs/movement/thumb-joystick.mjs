@@ -13,7 +13,13 @@ export function measureThumb(image,world,aspect=4/3){
  const straight=clamp(a.reduce((sum,v,i)=>sum+v*b[i],0)/length);
  // Thumb travel relative to its own base. No index-knuckle target or fixed bend threshold.
  const chain=d(2,3)+d(3,4);
- return {axes:[(image[2].x-image[4].x)/span,(image[2].y-image[4].y)/(aspect*span),(world[4].z-world[2].z)/chain,straight]};
+ // A thumb lying against the closed fingers is a release, never a direction.
+ // Measure along the knuckle row so this does not depend on screen rotation/mirroring.
+ const row=[image[17].x-image[5].x,(image[17].y-image[5].y)/aspect];
+ const row2=row[0]**2+row[1]**2;
+ const along=row2>1e-8?((image[4].x-image[6].x)*row[0]+(image[4].y-image[6].y)/aspect*row[1])/row2:-Infinity;
+ const wrapped=[5,9,13,17].filter(m=>reach(m)<.82).length>=3&&along>-.16&&d(4,6)/d(5,17)<.72;
+ return {rest:wrapped,axes:[(image[2].x-image[4].x)/span,(image[2].y-image[4].y)/(aspect*span),(world[4].z-world[2].z)/chain,straight]};
 }
 const valid=s=>s?.axes?.length===4&&s.axes.every(Number.isFinite);
 const dot=(a,b)=>a.reduce((sum,v,i)=>sum+v*b[i],0);
@@ -24,6 +30,7 @@ export function fitThumbDirections(samples){
  const origin=samples[0].axes.slice(),rows=samples.slice(1,5).map(s=>s.axes.map((v,i)=>v-origin[i]));
  const targets=[[-1,0],[1,0],[0,-1],[0,1]];
  const names=['left','right','forward','backward'];
+ samples.slice(0,5).forEach((s,i)=>{if(s.rest)throw failure('That is a resting fist. Lift your thumb away from the fingers for '+(i?names[i-1]:'centre')+'.',i);});
  rows.forEach((r,i)=>{const uncertainty=Math.hypot(...noise(samples[0]).map((v,k)=>v+noise(samples[i+1])[k]));
   if(Math.hypot(...r)<Math.max(.008,uncertainty*3))throw failure('The '+names[i]+' capture looks like centre. Retry only '+names[i]+', holding your thumb there until capture finishes.',i+1);
  });
@@ -60,6 +67,7 @@ export class ThumbJoystick {
  receive(sample,time){
   if(!valid(sample)){this.reset();return;}
   this.seen=time;
+  if(sample.rest){this.reset();this.seen=time;this.reason='FIST REST';return;}
   if(!this.calibration){this.reason='SET UP THUMB';return;}
   if(this.calibration.rest&&Math.hypot(...sample.axes.map((v,i)=>v-this.calibration.rest[i]))<this.calibration.restRadius){this.reset();this.seen=time;this.reason='FIST REST';return;}
   const delta=sample.axes.map((v,i)=>v-this.calibration.origin[i]);

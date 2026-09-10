@@ -1,12 +1,12 @@
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=31';
-import {setupThumbstick} from './thumbstick.mjs?v=31';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=32';
+import {setupThumbstick} from './thumbstick.mjs?v=32';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=31';
-import {DustMap} from './map.mjs?v=31';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=32';
+import {DustMap} from './map.mjs?v=32';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=31';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=31';
+import {setupUI} from './ui.mjs?v=32';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=32';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const held=new ThumbJoystick();let inputMode='poses',trackedHand=null,resting=false;
@@ -32,7 +32,7 @@ function collectThumbSetup(sample,now){
  const axes=[0,1,2,3].map(i=>frames.map(f=>f.axes[i]).sort((a,b)=>a-b)[Math.floor(frames.length/2)]);
  const noise=[0,1,2,3].map(i=>frames.map(f=>Math.abs(f.axes[i]-axes[i])).sort((a,b)=>a-b)[Math.floor(frames.length/2)]*1.4826);
  if(Math.hypot(...noise)>.12){$('thumbSetupText').textContent='Thumb moved during capture. Hold it still and retry.';return;}
- thumbSetup.samples[thumbSetup.step]={axes,noise};
+ thumbSetup.samples[thumbSetup.step]={axes,noise,rest:frames.filter(f=>f.rest).length>frames.length/2};
  const next=thumbSetup.samples.findIndex(v=>!v);
  if(next>=0){thumbSetup.step=next;setupPrompt();return;}
  try{held.configure(thumbSetup.samples);thumbSetup=null;$('thumbSetup').hidden=true;walkReason='RETURN THUMB TO CENTRE';}
@@ -58,7 +58,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=31',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=32',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
