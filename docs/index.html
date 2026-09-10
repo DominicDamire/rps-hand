@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 26)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 27)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -48,7 +48,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 
-const BUILD = 26;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 27;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -64,7 +64,7 @@ const BIG_HAND = [0.22, 0.15];      // palm length (wrist to middle knuckle) / f
 const DEBUG_OVERLAY = Q.get("debug") === "1";
 const SHOW_LINES = Q.get("lines") === "1";   // green skeleton + dots on the 3D hand (off by default so the skin can be judged)
 const PALMS_ONLY = Q.get("arms") !== "1";   // default: hands from the wrist only
-const FINGER_FAT = Q.get("fat") ? +Q.get("fat") : 1.15;   // width scale of the rigged hand (owner: "fingers too thin")
+const FINGER_FAT = Q.get("fat") ? +Q.get("fat") : 1.3;   // width scale of the rigged hand (owner: "fingers too thin")
 const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "arm";   // the owner's rigged arms model with its own textures (the one model we stick to)   // default: the owner's pre-rigged arms (arm_L/arm_R.glb); ?skin=hand.glb = the scan rig, ?skin=thing = the Thing rig, ?skin=0 = capsules
 const DS = Q.get("ds") != null ? +Q.get("ds") : 384;   // tracker input width after downscale (?ds=0 = the full camera frame). MediaPipe resizes to 192/224 anyway; 320 lost far hands
 const RVFC = Q.get("rvfc") !== "0";                        // start the tracker from requestVideoFrameCallback (?rvfc=0 = poll currentTime in rAF, the old way)
@@ -456,6 +456,7 @@ const CHAIN_OF = {}; for (const [k, js] of Object.entries(CHAINS)) for (const j 
 // like any rigged character (planar finger chains with a hyperextension clamp, anchored at the tracked palm centre).
 // Kept as the alternative; it deviates from the tracked fingertips by the tracker's proportion error.
 const HYPER = { mcp: 25, pip: 8, dip: 8 };   // degrees of backward bend allowed at each finger joint
+const FIST = { mcp: 85, pip: 100, dip: 60 };  // a closed fist's joint angles; blended in as the tracked tip approaches the knuckle (the tracker under-reads hidden joints)
 const _b = V(), _c = V(), _e = V();
 function poseFK(pts, bind, chirRight, scale) {
   const s = scale ?? pts[0].distanceTo(pts[9]) / bind[0].distanceTo(bind[9]), out = pts.map(p => p.clone());
@@ -474,11 +475,17 @@ function poseFK(pts, bind, chirRight, scale) {
     // per joint from the palm normal became ambiguous there and clamped real curls, so fists had straight phalanges).
     _b.copy(_n).addScaledVector(prev, -_n.dot(prev)).normalize();                                             // toward the palm, perpendicular to the metacarpal
     _q.crossVectors(prev, _b).normalize();                                                                    // signed flexion axis (also the sideways axis)
-    for (const [j, lim] of [[m + 1, HYPER.mcp], [m + 2, HYPER.pip], [m + 3, HYPER.dip]]) {
+    // curl index: tip close to the knuckle (relative to the finger's tracked length) = a closing fist; the tracker cannot see
+    // the middle and end joints then and under-reads their bend, so the fist angles take over as the tip approaches
+    const fLen = pts[m].distanceTo(pts[m + 1]) + pts[m + 1].distanceTo(pts[m + 2]) + pts[m + 2].distanceTo(pts[m + 3]);
+    const closeness = Math.min(1, Math.max(0, (0.75 - pts[m + 3].distanceTo(pts[m]) / Math.max(1e-6, fLen)) / 0.4));   // 0 at tip 75 % out, 1 at 35 %
+    for (const [j, lim, fist] of [[m + 1, HYPER.mcp, FIST.mcp], [m + 2, HYPER.pip, FIST.pip], [m + 3, HYPER.dip, FIST.dip]]) {
       _d.subVectors(pts[j], pts[j - 1]); _d.addScaledVector(_q, -_d.dot(_q)); if (_d.lengthSq() < 1e-10) _d.copy(prev); _d.normalize();   // no sideways bend
       _b.crossVectors(_q, prev).normalize();                                          // curl direction at this joint (rotating prev about the flexion axis)
-      const flex = Math.atan2(_d.dot(_b), _d.dot(prev)) * 180 / Math.PI;           // > 0 = curl toward the palm, < 0 = hyperextension
-      if (flex < -lim) { const a = -lim * Math.PI / 180; _d.copy(prev).multiplyScalar(Math.cos(a)).addScaledVector(_b, Math.sin(a)); }
+      let flex = Math.atan2(_d.dot(_b), _d.dot(prev)) * 180 / Math.PI;             // > 0 = curl toward the palm, < 0 = hyperextension
+      flex = Math.max(flex, closeness * fist);                                        // never less curled than the fist prior says for this closeness
+      if (flex < -lim) flex = -lim;
+      const a = flex * Math.PI / 180; _d.copy(prev).multiplyScalar(Math.cos(a)).addScaledVector(_b, Math.sin(a));
       seg(j, _d); prev = _e.copy(_d);
     }
   }
