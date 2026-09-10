@@ -1,9 +1,9 @@
-import {HeadLook} from './head-look.mjs?v=15';
-import {DustMap} from './map.mjs?v=15';
+import {HeadLook} from './head-look.mjs?v=16';
+import {DustMap} from './map.mjs?v=16';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=15';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=15';
+import {setupUI} from './ui.mjs?v=16';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=16';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();
 const swipe=new SwipeController();const headLook=new HeadLook();let lookDemo=0;
@@ -26,7 +26,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=15',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=16',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -45,9 +45,10 @@ async function start(){
 $('start').onclick=start;
 $('centerHead').onclick=()=>{head?.recenter();headLook.speed=0;swipe.reset();};
 $('headEnabled').onchange=()=>{if(head)head.mode=$('headEnabled').checked?'first':'off';headLook.speed=0;head?.recenter();};
+$('headThreshold').oninput=()=>{headLook.deadzoneDegrees=+$('headThreshold').value;$('thresholdValue').textContent=$('headThreshold').value+'°';};
 $('headGain').oninput=()=>{if(head)head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;};
 $('reset').onclick=()=>{headLook.heading=0;lookDemo=0;head?.recenter();camera.position.copy(dustMap.spawn);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
-function controlsChanged(){swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='LEFT index out (a slight bend is fine): move your hand to move. Turn your head slightly to keep rotating; face centre to stop. Turn farther for more speed. Up/down follows your head angle. Center head saves a comfortable neutral without changing your heading. Other fingers can stay relaxed. sideways = strafe; push toward camera = forward; pull toward yourself = back. Combine them for diagonals. To reset your reach: bend index FIRST, return your hand, then point again. Returning with index out also moves you.';status('Hands free · point deliberately to move');}
+function controlsChanged(){swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='LEFT index out (a slight bend is fine): move your hand to move. Small head movements stay still. Turn past the threshold (12° by default) to rotate; face centre to stop. Turn farther for more speed. Up/down follows your head angle. Center head saves a comfortable neutral without changing your heading. Other fingers can stay relaxed. sideways = strafe; push toward camera = forward; pull toward yourself = back. Combine them for diagonals. To reset your reach: bend index FIRST, return your hand, then point again. Returning with index out also moves you.';status('Hands free · point deliberately to move');}
 $('gain').oninput=()=>swipe.gain=+$('gain').value;
 $('reverse').onchange=()=>{swipe.reverse=$('reverse').checked;swipe.reset();};
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
