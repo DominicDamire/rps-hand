@@ -23,7 +23,7 @@ async def run():
     for name, ch in [("thumb",[1,2,3,4]),("index",[5,6,7,8]),("middle",[9,10,11,12]),("ring",[13,14,15,16]),("pinky",[17,18,19,20])]:
         lt=[norm(sub(tr[j],tr[PARENT[j]]))*100 for j in ch[1:]]; lb=[norm(sub(bind[j],bind[PARENT[j]]))*s*100 for j in ch[1:]]
         fl=sum(lt); r_=norm(sub(tr[ch[-1]],tr[ch[0]]))/fl
-        bt=[ang(tr[ch[k-1]],tr[ch[k]],tr[ch[k+1]]) for k in range(1,3)]; bf=[ang(fk[ch[k-1]],fk[ch[k]],fk[ch[k+1]]) for k in range(1,3)]
+        bt=[ang(tr[0],tr[ch[0]],tr[ch[1]])]+[ang(tr[ch[k-1]],tr[ch[k]],tr[ch[k+1]]) for k in range(1,3)]; bf=[ang(fk[0],fk[ch[0]],fk[ch[1]])]+[ang(fk[ch[k-1]],fk[ch[k]],fk[ch[k+1]]) for k in range(1,3)]
         print(f"{name:6s} len tracked {['%.1f'%x for x in lt]} bind*s {['%.1f'%x for x in lb]} | tip/knuckle r={r_:.2f} | bends tracked {['%.0f'%x for x in bt]} fk {['%.0f'%x for x in bf]}")
     # thumb tip vs index proximal segment
     print(f"thumb tip -> index proximal: tracked {segdist(tr[4],tr[5],tr[6])*100:.1f} cm  fk {segdist(fk[4],fk[5],fk[6])*100:.1f} cm ; thumb tip -> index middle seg: tracked {segdist(tr[4],tr[6],tr[7])*100:.1f} fk {segdist(fk[4],fk[6],fk[7])*100:.1f}")
