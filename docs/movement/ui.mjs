@@ -14,10 +14,18 @@ export function setupUI(){
  $('resetLayout').onclick=()=>{panel.removeAttribute('style');preview.removeAttribute('style');panel.classList.remove('collapsed');$('collapse').textContent='Hide controls';$('collapse').setAttribute('aria-expanded','true');preview.hidden=false;$('showPreview').hidden=true;};
  addEventListener('resize',()=>{if(panel.style.left)keepInside(panel);if(preview.style.left&&!preview.hidden)keepInside(preview);});
  const canvas=$('tracking'),ctx=canvas.getContext('2d');let trail=[];
+ const zoomView=(hands,w,h,joystick)=>{
+  const crop=handViewport(w,h,hands?.[0],joystick),box=$('previewImage');
+  box.style.aspectRatio='4/3';$('cam').style.visibility=hands?.length||joystick?.centre?'visible':'hidden';const zoom=box.clientWidth/crop.width;
+  for(const el of [$('cam'),canvas]){el.style.width=w*zoom+'px';el.style.height=h*zoom+'px';el.style.left=-crop.x*zoom+'px';el.style.top=-crop.y*zoom+'px';}
+  const speed=Math.hypot(joystick?.x||0,joystick?.z||0);
+  $('handZoomState').textContent=!joystick?.centre?'Show resting fist':joystick.active?(speed>1.01?'BOOST ':'MOVE ')+Math.round(speed*100)+'%':joystick.reason?.includes('TRACKING')||!hands?.length?'Show hand to resume':'Centre / fist = stop';
+ };
+
  const edges=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
  return {clear(){trail=[];ctx.clearRect(0,0,canvas.width,canvas.height);},camera(on){$('previewNote').hidden=on;this.clear();},draw(hands,w,h,active=false,joystick=null){
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;$('previewImage').style.aspectRatio=w+'/'+h;}
-  ctx.clearRect(0,0,w,h);if(preview.hidden)return;
+  ctx.clearRect(0,0,w,h);if(preview.hidden)return;zoomView(hands,w,h,joystick);
   const point=p=>[(1-p.x)*w,p.y*h];
   const now=performance.now();trail=trail.filter(p=>now-p.t<350);if(active&&hands?.length===1)trail.push({xy:point(hands[0][4]),t:now});else trail=[];
   for(const hand of hands??[]){if(hand.length!==21)continue;
@@ -74,4 +82,20 @@ export function drawThumbJoystick(ctx,hand,w,h,joystick){
  ctx.fillStyle='#08151dcc';ctx.fillRect(bx,36,barWidth,7);
  ctx.fillStyle=active?'#ffdb68':'#6dffb3';ctx.fillRect(bx,36,barWidth*Math.min(1,speed/1.6),7);
  ctx.restore();
+}
+
+// Crop in the same mirrored pixel coordinates as the overlay. Once centred,
+// the crop depends only on the saved anchor/scale, never the moving hand.
+export function handViewport(w,h,hand,joystick){
+ if(!w||!h)return {x:0,y:0,width:1,height:.75};
+ let cx,cy,width;
+ if(joystick?.centre&&joystick?.viewScale>0){
+  const span=joystick.viewScale*w;cx=joystick.centre[0]*w;cy=joystick.centre[1]*w+.35*span;width=span*2.2;
+ }else if(hand?.length===21){
+  const xs=hand.map(p=>(1-p.x)*w),ys=hand.map(p=>p.y*h);
+  cx=(Math.min(...xs)+Math.max(...xs))/2;cy=(Math.min(...ys)+Math.max(...ys))/2;
+  width=Math.max(Math.max(...xs)-Math.min(...xs),(Math.max(...ys)-Math.min(...ys))*4/3)*1.35;
+ }else{return {x:0,y:0,width:w,height:h};}
+ width=Math.max(w*.22,Math.min(width,w,h*4/3));const height=width*.75;
+ return {x:Math.max(0,Math.min(w-width,cx-width/2)),y:Math.max(0,Math.min(h-height,cy-height/2)),width,height};
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {ThumbJoystick,thumbVector,measureThumb} from './thumb-joystick.mjs';
-import {drawThumbJoystick} from './ui.mjs';
+import {drawThumbJoystick,handViewport} from './ui.mjs';
 const s=(x=0,y=0,rest=false,scale=1)=>({point:[x,y],rest,scale});
 const ready=()=>{const c=new ThumbJoystick();c.size=1;for(const t of [-400,-300,-200,-100,0])c.receive(s(0,.35,true),t);return c;};
 test('fist captures a fixed circle above its resting thumb',()=>{const c=ready();assert.deepEqual(c.centre,[0,0]);assert.equal(c.scale,1);assert.equal(c.direction,null);});
@@ -59,3 +59,12 @@ test('boost starts continuously at circle edge and stays capped in every directi
  assert.equal(thumbVector([.5,0],[0,0]).x,1);assert.ok(thumbVector([.50001,0],[0,0]).x<1.001);
  for(let i=0;i<360;i++){const a=i*Math.PI/180,v=thumbVector([100*Math.cos(a),100*Math.sin(a)],[0,0]);assert.ok(Math.abs(Math.hypot(v.x,v.z)-1.6)<1e-10);}
 });
+
+test('zoom crop stays anchored and includes the joystick boost ring',()=>{
+ const j={centre:[.5,.35],viewScale:.15,scale:.15*.55};const hand=Array.from({length:21},()=>({x:.5,y:.5}));
+ const a=handViewport(640,480,hand,j);hand[4]={x:.1,y:.9};assert.deepEqual(handViewport(640,480,hand,j),a);
+ const r=.8*j.scale*640,cx=j.centre[0]*640,cy=j.centre[1]*640;
+ assert.ok(cx-r>=a.x&&cx+r<=a.x+a.width&&cy-r>=a.y&&cy+r<=a.y+a.height);
+ assert.ok(a.width<640*.5);assert.ok(Math.abs(a.width/a.height-4/3)<1e-10);
+});
+test('zoom crop remains inside image near its edges',()=>{for(const centre of [[0,0],[1,.75],[.99,.01]]){const c=handViewport(640,480,null,{centre,viewScale:.2});assert.ok(c.x>=0&&c.y>=0&&c.x+c.width<=640&&c.y+c.height<=480);}});

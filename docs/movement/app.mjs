@@ -1,17 +1,17 @@
-import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=52';
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=52';
-import {setupThumbstick} from './thumbstick.mjs?v=52';
+import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=53';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=53';
+import {setupThumbstick} from './thumbstick.mjs?v=53';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=52';
-import {DustMap} from './map.mjs?v=52';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=53';
+import {DustMap} from './map.mjs?v=53';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=52';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=52';
+import {setupUI} from './ui.mjs?v=53';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=53';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
-$('saveTracking').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:52,frames:trackingLog},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='thumb-tracking-v52.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('saveTracking').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:53,frames:trackingLog},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='thumb-tracking-v53.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const held=new ThumbJoystick();let inputMode='poses',trackedHand=null,resting=false;
 const scheduler=new TrackingScheduler();const swipe=new SwipeController();const headLook=new HeadLook();let lookDemo=0;
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:false});renderer.setPixelRatio(1);
@@ -33,11 +33,11 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=52',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=53',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
-    lastResult=performance.now();if(lastResult-data.time>300){held.receive(null,lastResult);apply(null,lastResult);trackingUI.draw([],$('cam').videoWidth,$('cam').videoHeight,false,{centre:held.centre,scale:held.effectiveScale,reason:held.reason});walkReason='TRACKING TOO OLD · '+Math.round(lastResult-data.time)+' ms';status(walkReason);return;}
+    lastResult=performance.now();if(lastResult-data.time>300){held.receive(null,lastResult);apply(null,lastResult);trackingUI.draw([],$('cam').videoWidth,$('cam').videoHeight,false,{centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,reason:held.reason});walkReason='TRACKING TOO OLD · '+Math.round(lastResult-data.time)+' ms';status(walkReason);return;}
     let handIndex=inputMode==='index'?selectLeftHand(data):data.landmarks?.length===1?0:-1;
     if(resting){held.receive(null,lastResult);swipe.reset();walkReason='RESTING';return;}
     const label=handIndex>=0?data.handedness?.[handIndex]?.[0]?.categoryName:null;
@@ -51,7 +51,7 @@ async function start(){
       trackingLog.push({time:lastResult,captureTime:data.time,point:sample?.point??null,rest:sample?.rest??false,centre:held.centre,raw:held.raw,x:held.x,z:held.z,reason:held.reason});while(trackingLog.length>450||trackingLog.length&&lastResult-trackingLog[0].time>15000)trackingLog.shift();
       const active=!!held.direction;walkReason=handIndex<0?'SHOW ONE HAND':held.reason;
       $('gestureStats').textContent=`THUMB X ${held.x.toFixed(2)} · Y ${(-held.z).toFixed(2)} · raw X ${held.raw.x.toFixed(2)} Y ${(-held.raw.z).toFixed(2)} · tracker ${Math.round(data.inferenceMs||0)} ms`;
-      trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,active,{centre:held.centre,scale:held.effectiveScale,active,x:held.x,z:held.z,reason:held.reason});
+      trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,active,{centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,active,x:held.x,z:held.z,reason:held.reason});
       status(active?'THUMB · '+held.direction:walkReason,active);
     }
   };
@@ -87,7 +87,7 @@ function frame(now){
  if(inputMode==='touch'&&!document.hidden&&!demo&&!resting){const v=stick.vector,step=bodyDisplacement(v.x*held.speed*Math.min(.05,dt),v.z*held.speed*Math.min(.05,dt),headLook.heading);dustMap.move(camera.position,step.x,step.z);const moving=Math.hypot(v.x,v.z)>.001;status(moving?'WALKING · release to stop':'Thumbstick ready · drag to walk',moving);$('gestureStats').textContent=moving?'Walking '+Math.round(Math.hypot(v.x,v.z)*100)+'%':'Stopped';}
  if(running&&!resting){
   const movement=held.step(now,dt),world=bodyDisplacement(movement.dx,movement.dz,headLook.heading),beforeX=camera.position.x,beforeZ=camera.position.z;dustMap.move(camera.position,world.x,world.z);if(held.direction){walkReason=!dustMap.ready?'MAP LOADING':Math.hypot(camera.position.x-beforeX,camera.position.z-beforeZ)<.00001?'BLOCKED BY MAP':'MOVING';}
-  if(inputMode!=='touch'&&now-lastResult>350){held.receive(null,now);swipe.update(null,now);trackingUI.draw([],$('cam').videoWidth,$('cam').videoHeight,false,{centre:held.centre,scale:held.effectiveScale,reason:held.reason});walkReason='WAITING FOR TRACKING';status(walkReason);}
+  if(inputMode!=='touch'&&now-lastResult>350){held.receive(null,now);swipe.update(null,now);trackingUI.draw([],$('cam').videoWidth,$('cam').videoHeight,false,{centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,reason:held.reason});walkReason='WAITING FOR TRACKING';status(walkReason);}
   const v=$('cam');
   const job=scheduler.next({busy:busy||!!head?.busy,handReady:inputMode!=='touch'&&v.readyState>=2&&v.currentTime!==lastVideo,headReady:!!head?.wantsFrame(now)&&v.readyState>=2&&v.currentTime!==lastHeadVideo});
   if(job==='head'){lastHeadVideo=v.currentTime;head.capture(v,now);}
