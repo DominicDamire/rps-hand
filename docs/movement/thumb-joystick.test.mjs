@@ -82,3 +82,9 @@ test('phone inference gaps do not repeatedly lock the joystick',()=>{
  const c=ready();c.receive(s(.5),300);c.receive(s(.5),600);assert.equal(c.direction,'RIGHT');
  assert.ok(c.step(900).dx>0);assert.deepEqual(c.step(1051),{dx:0,dz:0});
 });
+
+test('two consistent 30fps samples engage without an extra 70ms wait',()=>{
+ const c=ready();c.receive(s(.5),100);assert.equal(c.direction,null);c.receive(s(.5),133);assert.equal(c.direction,'RIGHT');
+ c.receive(s(-.5),166);assert.equal(c.direction,'RIGHT');c.receive(s(-.5),199);assert.equal(c.direction,'LEFT');
+ c.receive(s(),215);assert.equal(c.direction,null);
+});

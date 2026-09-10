@@ -56,9 +56,9 @@ export class ThumbJoystick {
   if(!active||change>.8){
    const agreement=this.candidate?(v.x*this.candidate.x+v.z*this.candidate.z)/(Math.hypot(v.x,v.z)*Math.hypot(this.candidate.x,this.candidate.z)):-1;
    if(!this.candidate||agreement<Math.cos(Math.PI/5))this.candidate={...v,since:time,count:1};else this.candidate.count++;
-   if(this.candidate.count<2||time-this.candidate.since<70){if(!active)this.reason='CONFIRMING TILT';return;}
+   if(this.candidate.count<2||time-this.candidate.since<25){if(!active)this.reason='CONFIRMING TILT';return;}
   }
-  this.candidate=null;const alpha=active?1-Math.exp(-Math.min(100,elapsed)/30):1;
+  this.candidate=null;const alpha=active?1-Math.exp(-Math.min(100,elapsed)/18):1;
   this.x+=(v.x-this.x)*alpha;this.z+=(v.z-this.z)*alpha;this.lastTilt=t;this.reason='MOVING';
  }
  get effectiveScale(){return this.scale===null?null:this.scale*this.size;}
