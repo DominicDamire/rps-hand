@@ -458,7 +458,9 @@ const VIEWS = ["mirror", "first person", "third person"]; let view = 0;   // mir
 let eyeCamGL = null, headYaw = 0, headPitch = 0;
 const toPlayerV = (v, fp) => fp ? v.applyAxisAngle(YAXIS, nav.yaw).add(new THREE.Vector3(nav.x, nav.y, nav.z)) : v.applyAxisAngle(YAXIS, -nav.yaw).add(new THREE.Vector3(-nav.x, nav.y, nav.z));   // navigation transform: first person R(yaw)+T, mirror the mirrored one
 $("view").onclick = () => { view = (view + 1) % VIEWS.length; $("view").textContent = "VIEW: " + VIEWS[view]; applyView(true); };
-if (Q.get("view")) { view = Math.max(0, VIEWS.indexOf(Q.get("view").replace("_", " "))); $("view").textContent = "VIEW: " + VIEWS[view]; }   // ?view=first_person / third_person for render checks
+if (Q.get("view")) view = Math.max(0, VIEWS.indexOf(Q.get("view").replace("_", " ")));   // ?view=mirror / first_person / third_person
+else if (!Q.get("img") && !Q.get("video")) view = 1;   // live camera: first person by default (head tracking drives it); test stills/clips stay in mirror view
+$("view").textContent = "VIEW: " + VIEWS[view];
 function applyView(force) {
   const w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio(), fp = VIEWS[view] === "first person";
   if (force || canvas.width !== (w * pr | 0) || canvas.height !== (h * pr | 0)) {
