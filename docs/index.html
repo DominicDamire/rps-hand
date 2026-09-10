@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 31)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 32)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -48,7 +48,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 
-const BUILD = 31;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 32;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -393,6 +393,7 @@ const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 8);
 // screen area it covers in the video, seen from your side instead of the phone's; the room keeps the fixed eye camera.
 const handCam = new THREE.PerspectiveCamera(50, 1, 0.02, 8); window.handCam = handCam;
 const worldObjs = [];   // room objects hidden while the hands are drawn with handCam
+const FP_DEPTH = +Q.get("fpz") || 0.3;   // first person: the room is seen as if your hand were this far from the phone
 const worldGroup = new THREE.Group(); scene.add(worldGroup);   // everything that must mirror in the selfie view
 let frameW = 640, frameH = 480;   // camera frame size, set once the video is known
 const VIEWS = ["first person", "mirror"]; let view = Q.has("view") ? +Q.get("view") : Q.get("img") || Q.get("video") ? 1 : 0;   // ?view=0 first person, 1 mirror   // live camera: first person; test stills/clips: mirror   // mirror = the room seen from the phone, mirrored like the video
@@ -403,12 +404,14 @@ function applyView(force) {
     renderer.setSize(w, h, false); camera.aspect = w / h;
     // mirror: match the video pane's object-fit:cover crop (a pane taller than the frame shows the full frame height, a wider pane the full width)
     const t = Math.tan(HFOV / 2), cropFov = 2 * Math.atan(w / h < frameW / frameH ? t * frameH / frameW : t / (w / h)) * 180 / Math.PI;
-    camera.fov = fp ? 62 : cropFov; camera.updateProjectionMatrix();
+    camera.fov = cropFov; camera.updateProjectionMatrix();
     handCam.aspect = w / h; handCam.fov = cropFov; handCam.updateProjectionMatrix();
   }
   const dbgCam = Q.get("cam")?.split(",").map(Number);   // ?cam=x,y,z,tx,ty,tz: fixed debug camera (renders checks of the hand mesh)
   if (dbgCam) { camera.position.set(dbgCam[0], dbgCam[1], dbgCam[2]); camera.lookAt(dbgCam[3], dbgCam[4], dbgCam[5]); worldGroup.scale.x = 1; }
-  else if (fp) { camera.position.set(0, 0.12, -0.85); camera.lookAt(0, -0.12, 0.5); worldGroup.scale.x = 1; }
+  else if (fp) {   // the room from your side: the phone's view reflected at a fixed FP_DEPTH (a hand at that depth and the room agree exactly on screen)
+    _pd.set(0, Math.sin(pitch), -Math.cos(pitch)); camera.position.copy(_pd).multiplyScalar(2 * FP_DEPTH); camera.lookAt(0, 0, 0); worldGroup.scale.x = 1;
+  }
   else {   // looks where the phone looks, from where navigation has taken the player (the hands move with the player, so the video overlay stays exact)
     camera.position.set(0, 0, 0); camera.lookAt(0, Math.sin(pitch), -Math.cos(pitch)); worldGroup.scale.x = -1;
   }
@@ -434,6 +437,7 @@ function render3D(fpHands) {   // fpHands: [{group, pc}] hands to draw with the 
   if (!fpHands) { renderer.render(scene, camera); return; }
   const vis = fpHands.map(h => h.group.visible); for (const h of fpHands) h.group.visible = false;
   renderer.render(scene, camera);                                            // the room, from the eyes
+  const bg = scene.background; scene.background = null;                      // a Color background forces a clear per render: none for the hand passes
   for (const o of worldObjs) o.visible = false; renderer.autoClear = false;
   _pd.set(0, Math.sin(pitch), -Math.cos(pitch));                             // the phone's optical axis in the levelled world
   for (let i = 0; i < fpHands.length; i++) {
@@ -441,7 +445,7 @@ function render3D(fpHands) {   // fpHands: [{group, pc}] hands to draw with the 
     handCam.position.copy(_pd).multiplyScalar(2 * Zh); handCam.lookAt(0, 0, 0);   // the phone camera mirrored through the hand's depth plane
     renderer.clearDepth(); fpHands[i].group.visible = true; renderer.render(scene, handCam); fpHands[i].group.visible = false;
   }
-  for (const o of worldObjs) o.visible = true; renderer.autoClear = true; fpHands.forEach((h, i) => h.group.visible = vis[i]);
+  for (const o of worldObjs) o.visible = true; renderer.autoClear = true; scene.background = bg; fpHands.forEach((h, i) => h.group.visible = vis[i]);
 }
 
 
@@ -478,10 +482,10 @@ const FIT_EXACT = Q.get("fit") === "exact";
 // passes): finger segments are capsules that may not overlap, the palm is a slab the fingers cannot enter, every bone keeps
 // its length, knuckles stay put. Fingers therefore stack over each other when they cross and rest on the palm in a fist
 // instead of passing through. ?col=0 disables.
-const COLLIDE = Q.get("col") === "1";   // TEMP default off while build-31 verification runs
+const COLLIDE = Q.get("col") !== "0";
 const FINGER_RAD = 0.0075;           // finger radius in metres at hand scale 1 (axis-to-axis 15 mm = fingers touching)
 const PALM_HALF = 0.011;             // half thickness of the palm slab, metres at scale 1
-const _pa = V(), _pb = V(), _sd = V(), _r1 = V(), _r2 = V(), _pu = V(), _pv = V();
+const _pa = V(), _pb = V(), _sd = V(), _r1 = V(), _r2 = V(), _pu = V(), _pv = V(), _ray = V();
 function segClosest(a1, a2, b1, b2) {   // closest points between segments a1a2 and b1b2 -> [ta, tb] (Ericson, Real-Time Collision Detection 5.1.9)
   _r1.subVectors(a2, a1); _r2.subVectors(b2, b1); _sd.subVectors(a1, b1);
   const A = _r1.dot(_r1), E = _r2.dot(_r2), F = _r2.dot(_sd); let t1 = 0, t2 = 0;
@@ -490,12 +494,14 @@ function segClosest(a1, a2, b1, b2) {   // closest points between segments a1a2 
   else { const C = _r1.dot(_sd); if (E <= 1e-12) t1 = Math.min(1, Math.max(0, -C / A)); else { const B = _r1.dot(_r2), den = A * E - B * B; t1 = den !== 0 ? Math.min(1, Math.max(0, (B * F - C * E) / den)) : 0; t2 = (B * t1 + F) / E; if (t2 < 0) { t2 = 0; t1 = Math.min(1, Math.max(0, -C / A)); } else if (t2 > 1) { t2 = 1; t1 = Math.min(1, Math.max(0, (B - C) / A)); } } }
   return [t1, t2];
 }
-function solidHand(out, s, nOut) {   // out: 21 joints after FK (metres); s: hand scale; nOut: unit palm normal pointing to the palm side
+function solidHand(out, s, nOut, st) {   // out: 21 joints after FK (metres); s: hand scale; nOut: unit palm normal pointing to the palm side; st: per-hand memory
   const R = FINGER_RAD * s, chains = [[5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16], [17, 18, 19, 20], [1, 2, 3, 4]];
   const fixed = new Set([0, 1, 5, 9, 13, 17]), len = {};
   for (const ch of chains) for (let k = 1; k < 4; k++) len[ch[k]] = out[ch[k]].distanceTo(out[ch[k - 1]]);
   const segs = []; for (const ch of chains) for (let k = 1; k < 4; k++) segs.push([ch[k - 1], ch[k], ch]);
   _pu.subVectors(out[9], out[0]); const Lp = _pu.length(); _pu.normalize();                 // along the palm, wrist -> middle knuckle
+  _pv.subVectors(out[17], out[5]).normalize();                                              // across the palm, index -> pinky knuckle
+  const v5 = _sd.subVectors(out[5], out[0]).dot(_pv) - R, v17 = _sd.subVectors(out[17], out[0]).dot(_pv) + R;   // the slab spans the knuckles (an abducted thumb beside the palm is not lifted)
   const minD = PALM_HALF * s + R;
   for (let pass = 0; pass < 4; pass++) {
     for (let i = 0; i < segs.length; i++) for (let k = i + 1; k < segs.length; k++) {         // capsule vs capsule, different fingers only
@@ -503,13 +509,25 @@ function solidHand(out, s, nOut) {   // out: 21 joints after FK (metres); s: han
       const [ta, tb] = segClosest(out[a1], out[a2], out[b1], out[b2]);
       _pa.copy(out[a1]).lerp(out[a2], ta); _pb.copy(out[b1]).lerp(out[b2], tb); _sd.subVectors(_pa, _pb); const d = _sd.length();
       if (d >= 2 * R || d < 1e-6) continue;
-      _sd.multiplyScalar((2 * R - d) / d * 0.5);                                              // half the overlap each way
+      // Crossed or side by side? Fingers keep their knuckle order across the palm unless they cross. A pair whose order at
+      // the contact is swapped (index found on the pinky side of the middle, the thumb found over the fingers) IS
+      // crossing: the picture fixes where each finger is and the tracker's depth is the uncertain part, so the pair moves
+      // apart along the ray from the phone, one finger in front of the other. In front: the tracked depth order when it
+      // is clear (3 mm), else the order remembered for this pair, else the later chain (middle over index, thumb over the
+      // fingers). Side by side (order kept): the plain push apart, as fingers pressed together.
+      const crossed = (_pb.dot(_pv) - _pa.dot(_pv)) * (out[cb[0]].dot(_pv) - out[ca[0]].dot(_pv)) < 0;
+      if (crossed) {
+        _ray.copy(_pa).add(_pb).normalize(); const sz = _sd.dot(_ray), lat2 = _sd.lengthSq() - sz * sz, key = "o" + i + "_" + k;
+        let sign = Math.abs(sz) >= 0.003 ? Math.sign(sz) : st && st[key] || 1; if (st) st[key] = sign;
+        const zt = sign * Math.sqrt(Math.max(0, 4 * R * R - lat2));                          // depth gap that makes the pair just touch
+        _sd.copy(_ray).multiplyScalar((zt - sz) * 0.5);                                      // half the depth move each way
+      } else _sd.multiplyScalar((2 * R - d) / d * 0.5);                                      // half the overlap each way
       if (!fixed.has(a1)) out[a1].addScaledVector(_sd, 1 - ta); if (!fixed.has(a2)) out[a2].addScaledVector(_sd, ta);
       if (!fixed.has(b1)) out[b1].addScaledVector(_sd, -(1 - tb)); if (!fixed.has(b2)) out[b2].addScaledVector(_sd, -tb);
     }
     for (const ch of chains) for (let k = 1; k < 4; k++) {                                     // palm slab: joints over the palm stay outside it
-      const j = ch[k]; _sd.subVectors(out[j], out[0]); const u = _sd.dot(_pu), h = _sd.dot(nOut);
-      if (u > -0.2 * Lp && u < 0.9 * Lp && h < minD) out[j].addScaledVector(nOut, minD - h);
+      const j = ch[k]; _sd.subVectors(out[j], out[0]); const u = _sd.dot(_pu), v = _sd.dot(_pv), h = _sd.dot(nOut);
+      if (u > -0.2 * Lp && u < 0.9 * Lp && v > v5 && v < v17 && h < minD) out[j].addScaledVector(nOut, minD - h);
     }
     for (const ch of chains) for (let k = 1; k < 4; k++) {                                     // bones keep their length
       const j = ch[k], p = ch[k - 1]; _sd.subVectors(out[j], out[p]); const d = _sd.length(); if (d < 1e-9) continue;
@@ -525,10 +543,12 @@ const CHAIN_OF = {}; for (const [k, js] of Object.entries(CHAINS)) for (const j 
 const HYPER = { mcp: 25, pip: 8, dip: 8 };   // degrees of backward bend allowed at each finger joint
 const F_Q = (Q.get("fist") || "").split(",").map(Number);
 const FIST = F_Q.length === 3 ? { mcp: F_Q[0], pip: F_Q[1], dip: F_Q[2] } : { mcp: 85, pip: 100, dip: 60 };  // a closed fist's joint angles; blended in as the tracked tip approaches the knuckle (the tracker under-reads hidden joints)
-const _b = V(), _c = V(), _e = V();
+const _b = V(), _c = V(), _e = V(), _pw = V();
 function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing state for the joint angles
   const s = scale ?? pts[0].distanceTo(pts[9]) / bind[0].distanceTo(bind[9]), out = pts.map(p => p.clone());
   _l.subVectors(pts[17], pts[5]).normalize();
+  const Lp = _pw.subVectors(pts[9], pts[0]).length(); _pw.normalize();                                     // along the palm
+  const vLo = _d.subVectors(pts[5], pts[0]).dot(_l) - 0.1 * Lp, vHi = _d.subVectors(pts[17], pts[0]).dot(_l) + 0.1 * Lp;   // across-palm extent of the palm
   _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize(); if (!chirRight) _n.negate();   // now points OUT of the palm
   const seg = (j, dir) => out[j].copy(out[PARENT[j]]).addScaledVector(dir, s * bind[j].distanceTo(bind[PARENT[j]]));
   for (const j of [1, 5, 9, 13, 17]) seg(j, _d.subVectors(pts[j], pts[0]).normalize());   // palm: tracked directions, scan lengths
@@ -546,7 +566,14 @@ function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing s
     // curl index: tip close to the knuckle (relative to the finger's tracked length) = a closing fist; the tracker cannot see
     // the middle and end joints then and under-reads their bend, so the fist angles take over as the tip approaches
     const fLen = pts[m].distanceTo(pts[m + 1]) + pts[m + 1].distanceTo(pts[m + 2]) + pts[m + 2].distanceTo(pts[m + 3]);
-    const closeness = Math.min(1, Math.max(0, (0.75 - pts[m + 3].distanceTo(pts[m]) / Math.max(1e-6, fLen)) / 0.4));   // 0 at tip 75 % out, 1 at 35 %
+    let closeness = Math.min(1, Math.max(0, (0.75 - pts[m + 3].distanceTo(pts[m]) / Math.max(1e-6, fLen)) / 0.4));   // 0 at tip 75 % out, 1 at 35 %
+    // A fingertip OVER the palm (in the picture, and not far in front of it) is a folded finger. The tracker cannot see how
+    // deep a hidden finger sits and reads a closed fist as a loose hook 4-5 cm off the palm (measured on the victory and
+    // peace stills); a hovering hook over the palm is rare, a fist is not, so the fist angles take over there.
+    _d.subVectors(pts[m + 3], pts[0]); const uT = _d.dot(_pw), vT = _d.dot(_l), hT = Math.abs(_d.dot(_n));
+    const c01 = x => Math.min(1, Math.max(0, x));
+    const fold = c01((0.95 * Lp - uT) / (0.15 * Lp)) * c01((uT - 0.05 * Lp) / (0.1 * Lp)) * c01((0.6 * Lp - hT) / (0.15 * Lp)) * (vT > vLo && vT < vHi ? 1 : 0);
+    closeness = Math.max(closeness, fold);
     for (const [j, lim, fist] of [[m + 1, HYPER.mcp, FIST.mcp], [m + 2, HYPER.pip, FIST.pip], [m + 3, HYPER.dip, FIST.dip]]) {
       _d.subVectors(pts[j], pts[j - 1]).normalize();
       // the knuckle is a two-axis joint: it bends AND spreads (that is how fingers cross); the middle and end joints are hinges
@@ -563,7 +590,7 @@ function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing s
       seg(j, _d); prev = _e.copy(_d);
     }
   }
-  if (COLLIDE) solidHand(out, s, _n);
+  if (COLLIDE) solidHand(out, s, _n, st);
   // anchor: tracked palm centre
   const c0 = palmCentre(pts), c1 = palmCentre(out); _r.subVectors(c0, c1); for (const p of out) p.add(_r);
   if (window.dbg) { window.dbg.fk = out; window.dbg.fkIn = pts; window.dbg.bind = bind; }   // tests: the tracked points and what the skin gets
@@ -607,6 +634,45 @@ function frameDir(a, dir, L, s, refPrimary, refSecondary, out) {   // origin a, 
   out.makeBasis(_x.multiplyScalar(s), _y.multiplyScalar(L), _z.multiplyScalar(s)); out.setPosition(a); return out;
 }
 function palmRefs(pts) { _l.subVectors(pts[17], pts[5]).normalize(); _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize(); }
+// Hands only: the skin is cut STUB metres down the forearm (rest pose, measured from the wrist toward the elbow) and the
+// cut is closed with a cap, so the hand is a solid object from every side (first person looks at it from the wrist).
+const STUB = +Q.get("stub") || 0.08;
+function cutArm(geo, wrist, elbow, handBone) {
+  const pos = geo.attributes.position, n = pos.count, e = elbow.clone().sub(wrist).normalize(), far = new Uint8Array(n), _v = V();
+  for (let v = 0; v < n; v++) far[v] = _v.set(pos.getX(v), pos.getY(v), pos.getZ(v)).sub(wrist).dot(e) > STUB ? 1 : 0;
+  const idx = geo.index ? geo.index.array : Uint32Array.from({ length: n }, (_, i) => i), keep = [];
+  for (let t = 0; t < idx.length; t += 3) if (!(far[idx[t]] && far[idx[t + 1]] && far[idx[t + 2]])) keep.push(idx[t], idx[t + 1], idx[t + 2]);
+  // boundary edges of what is kept (used by one triangle only), matched by position so UV seams do not split the loop
+  const key = v => `${Math.round(pos.getX(v) * 1e4)},${Math.round(pos.getY(v) * 1e4)},${Math.round(pos.getZ(v) * 1e4)}`;
+  const edges = new Map();
+  for (let t = 0; t < keep.length; t += 3) for (let k = 0; k < 3; k++) {
+    const a = keep[t + k], b = keep[t + (k + 1) % 3], ka = key(a), kb = key(b), e = ka < kb ? ka + "|" + kb : kb + "|" + ka;
+    const r = edges.get(e); if (r) r.n++; else edges.set(e, { a, b, n: 1 });
+  }
+  const loops = [...edges.values()].filter(r => r.n === 1); if (!loops.length) { geo.setIndex(keep); return; }
+  // group boundary edges into loops (connected by position), cap each loop with a fan from its centroid
+  const adj = new Map(); for (const r of loops) for (const [u, w] of [[key(r.a), r], [key(r.b), r]]) { if (!adj.has(u)) adj.set(u, []); adj.get(u).push(w); }
+  const seen = new Set(), caps = [];
+  for (const r0 of loops) {
+    if (seen.has(r0)) continue; const group = [], stack = [r0]; seen.add(r0);
+    while (stack.length) { const r = stack.pop(); group.push(r); for (const u of [key(r.a), key(r.b)]) for (const w of adj.get(u)) if (!seen.has(w)) { seen.add(w); stack.push(w); } }
+    if (group.length >= 3) caps.push(group);
+  }
+  const attrs = Object.entries(geo.attributes), add = caps.length, out = {};
+  for (const [name, at] of attrs) { const arr = new at.array.constructor(at.array.length + add * at.itemSize); arr.set(at.array); out[name] = new THREE.BufferAttribute(arr, at.itemSize, at.normalized); }
+  caps.forEach((group, c) => {
+    const v = n + c, cx = V(), vs = new Set(); for (const r of group) { vs.add(r.a); vs.add(r.b); }
+    for (const u of vs) cx.add(new THREE.Vector3(pos.getX(u), pos.getY(u), pos.getZ(u))); cx.multiplyScalar(1 / vs.size);
+    const first = group[0].a;   // the new vertex copies the first loop vertex's attributes (uv, weights), then gets the centroid position
+    for (const [name, at] of attrs) for (let k = 0; k < at.itemSize; k++) out[name].setComponent(v, k, at.getComponent(first, k));
+    out.position.setXYZ(v, cx.x, cx.y, cx.z);
+    if (out.skinIndex) { out.skinIndex.setXYZW(v, handBone, 0, 0, 0); out.skinWeight.setXYZW(v, 1, 0, 0, 0); }
+    for (const r of group) keep.push(r.b, r.a, v);   // opposite winding to the kept triangle across the edge: the cap faces outward
+  });
+  for (const [name, at] of Object.entries(out)) geo.setAttribute(name, at);
+  geo.setIndex(keep);
+  if (out.normal) { const nm = geo.attributes.normal; for (let c = 0; c < add; c++) { let sx = 0, sy = 0, sz = 0; for (const r of caps[c]) { sx += nm.getX(r.a); sy += nm.getY(r.a); sz += nm.getZ(r.a); } const L = Math.hypot(sx, sy, sz) || 1; nm.setXYZ(n + c, sx / L, sy / L, sz / L); } }
+}
 async function loadRigSide(base, side) {
   const [gltf, meta] = await Promise.all([new GLTFLoader().loadAsync(`${base}_${side}.glb`), fetch(`${base}_${side}.json`).then(r => r.json())]);
   let src; gltf.scene.traverse(o => { if (o.isSkinnedMesh) src = o; });
@@ -618,6 +684,7 @@ async function loadRigSide(base, side) {
   const bind = meta.joints.map(q => new THREE.Vector3(...q));
   const edges = []; for (const [k, name] of Object.entries(meta.bones)) { const m = k.match(/^(\d+)-(\d+)$/); if (m && name && byName[norm(name)] != null) edges.push({ j: +m[2], i: byName[norm(name)] }); }
   const extra = {}; for (const key of ["hand", "forearm", "arm"]) { const nm = meta.bones[key], e = meta.extra?.[nm] || meta.extra?.[key]; if (nm && byName[norm(nm)] != null && e) extra[key] = { i: byName[norm(nm)], head: new THREE.Vector3(...e.head), tail: new THREE.Vector3(...e.tail) }; }
+  if (PALMS_ONLY && extra.forearm && extra.hand) cutArm(geo, extra.hand.head, extra.forearm.head, extra.hand.i);
   let material = null;
   if (Q.get("mat") === "plain") material = new THREE.MeshStandardMaterial({ color: 0xbfb8b0, roughness: 0.8, metalness: 0 });   // neutral clay: judge geometry without the texture
   else if (src.material?.isMeshStandardMaterial) {   // skin look: physical material, AO from the packed texture, slight sheen, no metalness glint
@@ -684,10 +751,7 @@ function makeRigSkin(variant, color) {
       bones[e.i].matrixWorldNeedsUpdate = true;
     }
     for (const i of riders) { bones[i].matrix.copy(handM); bones[i].matrixWorldNeedsUpdate = true; }
-    if (rest.forearm && PALMS_ONLY) {   // hands only: the forearm and upper arm collapse into the wrist (owner: "just palms"; ?arms=1 shows them)
-      frameDir(pts[0], dirW, 1e-4, 1e-4, _n, _l, bones[rest.forearm.i].matrix); bones[rest.forearm.i].matrixWorldNeedsUpdate = true;
-      if (rest.arm) { frameDir(pts[0], dirW, 1e-4, 1e-4, _n, _l, bones[rest.arm.i].matrix); bones[rest.arm.i].matrixWorldNeedsUpdate = true; }
-    } else if (rest.forearm) {   // straight forearm behind the wrist
+    if (rest.forearm) {   // straight forearm behind the wrist (hands only: its skin is cut away at load, see cutArm; ?arms=1 keeps it)
       o.copy(pts[0]).addScaledVector(dirW, -rest.forearm.L * sc); frameDir(o, dirW, rest.forearm.L * sc, ratio.palm, _n, _l, bones[rest.forearm.i].matrix); bones[rest.forearm.i].matrixWorldNeedsUpdate = true;
       if (rest.arm) { o.addScaledVector(dirW, -rest.arm.L * sc); frameDir(o, dirW, rest.arm.L * sc, ratio.palm, _n, _l, bones[rest.arm.i].matrix); bones[rest.arm.i].matrixWorldNeedsUpdate = true; }
     }

@@ -22,7 +22,7 @@ async def run():
     print(f"scale {s:.3f}  palm tracked {norm(sub(tr[0],tr[9]))*100:.1f} cm")
     for name, ch in [("thumb",[1,2,3,4]),("index",[5,6,7,8]),("middle",[9,10,11,12]),("ring",[13,14,15,16]),("pinky",[17,18,19,20])]:
         lt=[norm(sub(tr[j],tr[PARENT[j]]))*100 for j in ch[1:]]; lb=[norm(sub(bind[j],bind[PARENT[j]]))*s*100 for j in ch[1:]]
-        fl=sum(lt); r_=norm(sub(tr[ch[-1]],tr[ch[0]]))/fl
+        fl=sum(lt); r_=norm(sub(tr[ch[-1]],tr[ch[0]]))*100/fl
         bt=[ang(tr[0],tr[ch[0]],tr[ch[1]])]+[ang(tr[ch[k-1]],tr[ch[k]],tr[ch[k+1]]) for k in range(1,3)]; bf=[ang(fk[0],fk[ch[0]],fk[ch[1]])]+[ang(fk[ch[k-1]],fk[ch[k]],fk[ch[k+1]]) for k in range(1,3)]
         print(f"{name:6s} len tracked {['%.1f'%x for x in lt]} bind*s {['%.1f'%x for x in lb]} | tip/knuckle r={r_:.2f} | bends tracked {['%.0f'%x for x in bt]} fk {['%.0f'%x for x in bf]}")
     # thumb tip vs index proximal segment
