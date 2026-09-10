@@ -1,0 +1,24 @@
+[img victory       ] OK                     move=SCISSORS  HANDS: R 0.29m 2up fit 2.1%
+[img peace         ] OK                     move=SCISSORS  HANDS: L 0.20m 2up fit 2.4%
+[img dirty_peace   ] WRONG (want SCISSORS)  move=?         HANDS: -
+[img robbie_v      ] WRONG (want SCISSORS)  move=?         HANDS: -
+[img fist_pump     ] WRONG (want ROCK)      move=?         HANDS: -
+[img raised_fist   ] OK                     move=ROCK      HANDS: L 0.19m 0up fit 2.6%
+[img woman_hands   ] OK                     move=PAPER     HANDS: L 0.40m 4up fit 2.1% | R 0.52m 4up fit 0.9%
+[img crossed_hands ] OK                     move=PAPER     HANDS: L 0.29m 4up fit 1.0%
+[img scissors_png  ] WRONG (want SCISSORS)  move=PAPER     HANDS: R 0.18m 3up fit 3.8%
+[img count5        ]                        move=?         HANDS: -
+[img crossed1      ]                        move=SCISSORS  HANDS: R 0.15m 2up fit 3.7%
+[img crossed2      ]                        move=?         HANDS: -
+[img handshake1    ]                        move=?         HANDS: -
+[img handshake2    ]                        move=SCISSORS  HANDS: L 0.52m 2up fit 0.6%
+STILLS: 5/9 labelled moves correct
+[tilt 30 up      ] reproj 0.05%  ||  tracker: 16 ms | 52 fps | latency 17 ms | hands 1 / worker/GPU | mesh | mode predict | tilt 30° | build 14
+[vid rps       ] frames 1001 | two-hand 71% | held 675 | flips 5 | rawJumps 39 | spikes 2 snaps 2 handovers 0 | dispJumps 28 | depthClamps 3 | reproj 0.30% | lag 0.52% | fit 0.2% | moves R4 P793 S202 -2  ||  tracker: 12 ms | 61 fps | latency 13 ms | hands 2 / worker/GPU | mesh | mode predict | tilt off | build 14
+[vid wave      ] frames 1018 | two-hand 99% | held 0 | flips 2 | rawJumps 135 | spikes 0 snaps 0 handovers 0 | dispJumps 39 | depthClamps 3 | reproj 0.10% | lag 0.42% | fit 0.0% | moves R0 P1017 S0 -1  ||  tracker: 13 ms | 56 fps | latency 15 ms | hands 2 / worker/GPU | mesh | mode predict | tilt off | build 14
+[vid counting  ] frames 865 | two-hand 100% | held 0 | flips 2 | rawJumps 2 | spikes 0 snaps 0 handovers 0 | dispJumps 1 | depthClamps 2 | reproj 0.23% | lag 0.30% | fit 0.5% | moves R273 P476 S115 -1  ||  tracker: 15 ms | 53 fps | latency 16 ms | hands 2 / worker/GPU | mesh | mode predict | tilt off | build 14
+[vid gesture67 ] frames 1059 | two-hand 93% | held 0 | flips 3 | rawJumps 275 | spikes 67 snaps 28 handovers 0 | dispJumps 86 | depthClamps 256 | reproj 0.78% | lag 1.66% | fit 0.8% | moves R0 P1058 S0 -1  ||  tracker: 11 ms | 61 fps | latency 13 ms | hands 2 / worker/GPU | mesh | mode predict | tilt off | build 14
+[vid handclap  ] frames 1077 | two-hand 4% | held 205 | flips 17 | rawJumps 142 | spikes 21 snaps 15 handovers 0 | dispJumps 117 | depthClamps 38 | reproj 0.71% | lag 3.35% | fit 0.0% | moves R63 P581 S19 -414  ||  tracker: 13 ms | 60 fps | latency 14 ms | hands 0 / worker/GPU | mesh | mode predict | tilt off | build 14
+[vid cleanhands] frames 1364 | two-hand 4% | held 476 | flips 10 | rawJumps 43 | spikes 58 snaps 10 handovers 3 | dispJumps 16 | depthClamps 77 | reproj 1.90% | lag 3.44% | fit 0.3% | moves R126 P735 S7 -496  ||  tracker: 11 ms | 65 fps | latency 12 ms | hands 1 / worker/GPU | mesh | mode predict | tilt off | build 14
+[vid handwash  ] frames 1642 | two-hand 2% | held 260 | flips 8 | rawJumps 42 | spikes 14 snaps 3 handovers 0 | dispJumps 28 | depthClamps 17 | reproj 1.22% | lag 1.79% | fit 0.1% | moves R95 P333 S1 -1213  ||  tracker: 10 ms | 64 fps | latency 11 ms | hands 0 / worker/GPU | mesh | mode predict | tilt off | build 14
+ERRORS: none

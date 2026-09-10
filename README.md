@@ -8,8 +8,9 @@ hand copies the motion live in a room, with depth, physics and tilt levelling.
 - **Tests:** `test_rps_hand.py` (desktop), `web_test.py` (web smoke), `web_hard_test.py` (real footage,
   metrics; needs the test media from `fetch_test_media.py` and the system Microsoft Edge), `web_shot.py` (one screenshot)
 
-The 3D hand is the owner's ZBrush creature sculpt, decimated and rigged to the 21 MediaPipe joints
-(`docs/creature_hand.glb` + `docs/creature_hand.json`); `?skin=0` shows the old capsule hand.
+The 3D hand is the owner's hand scan (`hand1.OBJ`), decimated, rigged to the 21 MediaPipe joints and driven with the
+tracked bone lengths (`docs/hand.glb` + `docs/hand.json`); `?skin=0` shows the old capsule hand.
+In first-person view, point with the index finger and pull/push/drag to move and turn.
 
 Layout: `docs/index.html` is the whole web app (one file). `docs/test/` holds Wikimedia Commons test photos
 and clips (CC licences; two big ones are git-ignored). `assets/` holds the MediaPipe model for the desktop app.

@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 13)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 14)</div></div>
     <div class="hud" id="bottom"><div id="score">SCORE you 0 : 0 cpu</div><div id="game">Tap PLAY for a round</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
@@ -64,7 +64,7 @@ const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/h
 const DELEGATES = Q.get("delegate") === "CPU" ? ["CPU"] : ["GPU", "CPU"];   // ?delegate=CPU: headless tests have no real GPU
 const PAD = Q.get("pad") != null ? +Q.get("pad") : 0.3;   // border added around the frame when the hand is big, fraction of the longer side (?pad=0 to disable)
 const BIG_HAND = [0.22, 0.15];      // palm length (wrist to middle knuckle) / frame short side: pad above the first, unpad below the second (hysteresis)
-const SKIN_URL = Q.get("skin") === "0" ? null : "creature_hand.glb";   // rigged creature hand (?skin=0 = the old capsule hand)
+const SKIN_URL = Q.get("skin") === "0" ? null : "hand.glb";   // rigged hand scan (?skin=0 = the old capsule hand)
 const TRACKER_OPTS = { runningMode: "VIDEO", numHands: 2, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.4 };
 
 // --- skeleton (MediaPipe's 21 landmarks) --------------------------------------------------------
@@ -207,10 +207,10 @@ function level(a) {
   for (let i = 0; i < 21; i++) { const y = a[3 * i + 1], z = a[3 * i + 2]; out[3 * i + 1] = c * y - sn * z; out[3 * i + 2] = sn * y + c * z; }
   return out;
 }
-// --- pinch navigation (first-person view): grab the world and drag it ---------------------------------------------
-// Pinch (thumb tip on index tip) and pull the hand toward yourself: you move forward. Push it toward the camera: you move
-// back. Drag it across the picture: you turn. Only in the first-person view; the mirror view must stay glued to the video.
-const PINCH = [0.3, 0.5];          // thumb-index tip distance / palm length: pinch below the first, release above the second
+// --- pointing navigation (first-person view): point with the index finger and drag the world -------------------------
+// Index finger out (the other three folded) and pull the hand toward yourself: you move forward. Push it toward the
+// camera: you move back. Drag it across the picture: you turn. Only in the first-person view; the mirror view must
+// stay glued to the video. (Was a pinch; the owner found a pinch too hard for the tracker to see.)
 const NAV_MOVE = 4;                // metres travelled per metre of hand pull
 const NAV_TURN = 4;                // radians turned per metre of sideways drag
 const nav = { x: 0, z: 0, yaw: 0 }; const YAXIS = new THREE.Vector3(0, 1, 0);
@@ -351,13 +351,57 @@ $("reset").onclick = () => { resetProps(); nav.x = nav.z = nav.yaw = 0; };
 const FAR = { x: 0, y: 10, z: 0 };   // parking spot for the colliders of a hand that is not in view
 
 // --- skinned hand mesh driven by the 21 tracked points -----------------------------------------------
-// The GLB (docs/creature_hand.glb, built from the owner's ZBrush sculpt) has one bone per skeleton edge, named
-// b<child joint>, no bone hierarchy. creature_hand.json holds the 21 joint positions of the bind pose in the mesh's own units.
+// The GLB (docs/hand.glb, built from the owner's hand scan hand1.OBJ) has one bone per skeleton edge, named
+// b<child joint>, no bone hierarchy. hand.json holds the 21 joint positions of the bind pose in the mesh's own units.
 // Each frame every bone gets a frame built from the tracked points: y along the bone, scaled to the TRACKED bone length,
 // x across the palm, width scaled by the palm-length ratio. The bind inverse is the same frame built from the bind joints,
 // so bind pose -> identity. No canonical lengths anywhere: the skin stretches to the tracked geometry exactly.
 const THUMB = new Set([1, 2, 3, 4]);
-const _y = V(), _x = V(), _z = V(), _r = V(), _n = V(), _l = V(), _u = V();
+const _y = V(), _x = V(), _z = V(), _r = V(), _n = V(), _l = V(), _u = V(), _d = V(), _q = V();
+// Points the SKIN is driven by: the tracked points with each finger's middle joints projected into that finger's bending
+// plane (the plane through knuckle and tip that is perpendicular to the across-palm direction). A finger cannot bend
+// sideways at PIP/DIP, so any sideways offset there is tracker noise, and copying it made the skin look crooked. The
+// green skeleton lines and everything else still use the exact tracked points.
+function meshPts(pts) {
+  const out = pts.map(p => p.clone());
+  _l.subVectors(pts[17], pts[5]).normalize();
+  for (const m of [5, 9, 13, 17]) {
+    _d.subVectors(pts[m + 3], pts[m]); if (_d.lengthSq() < 1e-8) continue; _d.normalize();
+    _q.copy(_l).addScaledVector(_d, -_l.dot(_d)); if (_q.lengthSq() < 0.05) continue; _q.normalize();   // sideways axis of this finger
+    for (const j of [m + 1, m + 2]) out[j].addScaledVector(_q, -_r.subVectors(out[j], pts[m]).dot(_q));
+  }
+  return out;
+}
+// "Rigged" drive (default): the skin keeps the scan's own bone lengths and only takes joint ROTATIONS from the tracker,
+// like any rigged character. Per finger the chain is rebuilt in its bending plane with a hyperextension clamp, so the
+// tracker's per-joint jitter and its proportion errors cannot squash, fatten or zigzag the fingers. The result is
+// anchored at the tracked palm centre and scaled by the tracked palm length. ?fit=exact restores the exact-geometry drive.
+const FIT_EXACT = Q.get("fit") === "exact";
+const HYPER = { mcp: 25, pip: 8, dip: 8 };   // degrees of backward bend allowed at each finger joint
+const _b = V(), _c = V(), _e = V();
+function poseFK(pts, bind, chirRight) {
+  const s = pts[0].distanceTo(pts[9]) / bind[0].distanceTo(bind[9]), out = pts.map(p => p.clone());
+  _l.subVectors(pts[17], pts[5]).normalize();
+  _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize(); if (!chirRight) _n.negate();   // now points OUT of the palm
+  const seg = (j, dir) => out[j].copy(out[PARENT[j]]).addScaledVector(dir, s * bind[j].distanceTo(bind[PARENT[j]]));
+  for (const j of [1, 5, 9, 13, 17]) seg(j, _d.subVectors(pts[j], pts[0]).normalize());   // palm: tracked directions, scan lengths
+  for (const j of [2, 3, 4]) seg(j, _d.subVectors(pts[j], pts[PARENT[j]]).normalize());   // thumb: as tracked
+  for (const m of [5, 9, 13, 17]) {
+    // bending plane of this finger: contains the knuckle direction, perpendicular to the across-palm axis
+    _q.copy(_l).addScaledVector(_d.subVectors(pts[m + 3], pts[m]).normalize(), -_l.dot(_d)).normalize();   // sideways axis
+    let prev = _c.subVectors(pts[m], pts[0]).normalize();                                                    // metacarpal direction
+    for (const [j, lim] of [[m + 1, HYPER.mcp], [m + 2, HYPER.pip], [m + 3, HYPER.dip]]) {
+      _d.subVectors(pts[j], pts[j - 1]); _d.addScaledVector(_q, -_d.dot(_q)); if (_d.lengthSq() < 1e-10) _d.copy(prev); _d.normalize();   // no sideways bend
+      _b.crossVectors(_q, prev).normalize(); if (_b.dot(_n) < 0) _b.negate();       // in-plane axis pointing out of the palm (backward bend)
+      const back = Math.atan2(_d.dot(_b), _d.dot(prev)) * 180 / Math.PI;           // > 0 = hyperextension
+      if (back > lim) { const a = lim * Math.PI / 180; _d.copy(prev).multiplyScalar(Math.cos(a)).addScaledVector(_b, Math.sin(a)); }
+      seg(j, _d); prev = _e.copy(_d);
+    }
+  }
+  // anchor: tracked palm centre
+  const c0 = palmCentre(pts), c1 = palmCentre(out); _r.subVectors(c0, c1); for (const p of out) p.add(_r);
+  return out;
+}
 function boneFrame(pts, j, s, out) {
   const a = pts[PARENT[j]], b = pts[j];
   _y.subVectors(b, a); const L = Math.max(_y.length(), 1e-6); _y.multiplyScalar(1 / L);
@@ -373,25 +417,26 @@ function boneFrame(pts, j, s, out) {
 }
 let SKIN = null;
 async function loadSkin() {
-  const [gltf, meta] = await Promise.all([new GLTFLoader().loadAsync(SKIN_URL), fetch("creature_hand.json").then(r => r.json())]);
+  const [gltf, meta] = await Promise.all([new GLTFLoader().loadAsync(SKIN_URL), fetch("hand.json").then(r => r.json())]);
   let src; gltf.scene.traverse(o => { if (o.isSkinnedMesh) src = o; });
   const geo = src.geometry, order = src.skeleton.bones.map(b => +b.name.slice(1));   // bone i drives joint order[i]
+  const material = src.material?.isMeshStandardMaterial ? src.material : null;        // the scan's material (colour, roughness, baked normal map)
   const geoL = geo.clone().applyMatrix4(new THREE.Matrix4().makeScale(-1, 1, 1));    // the mirrored copy is the other hand
   const ix = geoL.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; }
   const joints = meta.joints.map(p => new THREE.Vector3(...p)), jointsL = joints.map(p => new THREE.Vector3(-p.x, p.y, p.z));
-  const inverses = bind => order.map(j => boneFrame(bind, j, 1, new THREE.Matrix4()).invert());
-  return { order, R: { geo, bind: joints, inv: inverses(joints) }, L: { geo: geoL, bind: jointsL, inv: inverses(jointsL) }, mirroredIsLeft: meta.hand === "right" };
+  const inverses = bind => { const b = meshPts(bind); return order.map(j => boneFrame(b, j, 1, new THREE.Matrix4()).invert()); };
+  return { order, material, R: { geo, bind: joints, inv: inverses(joints) }, L: { geo: geoL, bind: jointsL, inv: inverses(jointsL) }, mirroredIsLeft: meta.hand === "right" };
 }
 const skinPromise = SKIN_URL ? loadSkin().catch(e => { console.warn("hand mesh unavailable, capsule hand instead:", e); return null; }) : Promise.resolve(null);
 const CHIR_RIGHT = 1;    // sign of (thumb tip - wrist) . ((5-0) x (17-0)) for a right hand: the thumb sits on the palm side, and for a right hand that cross product points out of the palm
 function makeSkin(variant, color) {
   const bones = SKIN.order.map(() => { const b = new THREE.Bone(); b.matrixAutoUpdate = false; return b; });
-  const mesh = new THREE.SkinnedMesh(variant.geo, new THREE.MeshStandardMaterial({ color, roughness: 0.75 }));
+  const mesh = new THREE.SkinnedMesh(variant.geo, SKIN.material ? SKIN.material.clone() : new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
   mesh.add(...bones); mesh.bind(new THREE.Skeleton(bones, variant.inv.map(m => m.clone())), new THREE.Matrix4());
   mesh.castShadow = true; mesh.frustumCulled = false; mesh.visible = false;
   const L0 = variant.bind[0].distanceTo(variant.bind[9]);
-  return { mesh, update(pts) {
-    const sc = pts[0].distanceTo(pts[9]) / L0;
+  return { mesh, update(tracked, chirRight) {
+    const pts = FIT_EXACT ? meshPts(tracked) : poseFK(tracked, variant.bind, chirRight), sc = pts[0].distanceTo(pts[9]) / L0;
     SKIN.order.forEach((j, i) => { boneFrame(pts, j, sc, bones[i].matrix); bones[i].matrixWorldNeedsUpdate = true; });
     mesh.visible = true;
   } };
@@ -408,7 +453,7 @@ function makeHand(color = 0xdead8f) {
   const joints = capsules ? JOINT_R.map(() => mk(sph)) : [];
   const palm = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color, roughness: 0.6, side: THREE.DoubleSide }));
   palm.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(PALM_TRIS.length * 9), 3)); palm.castShadow = true; if (capsules) group.add(palm);
-  const skinR = SKIN && makeSkin(SKIN.R, 0x9a86a0), skinL = SKIN && makeSkin(SKIN.L, 0x9a86a0); if (SKIN) group.add(skinR.mesh, skinL.mesh);
+  const skinR = SKIN && makeSkin(SKIN.R, 0xd9a58a), skinL = SKIN && makeSkin(SKIN.L, 0xd9a58a); if (SKIN) group.add(skinR.mesh, skinL.mesh);
   let chir = 0;   // smoothed handedness sign from the geometry (MediaPipe's label flickers, the thumb's side of the palm does not)
   const skel = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x78ff78, depthTest: false }));
   skel.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CONNECTIONS.length * 6), 3)); skel.renderOrder = 1; group.add(skel);
@@ -432,7 +477,7 @@ function makeHand(color = 0xdead8f) {
         chir += 0.2 * (Math.sign(_r.subVectors(pts[4], pts[0]).dot(_n)) - chir);
         const right = chir * CHIR_RIGHT >= 0, useMirrored = right !== SKIN.mirroredIsLeft;   // the GLB is a right hand: its mirrored copy is the left hand
         const on = useMirrored ? skinL : skinR, off = useMirrored ? skinR : skinL;
-        on.update(pts); off.mesh.visible = false;
+        on.update(pts, right); off.mesh.visible = false;
       } else {
         for (const bn of bones) placeCylinder(bn.mesh, pts[bn.a], pts[bn.b], bn.r);
         joints.forEach((m, i) => { m.position.copy(pts[i]); m.scale.setScalar(JOINT_R[i]); });
@@ -632,7 +677,7 @@ async function main() {
       shown[s.key] = camToGL(MODES[mode] === "predict" ? s.filt.predict(lead) : MODES[mode] === "smooth" ? s.filt.x : s.raw);
       if (s.det && ovW) { const pr = toImage(shown[s.key]); dbg.reprojSum += pr.reduce((t, q, i) => t + Math.hypot(q.x - s.det.lm[i].x, q.y - s.det.lm[i].y), 0) / 21; dbg.reprojN++; }
       s.hist.push({ t: now, a: Float32Array.from(shown[s.key]) }); if (s.hist.length > 12) s.hist.shift();
-      move ??= moveFromFingers(s.ext); hud.push(`${s.name[0]} ${s.depth.toFixed(2)}m ${s.ext.filter(Boolean).length}up fit ${(s.fit * 100).toFixed(1)}%${s.pinch ? " pinch" : ""}`);
+      move ??= moveFromFingers(s.ext); hud.push(`${s.name[0]} ${s.depth.toFixed(2)}m ${s.ext.filter(Boolean).length}up fit ${(s.fit * 100).toFixed(1)}%${s.pinch ? " pointing" : ""}`);
     }
     // handshake rule: a hand that vanished while touching the other hand keeps its pose and rides along with that hand
     for (const s of [slots.Right, slots.Left]) {
@@ -645,9 +690,9 @@ async function main() {
     const fp = VIEWS[view] === "first person"; let navBy = null;
     for (const s of [slots.Right, slots.Left]) {   // pinch navigation: one pinching hand steers
       if (!shown[s.key] || !fp) { s.pinch = false; continue; }
-      const p = shape(shown[s.key]), ratio = p[4].distanceTo(p[8]) / Math.max(1e-3, p[0].distanceTo(p[9]));
-      if (!s.pinch && ratio < PINCH[0] && s.ext[0]) { s.pinch = true; s.pinchStart = { palm: palmCentre(p), x: nav.x, z: nav.z, yaw: nav.yaw }; dbg.pinches++; }
-      else if (s.pinch && ratio > PINCH[1]) s.pinch = false;
+      const p = shape(shown[s.key]), pointing = s.ext[0] && !s.ext[1] && !s.ext[2] && !s.ext[3];   // index out, the rest folded
+      if (!s.pinch && pointing) { s.pinch = true; s.pinchStart = { palm: palmCentre(p), x: nav.x, z: nav.z, yaw: nav.yaw }; dbg.pinches++; }
+      else if (s.pinch && !pointing) s.pinch = false;
       if (s.pinch && !navBy) {
         const d = palmCentre(p).sub(s.pinchStart.palm), m = -d.z * NAV_MOVE;   // pull toward you (z more negative) = forward
         nav.yaw = s.pinchStart.yaw - d.x * NAV_TURN; nav.x = s.pinchStart.x + Math.sin(nav.yaw) * m; nav.z = s.pinchStart.z + Math.cos(nav.yaw) * m; navBy = s;
@@ -666,7 +711,7 @@ async function main() {
     world.timestep = dt; world.step();
     for (const p of props) { p.mesh.position.copy(p.body.translation()); p.mesh.quaternion.copy(p.body.rotation()); }
     if (now - stat.t > 1000) {
-      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | ${SKIN ? "mesh" : "capsules"} | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"}${VIEWS[view] === "first person" ? ` | nav ${Math.hypot(nav.x, nav.z).toFixed(1)}m ${(nav.yaw * 180 / Math.PI).toFixed(0)}° (pinch+drag)` : ""} | build ${BUILD}`;
+      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | ${SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"}${VIEWS[view] === "first person" ? ` | nav ${Math.hypot(nav.x, nav.z).toFixed(1)}m ${(nav.yaw * 180 / Math.PI).toFixed(0)}° (point+drag)` : ""} | build ${BUILD}`;
       stat = { ms: 0, lat: 0, n: 0, t: now }; dbg.pitch = pitch; dbg.tiltOn = tiltOn;
     }
     $("hand").textContent = "HANDS: " + (hud.join("  |  ") || "-");
