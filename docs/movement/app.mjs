@@ -111,4 +111,4 @@ function frame(now){
  renderer.render(scene,camera);
 }controlsChanged();requestAnimationFrame(frame);
 if(new URLSearchParams(location.search).has('cam')){$('start').textContent='Connect phone camera';start();}   // phone-as-camera mode: no local permission prompt, connect right away
-$('phoneCam').onclick=()=>{const u=new URL(location.href);u.searchParams.set('cam','');location.href=u.href;};
+{const b=$('phoneCam');if(b)b.onclick=()=>{const u=new URL(location.href);u.searchParams.set('cam','');location.href=u.href;};}
