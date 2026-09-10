@@ -22,18 +22,22 @@ export function measureThumb(image,world,aspect=4/3){
  return {rest:wrapped,axes:[(image[2].x-image[4].x)/span,(image[2].y-image[4].y)/(aspect*span),(world[4].z-world[2].z)/chain,straight]};
 }
 const valid=s=>s?.axes?.length===4&&s.axes.every(Number.isFinite);
-const dot=(a,b)=>a.reduce((sum,v,i)=>sum+v*b[i],0);
-// Fixed analog thumb mapping from the tested reference movements; no user setup.
-const DEFAULT_MAP={"origin":[0.3708756125518603,-0.5724621207669807,-0.8790693831958614,0.8020211541734797],"weights":[[-0.08063748082743882,1.2519772296202216,-19.147619681101904,-2.8156916671466647],[-0.030052957847388737,4.696678951280948,24.35192083218075,4.095663001933436]]};
 export class ThumbJoystick {
  constructor(){this.speed=4.5;this.reset();}
- reset(){this.x=0;this.z=0;this.seen=-Infinity;this.reason='SHOW THUMB';}
+ reset(){this.x=0;this.z=0;this.seen=-Infinity;this.reason='SHOW THUMB';this.centre=null;this.settling=[];}
  receive(sample,time){
   if(!valid(sample)){this.reset();return;}
   this.seen=time;
   if(sample.rest){this.reset();this.seen=time;this.reason='FIST REST';return;}
-  const delta=sample.axes.map((v,i)=>v-DEFAULT_MAP.origin[i]);
-  const [x,z]=DEFAULT_MAP.weights.map(w=>dot(w,delta));
+  // Brief automatic centre from visible thumb position. Estimated depth never drives walking.
+  if(!this.centre){
+   this.x=this.z=0;this.reason='HOLD THUMB STILL BRIEFLY';
+   if(this.settling.length&&Math.hypot(sample.axes[0]-this.settling[0].x,sample.axes[1]-this.settling[0].y)>.08)this.settling=[];
+   this.settling.push({x:sample.axes[0],y:sample.axes[1],time});
+   if(this.settling.length>=3&&time-this.settling[0].time>=180){this.centre=[0,1].map(i=>{const values=this.settling.map(p=>i?p.y:p.x).sort((a,b)=>a-b);return values[Math.floor(values.length/2)];});this.reason='THUMB CENTRED';}
+   return;
+  }
+  const x=-(sample.axes[0]-this.centre[0])/.45,z=(sample.axes[1]-this.centre[1])/.4;
   const dead=v=>Math.sign(v)*Math.max(0,(Math.abs(clamp(v))-.22)/.78);
   this.x=dead(x);this.z=dead(z);
   // A small secondary signal near a main direction is usually tracking cross-talk.
