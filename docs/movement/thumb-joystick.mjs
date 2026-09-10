@@ -23,56 +23,17 @@ export function measureThumb(image,world,aspect=4/3){
 }
 const valid=s=>s?.axes?.length===4&&s.axes.every(Number.isFinite);
 const dot=(a,b)=>a.reduce((sum,v,i)=>sum+v*b[i],0);
-const failure=(message,retryIndex)=>Object.assign(new Error(message),{retryIndex});
-const noise=s=>s.noise?.length===4?s.noise.map(v=>Number.isFinite(v)?Math.max(0,v):0):[0,0,0,0];
-export function fitThumbDirections(samples){
- if(samples.length!==5||!samples.every(valid))throw Error('Capture centre and four directions.');
- const origin=samples[0].axes.slice(),rows=samples.slice(1,5).map(s=>s.axes.map((v,i)=>v-origin[i]));
- const targets=[[-1,0],[1,0],[0,-1],[0,1]];
- const names=['left','right','forward','backward'];
- samples.slice(0,5).forEach((s,i)=>{if(s.rest)throw failure('That is a resting fist. Lift your thumb away from the fingers for '+(i?names[i-1]:'centre')+'.',i);});
- rows.forEach((r,i)=>{const uncertainty=Math.hypot(...noise(samples[0]).map((v,k)=>v+noise(samples[i+1])[k]));
-  if(Math.hypot(...r)<Math.max(.008,uncertainty*3))throw failure('The '+names[i]+' capture looks like centre. Retry only '+names[i]+', holding your thumb there until capture finishes.',i+1);
- });
- // Fit in units of this user's measured travel, not a fixed minimum thumb size.
- const scales=[0,1,2,3].map(i=>Math.max(.005,...rows.map(r=>Math.abs(r[i]))));
- const normalized=rows.map(r=>r.map((v,i)=>v/scales[i]));
- // Regularized least squares fits continuous travel, including cross-axis coupling.
- const a=Array.from({length:4},(_,i)=>Array.from({length:6},(_,j)=>j<4?normalized.reduce((sum,r)=>sum+r[i]*r[j],0)+(i===j?.0001:0):normalized.reduce((sum,r,k)=>sum+r[i]*targets[k][j-4],0)));
- for(let i=0;i<4;i++){
-  let pivot=i;for(let k=i+1;k<4;k++)if(Math.abs(a[k][i])>Math.abs(a[pivot][i]))pivot=k;
-  [a[i],a[pivot]]=[a[pivot],a[i]];const scale=a[i][i];for(let j=i;j<6;j++)a[i][j]/=scale;
-  for(let k=0;k<4;k++)if(k!==i){const f=a[k][i];for(let j=i;j<6;j++)a[k][j]-=f*a[i][j];}
- }
- const weights=[a.map((r,i)=>r[4]/scales[i]),a.map((r,i)=>r[5]/scales[i])];
- const errors=rows.map((r,i)=>Math.hypot(...weights.map((w,j)=>dot(w,r)-targets[i][j])));
- const worst=errors.indexOf(Math.max(...errors));
- if(weights.some(w=>!w.every(Number.isFinite))||errors[worst]>.25)throw failure('The '+names[worst]+' direction overlaps another direction. Retry only '+names[worst]+'.',worst+1);
- for(let i=0;i<samples.length;i++)if(weights.some(w=>Math.hypot(...w.map((v,k)=>v*noise(samples[i])[k]))>.18))throw failure('Tracking varied too much during '+(i?names[i-1]:'centre')+'. Hold still and retry this capture.',i);
-
- return {origin,weights};
-}
-export function fitThumbCalibration(samples){
- if(samples.length!==6||!samples.every(valid))throw Error('Capture centre, four directions and your resting fist.');
- const {origin,weights}=fitThumbDirections(samples.slice(0,5));
- const rest=samples[5].axes.slice();
- const separation=Math.min(...samples.slice(0,5).map(s=>Math.hypot(...s.axes.map((v,i)=>v-rest[i]))));
- if(separation<Math.max(.012,Math.hypot(...noise(samples[5]))*4))throw failure('Resting fist looks too similar to a walking position. Retry Rest with your thumb wrapped around your fingers.',5);
- return {origin,weights,rest,restRadius:Math.min(.24,separation*.4)};
-}
+// Fixed analog thumb mapping from the tested reference movements; no user setup.
+const DEFAULT_MAP={"origin":[0.3708756125518603,-0.5724621207669807,-0.8790693831958614,0.8020211541734797],"weights":[[-0.08063748082743882,1.2519772296202216,-19.147619681101904,-2.8156916671466647],[-0.030052957847388737,4.696678951280948,24.35192083218075,4.095663001933436]]};
 export class ThumbJoystick {
- constructor(){this.speed=4.5;this.calibration=null;this.reset();}
- reset(){this.x=0;this.z=0;this.seen=-Infinity;this.reason=this.calibration?'SHOW THUMB':'SET UP THUMB';this.armed=false;}
- configure(samples){this.calibration=fitThumbCalibration(samples);this.reset();}
+ constructor(){this.speed=4.5;this.reset();}
+ reset(){this.x=0;this.z=0;this.seen=-Infinity;this.reason='SHOW THUMB';}
  receive(sample,time){
   if(!valid(sample)){this.reset();return;}
   this.seen=time;
   if(sample.rest){this.reset();this.seen=time;this.reason='FIST REST';return;}
-  if(!this.calibration){this.reason='SET UP THUMB';return;}
-  if(this.calibration.rest&&Math.hypot(...sample.axes.map((v,i)=>v-this.calibration.rest[i]))<this.calibration.restRadius){this.reset();this.seen=time;this.reason='FIST REST';return;}
-  const delta=sample.axes.map((v,i)=>v-this.calibration.origin[i]);
-  const [x,z]=this.calibration.weights.map(w=>dot(w,delta));
-  if(!this.armed){this.x=this.z=0;this.reason='RETURN THUMB TO CENTRE';if(Math.hypot(x,z)<.3)this.armed=true;else return;}
+  const delta=sample.axes.map((v,i)=>v-DEFAULT_MAP.origin[i]);
+  const [x,z]=DEFAULT_MAP.weights.map(w=>dot(w,delta));
   const dead=v=>Math.sign(v)*Math.max(0,(Math.abs(clamp(v))-.22)/.78);
   this.x=dead(x);this.z=dead(z);
   // A small secondary signal near a main direction is usually tracking cross-talk.

@@ -1,43 +1,15 @@
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=32';
-import {setupThumbstick} from './thumbstick.mjs?v=32';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=33';
+import {setupThumbstick} from './thumbstick.mjs?v=33';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=32';
-import {DustMap} from './map.mjs?v=32';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=33';
+import {DustMap} from './map.mjs?v=33';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=32';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=32';
+import {setupUI} from './ui.mjs?v=33';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=33';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const held=new ThumbJoystick();let inputMode='poses',trackedHand=null,resting=false;
-let thumbSetup=null;
-const setupNames=['centre (comfortable, partly bent)','left','right','forward (straight)','backward (thumb bent above fingers)','rest (closed fist, thumb wrapped around fingers)'];
-function setupPrompt(){
- const name=setupNames[thumbSetup.step];
- $('thumbSetupText').textContent='Step '+(thumbSetup.step+1)+' of 6. Hold your fist still. Put your thumb at '+name+'. Then tap Capture and hold it there.';
- $('captureThumb').textContent='Capture '+name.split(' ')[0];
-}
-function beginThumbSetup(){held.calibration=null;held.reset();headLook.resetLook();$('captureThumb').disabled=false;$('panel').classList.remove('collapsed');$('collapse').textContent='Hide controls';$('collapse').setAttribute('aria-expanded','true');thumbSetup={samples:Array(6).fill(null),step:0,frames:[],captureAt:null};$('thumbSetup').hidden=false;setupPrompt();$('thumbSetup').scrollIntoView({block:'nearest'});}
-$('captureThumb').onclick=()=>{if(!running||resting){$('thumbSetupText').textContent='Start the camera and press Resume if resting.';return;}thumbSetup.frames=[];thumbSetup.captureAt=performance.now()+1000;$('captureThumb').disabled=true;};
-function collectThumbSetup(sample,now){
- if(thumbSetup.captureAt===null)return;
- if(now<thumbSetup.captureAt){$('thumbSetupText').textContent='Get ready: '+setupNames[thumbSetup.step];return;}
- $('thumbSetupText').textContent='Hold still...';
- if(sample)thumbSetup.frames.push(sample);
- if(now-thumbSetup.captureAt<650)return;
- $('captureThumb').disabled=false;
- thumbSetup.captureAt=null;
- const frames=thumbSetup.frames;
- if(frames.length<3){$('thumbSetupText').textContent='Thumb not clear enough. Show one fist with your thumb visible, then retry.';return;}
- const axes=[0,1,2,3].map(i=>frames.map(f=>f.axes[i]).sort((a,b)=>a-b)[Math.floor(frames.length/2)]);
- const noise=[0,1,2,3].map(i=>frames.map(f=>Math.abs(f.axes[i]-axes[i])).sort((a,b)=>a-b)[Math.floor(frames.length/2)]*1.4826);
- if(Math.hypot(...noise)>.12){$('thumbSetupText').textContent='Thumb moved during capture. Hold it still and retry.';return;}
- thumbSetup.samples[thumbSetup.step]={axes,noise,rest:frames.filter(f=>f.rest).length>frames.length/2};
- const next=thumbSetup.samples.findIndex(v=>!v);
- if(next>=0){thumbSetup.step=next;setupPrompt();return;}
- try{held.configure(thumbSetup.samples);thumbSetup=null;$('thumbSetup').hidden=true;walkReason='RETURN THUMB TO CENTRE';}
- catch(e){thumbSetup.step=Number.isInteger(e.retryIndex)?e.retryIndex:0;setupPrompt();$('thumbSetupText').textContent=e.message+' Your other captures are kept.';}
-}
 const swipe=new SwipeController();const headLook=new HeadLook();let lookDemo=0;
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:false});renderer.setPixelRatio(1);
 const scene=new THREE.Scene();scene.background=new THREE.Color('#25394a');scene.fog=new THREE.FogExp2('#25394a',.018);
@@ -58,7 +30,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=32',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=33',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -72,7 +44,7 @@ async function start(){
       const result=apply(sample,data.time);trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,result.active);
     }else if(inputMode==='poses'){
       const sample=handIndex>=0?measureThumb(data.landmarks[handIndex],data.worldLandmarks[handIndex],$('cam').videoWidth/$('cam').videoHeight):null;
-      if(thumbSetup){held.reset();collectThumbSetup(sample,lastResult);}else held.receive(sample,lastResult);
+      held.receive(sample,lastResult);
       const active=!!held.direction;walkReason=handIndex<0?'SHOW ONE HAND':held.reason;
       $('gestureStats').textContent=`THUMB X ${held.x.toFixed(2)} · Y ${(-held.z).toFixed(2)} · tracker ${Math.round(data.inferenceMs||0)} ms`;
       trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,active);
@@ -80,21 +52,20 @@ async function start(){
     }
     handsSinceHead++;if(running&&handsSinceHead>=2&&head?.wantsFrame(lastResult)&&$('cam').currentTime!==lastHeadVideo){handsSinceHead=0;lastHeadVideo=$('cam').currentTime;head.capture($('cam'),lastResult);}
   };
-  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:100,widths:[384,288,512]});head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;handsSinceHead=0;running=true;lastResult=performance.now();$('start').textContent='Stop camera';if(!held.calibration)beginThumbSetup();status('Show one hand');
+  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:100,widths:[384,288,512]});head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;handsSinceHead=0;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Show one hand');
  }catch(e){stop();status('Camera not started');$('error').textContent=e.name==='NotAllowedError'?'Camera access was declined. Allow camera access in your browser, then retry.':e.message;}
  finally{$('start').disabled=false;}
 }
 $('start').onclick=start;
-$('rest').onclick=()=>{resting=!resting;held.reset();stick.reset();swipe.reset();demoRun=null;lookDemo=0;headLook.resetLook();head?.recenter();$('rest').textContent=resting?'Resume':'Rest';$('rest').setAttribute('aria-pressed',String(resting));walkReason=resting?'RESTING':'CENTRE THUMB';status(walkReason);};
-$('centerThumb').onclick=beginThumbSetup;
+$('rest').onclick=()=>{resting=!resting;held.reset();stick.reset();swipe.reset();demoRun=null;lookDemo=0;headLook.resetLook();head?.recenter();$('rest').textContent=resting?'Resume':'Rest';$('rest').setAttribute('aria-pressed',String(resting));walkReason=resting?'RESTING':'THUMB READY';status(walkReason);};
 $('centerHead').onclick=()=>{head?.recenter();headLook.resetLook();swipe.reset();};
 $('headEnabled').onchange=()=>{if(head)head.mode=$('headEnabled').checked?'first':'off';headLook.resetLook();head?.recenter();camera.rotation.y=headLook.heading;};
 $('turnMode').onchange=()=>{headLook.mode=$('turnMode').value;headLook.resetLook();head?.recenter();};
 $('headThreshold').oninput=()=>{headLook.deadzoneDegrees=+$('headThreshold').value;$('thresholdValue').textContent=$('headThreshold').value+'°';};
 $('headGain').oninput=()=>{if(head)head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;};
 $('reset').onclick=()=>{stick.reset();held.reset();headLook.heading=0;headLook.resetLook();lookDemo=0;head?.recenter();camera.position.copy(dustMap.spawn);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
-function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Set up your thumb directions and resting fist once per page load. Keep your fist still and move only your thumb. After setup, return to centre to start. Close your fist with your thumb wrapped around your fingers to rest. Return your thumb to centre to resume. The Rest button also pauses.';status('Start camera · thumb joystick ready');}
-$('movementMode').onchange=()=>{inputMode=$('movementMode').value;stick.reset();held.reset();trackedHand=null;swipe.reset();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('stickZone').hidden=inputMode!=='touch';$('hint').textContent=inputMode==='touch'?'Drag thumbstick to walk; release to stop.':inputMode==='poses'?'Set up thumb controls, then return to centre. Thumb travel controls all directions. Close your fist to rest; return your thumb to centre to resume.':'Left index out: move your hand to walk. Bend index to release.';};
+function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Start the camera and move your thumb to walk. Keep the other fingers curled. Wrap your thumb against your fist to stop; lift it to move again. The Rest button also pauses.';status('Start camera · thumb joystick ready');}
+$('movementMode').onchange=()=>{inputMode=$('movementMode').value;stick.reset();held.reset();trackedHand=null;swipe.reset();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('stickZone').hidden=inputMode!=='touch';$('hint').textContent=inputMode==='touch'?'Drag thumbstick to walk; release to stop.':inputMode==='poses'?'Move your thumb to walk. Wrap it against your fist to stop; lift it to move again.':'Left index out: move your hand to walk. Bend index to release.';};
 $('gain').oninput=()=>held.speed=+$('gain').value;
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
 document.querySelectorAll('[data-look]').forEach(b=>b.onclick=()=>{lookDemo=+b.dataset.look;if(!lookDemo)headLook.speed=0;});
@@ -104,7 +75,7 @@ addEventListener('pagehide',stop);
 function frame(now){
  requestAnimationFrame(frame);
  const dt=lastFrameTime?Math.min(.1,(now-lastFrameTime)/1000):1/60;lastFrameTime=now;
- if(head&&!resting&&!(thumbSetup&&inputMode==='poses')){const pose=head.update(now,dt),valid=head.mode!=='off'&&!!head.lastResult?.pose&&now-head.pose.seen<250;const rawYaw=valid&&head.pose.neutral?-(head.pose.latest.yaw-head.pose.neutral.yaw):0;const viewYaw=headLook.update(rawYaw,dt,valid,head.lastResult?.ts);if(valid)camera.rotation.set(pose.pitch,viewYaw,0,'YXZ');$('headStatus').textContent=head.status(now)+(valid?` · ${headLook.state}${headLook.state==='HOLD TO TURN'?' '+Math.round(headLook.progress*100)+'%':''}`:' · turn stopped');}
+ if(head&&!resting){const pose=head.update(now,dt),valid=head.mode!=='off'&&!!head.lastResult?.pose&&now-head.pose.seen<250;const rawYaw=valid&&head.pose.neutral?-(head.pose.latest.yaw-head.pose.neutral.yaw):0;const viewYaw=headLook.update(rawYaw,dt,valid,head.lastResult?.ts);if(valid)camera.rotation.set(pose.pitch,viewYaw,0,'YXZ');$('headStatus').textContent=head.status(now)+(valid?` · ${headLook.state}${headLook.state==='HOLD TO TURN'?' '+Math.round(headLook.progress*100)+'%':''}`:' · turn stopped');}
  if(demo&&!resting){camera.rotation.set(0,headLook.update(lookDemo*.35,dt),0,'YXZ');}
 
  if(demo&&demoRun&&!resting){const elapsed=now-demoRun.start,t=Math.max(0,Math.min(1,(elapsed-180)/180));const d=demoRun.direction;apply({x:.5+(d.includes('right')?.25:d.includes('left')?-.25:0)*t,z:.5+(d.includes('forward')?-.18:d.includes('backward')?.18:0)*t,pinch:.8,extended:true,pointing:true},now);if(elapsed>1050){demoRun=null;apply(null,now);status('Demo complete · choose another movement');}}
