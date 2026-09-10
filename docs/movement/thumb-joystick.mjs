@@ -9,19 +9,22 @@ export function measureThumb(image,world,aspect=4/3){
  const straight=clamp(a.reduce((sum,v,i)=>sum+v*b[i],0)/length);
  const span=Math.hypot(image[5].x-image[17].x,(image[5].y-image[17].y)/aspect)+Math.hypot(image[0].x-image[9].x,(image[0].y-image[9].y)/aspect);
  if(span<.015)return null;
- return {straight,x:(image[2].x-image[4].x)/(span*.5)};
+ const centre={x:(world[0].x+world[5].x+world[17].x)/3,y:(world[0].y+world[5].y+world[17].y)/3,z:(world[0].z+world[5].z+world[17].z)/3};
+ const palm=(d(0,9)+d(5,17))/2;if(palm<.005)return null;
+ const thumbReach=Math.hypot(world[4].x-centre.x,world[4].y-centre.y,world[4].z-centre.z)/palm;
+ return {reach:thumbReach,x:(image[2].x-image[4].x)/(span*.5)};
 }
 export class ThumbJoystick {
- constructor(){this.speed=3;this.reset();}
+ constructor(){this.speed=4.5;this.reset();}
  reset(){this.x=0;this.z=0;this.neutral=null;this.seen=-Infinity;this.reason='OPEN HAND / NO THUMB';}
  receive(sample,time){
   if(!sample){this.reset();return;}
-  this.neutral??=sample.x;this.seen=time;
-  // Thumb IP bend provides depth; deflection relative to its automatic centre provides strafe.
-  const side=sample.straight>.8?clamp((sample.x-this.neutral)/.65):0;
-  this.x=Math.sign(side)*Math.max(0,(Math.abs(side)-.12)/.88);
-  this.z=sample.straight>.9?-Math.min(1,(sample.straight-.9)/.08):sample.straight<.8?Math.min(1,(.8-sample.straight)/.25):0;
-  this.z*=1-Math.abs(this.x);
+  if(!Number.isFinite(sample.reach)||!Number.isFinite(sample.x)){this.reset();return;}
+  this.neutral??={...sample};this.seen=time;
+  // Palm-normalized reach includes movement at the thumb base, unlike one joint angle.
+  const dead=v=>Math.sign(v)*Math.max(0,(Math.abs(v)-.2)/.8);
+  this.x=dead(clamp((sample.x-this.neutral.x)/.55));
+  this.z=-dead(clamp((sample.reach-this.neutral.reach)/.35))||0;
   const length=Math.hypot(this.x,this.z);if(length>1){this.x/=length;this.z/=length;}
   this.reason=length>.01?'MOVING':'THUMB CENTRED';
  }
