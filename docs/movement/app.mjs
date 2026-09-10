@@ -1,12 +1,12 @@
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=23';
-import {setupThumbstick} from './thumbstick.mjs?v=23';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=24';
+import {setupThumbstick} from './thumbstick.mjs?v=24';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=23';
-import {DustMap} from './map.mjs?v=23';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=24';
+import {DustMap} from './map.mjs?v=24';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=23';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=23';
+import {setupUI} from './ui.mjs?v=24';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=24';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const held=new ThumbJoystick();let inputMode='poses',trackedHand=null,resting=false;
@@ -30,7 +30,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=23',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=24',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -65,8 +65,8 @@ $('turnMode').onchange=()=>{headLook.mode=$('turnMode').value;headLook.resetLook
 $('headThreshold').oninput=()=>{headLook.deadzoneDegrees=+$('headThreshold').value;$('thresholdValue').textContent=$('headThreshold').value+'°';};
 $('headGain').oninput=()=>{if(head)head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;};
 $('reset').onclick=()=>{stick.reset();held.reset();headLook.heading=0;headLook.resetLook();lookDemo=0;head?.recenter();camera.position.copy(dustMap.spawn);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
-function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Start with a comfortably half-bent thumb: this is your resting centre. Reach farther from your palm to go forward; draw thumb toward your palm to reverse. Sideways = strafe. Return to centre or open your hand to stop. Rest freezes all movement until Resume. Centre thumb resets your comfortable centre.';status('Start camera · thumb joystick ready');}
-$('movementMode').onchange=()=>{inputMode=$('movementMode').value;stick.reset();held.reset();trackedHand=null;swipe.reset();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('stickZone').hidden=inputMode!=='touch';$('hint').textContent=inputMode==='touch'?'Drag thumbstick to walk; release to stop.':inputMode==='poses'?'Half-bent thumb starts at rest. Extend away from palm = forward; draw toward palm = backward. Return to centre or open hand to stop.':'Left index out: move your hand to walk. Bend index to release.';};
+function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Hold your thumb comfortably beside your curled index finger. Move the thumb tip above its starting position to go forward, below it to reverse, or sideways to strafe. The cyan dot marks the index knuckle used as the reference. Return to centre or open your hand to stop. Rest pauses everything; Centre thumb resets your neutral.';status('Start camera · thumb joystick ready');}
+$('movementMode').onchange=()=>{inputMode=$('movementMode').value;stick.reset();held.reset();trackedHand=null;swipe.reset();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('stickZone').hidden=inputMode!=='touch';$('hint').textContent=inputMode==='touch'?'Drag thumbstick to walk; release to stop.':inputMode==='poses'?'Thumb tip relative to index knuckle: up = forward, down = backward, sideways = strafe. Return to centre or open hand to stop.':'Left index out: move your hand to walk. Bend index to release.';};
 $('gain').oninput=()=>held.speed=+$('gain').value;
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
 document.querySelectorAll('[data-look]').forEach(b=>b.onclick=()=>{lookDemo=+b.dataset.look;if(!lookDemo)headLook.speed=0;});
