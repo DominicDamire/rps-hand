@@ -1,10 +1,6 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs';
-const s=(straight=1,x=0,resting=false)=>({straight,x,resting});
-test('straight thumb drives forward continuously; partial curl reverses',()=>{const c=new ThumbJoystick();c.receive(s(),0);assert.ok(c.step(20,.02).dz<0);assert.ok(c.step(40,.02).dz<0);c.receive(s(.55),60);assert.ok(c.step(80,.02).dz>0);});
-test('wrapped thumb rests regardless of straightness or lateral position',()=>{const c=new ThumbJoystick();c.receive(s(),0);c.receive(s(.55,.4),20);assert.ok(c.direction);for(const bend of [.1,.6,1]){c.receive(s(bend,2,true),40);assert.equal(c.direction,null);assert.deepEqual(c.step(60,.02),{dx:0,dz:0});assert.equal(c.reason,'RESTING THUMB');}});
-test('sideways centre and gain stay unchanged when leaving rest',()=>{const c=new ThumbJoystick();c.receive(s(.83,.2),0);c.receive(s(.83,.475),20);assert.ok(Math.abs(c.x-.375)<1e-10);c.receive(s(.4,1,true),40);c.receive(s(.83,.475),60);assert.ok(Math.abs(c.x-.375)<1e-10);});
-test('open hand and tracking loss stop immediately',()=>{const c=new ThumbJoystick();c.receive(s(),0);c.receive(null,20);assert.equal(c.direction,null);c.receive(s(),50);assert.equal(c.step(401,.02).dz,0);});
-function fixture(){const w=Array.from({length:21},()=>({x:0,y:0,z:0}));for(const [i,m] of [5,9,13,17].entries()){w[m]={x:(i-1.5)*.025,y:.06,z:0};w[m+1]={...w[m],y:.09};w[m+2]={...w[m],y:.07,z:.02};w[m+3]={...w[m],y:.05,z:.02};}w[2]={x:-.08,y:.02,z:0};w[3]={x:-.075,y:.045,z:0};w[4]={x:-.07,y:.07,z:0};return w;}
-const image=w=>w.map(p=>({x:.5+p.x*2,y:.6-p.y*2,z:p.z*2}));
-test('geometry distinguishes straight thumb from thumb wrapped over middle finger, for either hand',()=>{for(const mirror of [1,-1]){const w=fixture().map(p=>({...p,x:p.x*mirror}));let m=measureThumb(image(w),w,1);assert.ok(m.straight>.95);assert.equal(m.resting,false);w[4]={...w[10]};m=measureThumb(image(w),w,1);assert.equal(m.resting,true);}});
-test('invalid landmarks cannot move',()=>{assert.equal(measureThumb([],[]),null);});
+import test from 'node:test';import assert from 'node:assert/strict';import {ThumbJoystick} from './thumb-joystick.mjs';
+const s=(x=0,y=0,rest=false)=>({position:{x,y},rest});
+test('thumb motion moves once; holding never continues walking',()=>{const c=new ThumbJoystick();c.receive(s(),0);c.receive(s(0,.1),20);assert.ok(c.step(21).dz<0);assert.deepEqual(c.step(22),{dx:0,dz:0});c.receive(s(0,.1),40);assert.deepEqual(c.step(41),{dx:0,dz:0});});
+test('all four directions follow thumb motion without centring',()=>{for(const [x,y,name] of [[.1,0,'LEFT'],[-.1,0,'RIGHT'],[0,.1,'FORWARD'],[0,-.1,'BACKWARD']]){const c=new ThumbJoystick();c.receive(s(),0);c.receive(s(x,y),20);assert.equal(c.direction,name);}});
+test('fist cancels pending motion and return stroke cannot jump',()=>{const c=new ThumbJoystick();c.receive(s(),0);c.receive(s(0,.1),20);c.receive(s(0,.1,true),21);assert.deepEqual(c.step(22),{dx:0,dz:0});c.receive(s(.5,.5),30);assert.deepEqual(c.step(31),{dx:0,dz:0});});
+test('tracking loss, jitter and jumps do not move',()=>{const c=new ThumbJoystick();c.receive(s(),0);c.receive(s(.001,.001),20);assert.deepEqual(c.step(21),{dx:0,dz:0});c.receive(s(2,2),40);assert.deepEqual(c.step(41),{dx:0,dz:0});c.receive(null,50);assert.deepEqual(c.step(51),{dx:0,dz:0});});

@@ -24,7 +24,6 @@ export function setupUI(){
    ctx.lineWidth=Math.max(2,w/240);ctx.lineCap='round';
    for(const [a,b]of edges){ctx.strokeStyle=a>=1&&b<=4?'#ffdf75':'#67ffbb';ctx.beginPath();ctx.moveTo(...point(hand[a]));ctx.lineTo(...point(hand[b]));ctx.stroke();}
    for(let i=0;i<21;i++){ctx.fillStyle=i===4?'#ffdf75':'#e5fff3';ctx.beginPath();ctx.arc(...point(hand[i]),i===4?w/65:w/160,0,Math.PI*2);ctx.fill();}
-   const ref=point(hand[6]),thumb=point(hand[4]);ctx.strokeStyle='#56ddff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(...ref);ctx.lineTo(...thumb);ctx.stroke();ctx.fillStyle='#56ddff';ctx.beginPath();ctx.arc(...ref,w/70,0,Math.PI*2);ctx.fill();
    const [x,y]=point(hand[4]);ctx.strokeStyle=active?'#ffdf75':'#ffffff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,w/38,0,Math.PI*2);ctx.stroke();
   }
   if(trail.length>1){ctx.strokeStyle='#ffab45';ctx.lineWidth=Math.max(3,w/140);ctx.beginPath();trail.forEach((p,i)=>i?ctx.lineTo(...p.xy):ctx.moveTo(...p.xy));ctx.stroke();}
