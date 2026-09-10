@@ -1,6 +1,6 @@
 const RAD=Math.PI/180;
 export class HeadLook {
- constructor(){this.heading=0;this.gain=1.5;this.deadzoneDegrees=12;this.mode='hold';this.resetLook();}
+ constructor(){this.heading=0;this.gain=1.5;this.deadzoneDegrees=8;this.mode='hold';this.resetLook();}
  resetLook(){this.speed=0;this.look=0;this.pending=0;this.direction=0;this.turning=false;this.previous=null;this.armed=true;this.neutralTime=0;this.progress=0;this.state='LOOK ONLY';}
  update(yaw,dt,valid=true,sampleTime=null){
   dt=Math.max(0,Math.min(.1,Number.isFinite(dt)?dt:0));this.speed=0;
