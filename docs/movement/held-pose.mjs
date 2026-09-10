@@ -7,7 +7,7 @@ export function poseFeature(p){
  const reach=m=>dist(m,m+3)/(dist(m,m+1)+dist(m+1,m+2)+dist(m+2,m+3)||1);
  // All reference poses curl the four fingers. An open hand is an explicit stop.
  if([5,9,13,17].filter(m=>reach(m)>.8).length>=2)return null;
- return p.slice(1).flatMap(v=>[(v.x-p[0].x)/scale,(v.y-p[0].y)/scale,(v.z-p[0].z)/scale]);
+ return p.slice(1).flatMap((v,i)=>{const weight=i<4?2:1;return [(v.x-p[0].x)/scale*weight,(v.y-p[0].y)/scale*weight,(v.z-p[0].z)/scale*weight];});
 }
 export const poseDistance=(a,b)=>Math.sqrt(a.reduce((sum,v,i)=>sum+(v-b[i])**2,0)/a.length);
 export class HeldPose {
