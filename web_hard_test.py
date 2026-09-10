@@ -5,7 +5,9 @@ Stills carry an expected move; videos print motion metrics from window.dbg:
   held         frames a lost hand rode along with the other one (handshake rule)
   spikes/snaps/handovers  whole-hand jumps >12 cm rejected / accepted / passed to the other slot
   dispJumps    displayed palm moved >10 cm between two rendered frames = what the player sees jump
-  reproj       mean distance displayed lines vs video lines, % of frame width (0 = exact)
+  reproj       mean distance displayed lines vs latest tracker lines, % of frame width (0 = exact)
+  lag          mean distance between the raw landmarks of a frame and what was ON SCREEN when that frame was captured
+               (includes pipeline latency; the number the player feels as drift on fast moves)
   moves        histogram of the detected move per tracker frame"""
 import asyncio, os, sys
 from playwright.async_api import async_playwright
@@ -24,12 +26,12 @@ VIDEOS = [v for v in ALL_VIDEOS if len(sys.argv) < 4 or any(k in v[0] for k in s
 SECS = int(sys.argv[1]) if len(sys.argv) > 1 else 24
 WHAT = sys.argv[2] if len(sys.argv) > 2 else "all"
 ARGS = ["--enable-gpu", "--ignore-gpu-blocklist", "--autoplay-policy=no-user-gesture-required"]
-RESET = "Object.assign(window.dbg, {frames:0,two:0,held:0,labelFlips:0,maxJump:0,bigJumps:0,spikes:0,snaps:0,handovers:0,dispJumps:0,reprojN:0,reprojSum:0,fitSum:0,moves:{ROCK:0,PAPER:0,SCISSORS:0,none:0}})"
+RESET = "Object.assign(window.dbg, {frames:0,two:0,held:0,labelFlips:0,maxJump:0,bigJumps:0,spikes:0,snaps:0,handovers:0,dispJumps:0,reprojN:0,reprojSum:0,lagSum:0,lagN:0,depthClamps:0,fitSum:0,moves:{ROCK:0,PAPER:0,SCISSORS:0,none:0}})"
 
 def fmt(d, stats):
-    fr = max(d["frames"], 1); rp = 100 * d["reprojSum"] / max(d["reprojN"], 1); m = d["moves"]
+    fr = max(d["frames"], 1); rp = 100 * d["reprojSum"] / max(d["reprojN"], 1); lag = 100 * d["lagSum"] / max(d["lagN"], 1); m = d["moves"]
     return (f"frames {d['frames']} | two-hand {100 * d['two'] / fr:.0f}% | held {d['held']} | flips {d['labelFlips']} | rawJumps {d['bigJumps']} | spikes {d['spikes']} snaps {d['snaps']} handovers {d['handovers']} "
-            f"| dispJumps {d['dispJumps']} | reproj {rp:.2f}% | fit {100 * d['fitSum'] / max(d['reprojN'], 1):.1f}% | moves R{m['ROCK']} P{m['PAPER']} S{m['SCISSORS']} -{m['none']}  ||  {stats}")
+            f"| dispJumps {d['dispJumps']} | depthClamps {d.get('depthClamps', 0)} | reproj {rp:.2f}% | lag {lag:.2f}% | fit {100 * d['fitSum'] / max(d['reprojN'], 1):.1f}% | moves R{m['ROCK']} P{m['PAPER']} S{m['SCISSORS']} -{m['none']}  ||  {stats}")
 
 async def run():
     async with async_playwright() as p:
