@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {SwipeController,isPointing} from './swipe.mjs';
 const p=(x=.5,z=.5)=>({x,z,pointing:true});
 function ready(){const c=new SwipeController();for(let t=0;t<=80;t+=20)c.update(p(),t);return c;}
-test('diagonal path translates both axes without changing angle',()=>{const c=ready();const r=c.update(p(.46,.46),100);assert.ok(r.dx<0&&r.dz>0);assert.equal(r.yaw,0);const next=c.update(p(.5,.5),120);assert.ok(next.dx>0&&next.dz<0);});
+test('diagonal path translates both axes without changing angle',()=>{const c=ready();const r=c.update(p(.46,.46),100);assert.ok(r.dx<0&&r.dz<0);assert.equal(r.yaw,0);const next=c.update(p(.5,.5),120);assert.ok(next.dx>0&&next.dz>0);});
 test('holding at displaced position stops with no coasting',()=>{const c=ready();c.update(p(.55,.55),100);for(let t=120;t<500;t+=20){const r=c.update(p(.55,.55),t);assert.ok(Math.abs(r.dx)<1e-12);assert.ok(Math.abs(r.dz)<1e-12);}});
 test('open hand or relaxed index immediately releases movement',()=>{const c=ready();const r=c.update({...p(.7,.7),pointing:false},100);assert.ok(Math.abs(r.dx)<1e-12);assert.ok(Math.abs(r.dz)<1e-12);assert.equal(r.active,false);assert.equal(c.update(p(.7,.7),120).dx,0);});
 test('tracking loss, stale frames and outliers reanchor',()=>{for(const action of [c=>c.update(null,100),c=>c.update(p(.8,.8),100),c=>c.update(p(.6,.6),1000)]){const c=ready();action(c);const r=c.update(p(.6,.6),1020);assert.ok(Math.abs(r.dx)<1e-12);assert.ok(Math.abs(r.dz)<1e-12);}});

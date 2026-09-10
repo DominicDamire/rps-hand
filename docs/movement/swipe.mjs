@@ -1,4 +1,4 @@
-import {measureHand} from './controller.mjs?v=8';
+import {measureHand} from './controller.mjs?v=9';
 export function indexExtension(p){
  if(p?.length!==21||!p.every(v=>[v.x,v.y,v.z].every(Number.isFinite)))return 0;
  const d=(a,b)=>Math.hypot(p[a].x-p[b].x,p[a].y-p[b].y,p[a].z-p[b].z);
@@ -33,7 +33,7 @@ export class SwipeController{
   if(!validDepth)this.anchor.z=s.z;
   const depth=validDepth?(s.z+previous.z)/2:.5;
   let dx=consume('x',.003)*depth*1.1547*this.gain;
-  let dz=validDepth?-consume('z',.008)*this.gain*(this.reverse?-1:1):0;
+  let dz=validDepth?consume('z',.008)*this.gain*(this.reverse?-1:1):0;
   const length=Math.hypot(dx,dz),limit=20*(t-previous.t)/1000,k=length>limit?limit/length:1;
   dx*=k;dz*=k;
   return {...zero,dx,dz,active:true,status:length>0?'Moving · relax index to release':'Ready · holding still'};

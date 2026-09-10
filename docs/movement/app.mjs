@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=8';
-import {SwipeController,measurePointer} from './swipe.mjs?v=8';
+import {setupUI} from './ui.mjs?v=9';
+import {SwipeController,measurePointer} from './swipe.mjs?v=9';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();
 const swipe=new SwipeController();
@@ -35,7 +35,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=8',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=9',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -49,7 +49,7 @@ async function start(){
 }
 $('start').onclick=start;
 $('reset').onclick=()=>{camera.position.set(0,1.65,7);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
-function controlsChanged(){swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Index fully straight: move your hand to move. Other fingers can stay relaxed. sideways = strafe; push toward camera = back; pull toward yourself = forward. Combine them for diagonals. To reset your reach: bend index FIRST, return your hand, then straighten it. Returning with index straight also moves you.';status('Hands free · point deliberately to move');}
+function controlsChanged(){swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Index fully straight: move your hand to move. Other fingers can stay relaxed. sideways = strafe; push toward camera = forward; pull toward yourself = back. Combine them for diagonals. To reset your reach: bend index FIRST, return your hand, then straighten it. Returning with index straight also moves you.';status('Hands free · point deliberately to move');}
 $('gain').oninput=()=>swipe.gain=+$('gain').value;
 $('reverse').onchange=()=>{swipe.reverse=$('reverse').checked;swipe.reset();};
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
@@ -58,7 +58,7 @@ document.addEventListener('visibilitychange',()=>{swipe.reset();demoRun=null;if(
 addEventListener('pagehide',stop);
 function frame(now){
  requestAnimationFrame(frame);
- if(demo&&demoRun){const elapsed=now-demoRun.start,t=Math.max(0,Math.min(1,(elapsed-180)/180));const d=demoRun.direction;apply({x:.5+(d.includes('right')?.25:d.includes('left')?-.25:0)*t,z:.5+(d.includes('forward')?.18:d.includes('backward')?-.18:0)*t,pinch:.8,extended:true,pointing:true},now);if(elapsed>1050){demoRun=null;apply(null,now);status('Demo complete · choose another movement');}}
+ if(demo&&demoRun){const elapsed=now-demoRun.start,t=Math.max(0,Math.min(1,(elapsed-180)/180));const d=demoRun.direction;apply({x:.5+(d.includes('right')?.25:d.includes('left')?-.25:0)*t,z:.5+(d.includes('forward')?-.18:d.includes('backward')?.18:0)*t,pinch:.8,extended:true,pointing:true},now);if(elapsed>1050){demoRun=null;apply(null,now);status('Demo complete · choose another movement');}}
  if(running){
   if(now-lastResult>500){swipe.update(null,now);trackingUI.clear();status('Waiting for tracking');}
   const v=$('cam');if(!busy&&v.readyState>=2&&v.currentTime!==lastVideo){lastVideo=v.currentTime;busy=true;const capture=now,owner=worker;createImageBitmap(v,{resizeWidth:384,resizeHeight:Math.round(384*v.videoHeight/v.videoWidth),resizeQuality:'low'}).then(bitmap=>{if(worker!==owner||!running){bitmap.close();return;}owner.postMessage({type:'frame',bitmap,time:capture},[bitmap]);}).catch(e=>{busy=false;status('Frame unavailable');$('error').textContent=e.message;});}
