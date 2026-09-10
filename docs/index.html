@@ -372,11 +372,18 @@ function meshPts(pts) {
   }
   return out;
 }
-// "Rigged" drive (default): the skin keeps the scan's own bone lengths and only takes joint ROTATIONS from the tracker,
-// like any rigged character. Per finger the chain is rebuilt in its bending plane with a hyperextension clamp, so the
-// tracker's per-joint jitter and its proportion errors cannot squash, fatten or zigzag the fingers. The result is
-// anchored at the tracked palm centre and scaled by the tracked palm length. ?fit=exact restores the exact-geometry drive.
-const FIT_EXACT = Q.get("fit") === "exact";
+// EXACT drive (default, the owner's rule: the skin's joints sit on the tracked points, nothing canonical). What made it
+// look fat and crooked before: every bone was stretched to its tracked length while keeping the scan's thickness, so a
+// finger the tracker measures 15 % short became 15 % fatter, and the nail got crushed. Now each finger's thickness is
+// scaled by that finger's own tracked-to-scan length ratio (a shape fit, as hand-model fitting does), smoothed over
+// time so it cannot flicker; the palm and thumb use their own ratios. Joint positions stay exactly the tracked ones
+// (only sideways PIP/DIP noise is projected out, see meshPts). ?fit=rigged switches to the rotation-only drive below.
+const FIT_EXACT = Q.get("fit") !== "rigged";
+const CHAINS = { palm: [1, 5, 9, 13, 17], thumb: [2, 3, 4], index: [6, 7, 8], middle: [10, 11, 12], ring: [14, 15, 16], pinky: [18, 19, 20] };
+const CHAIN_OF = {}; for (const [k, js] of Object.entries(CHAINS)) for (const j of js) CHAIN_OF[j] = k;
+// "Rigged" drive (?fit=rigged): the skin keeps the scan's own bone lengths and only takes joint ROTATIONS from the tracker,
+// like any rigged character (planar finger chains with a hyperextension clamp, anchored at the tracked palm centre).
+// Kept as the alternative; it deviates from the tracked fingertips by the tracker's proportion error.
 const HYPER = { mcp: 25, pip: 8, dip: 8 };   // degrees of backward bend allowed at each finger joint
 const _b = V(), _c = V(), _e = V();
 function poseFK(pts, bind, chirRight) {
@@ -435,9 +442,15 @@ function makeSkin(variant, color) {
   mesh.add(...bones); mesh.bind(new THREE.Skeleton(bones, variant.inv.map(m => m.clone())), new THREE.Matrix4());
   mesh.castShadow = true; mesh.frustumCulled = false; mesh.visible = false;
   const L0 = variant.bind[0].distanceTo(variant.bind[9]);
+  const bindLen = {}; for (const [k, js] of Object.entries(CHAINS)) bindLen[k] = js.reduce((t, j) => t + variant.bind[j].distanceTo(variant.bind[PARENT[j]]), 0);
+  const ratio = {};   // per chain: smoothed tracked length / scan length = the thickness scale of that chain
   return { mesh, update(tracked, chirRight) {
     const pts = FIT_EXACT ? meshPts(tracked) : poseFK(tracked, variant.bind, chirRight), sc = pts[0].distanceTo(pts[9]) / L0;
-    SKIN.order.forEach((j, i) => { boneFrame(pts, j, sc, bones[i].matrix); bones[i].matrixWorldNeedsUpdate = true; });
+    for (const [k, js] of Object.entries(CHAINS)) {
+      const r = js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k];
+      ratio[k] = ratio[k] == null ? r : ratio[k] + 0.08 * (r - ratio[k]);
+    }
+    SKIN.order.forEach((j, i) => { boneFrame(pts, j, FIT_EXACT ? ratio[CHAIN_OF[j]] : sc, bones[i].matrix); bones[i].matrixWorldNeedsUpdate = true; });
     mesh.visible = true;
   } };
 }
