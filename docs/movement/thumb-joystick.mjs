@@ -14,9 +14,10 @@ export function measureThumb(image,world,aspect=4/3){
  const across=['x','y','z'].map(k=>world[17][k]-world[5][k]);
  const width2=across.reduce((s,v)=>s+v*v,0);if(width2<1e-8)return null;
  const coverage=across.reduce((s,v,i)=>s+v*(world[4][['x','y','z'][i]]-world[5][['x','y','z'][i]]),0)/width2;
- // A wrapped thumb crosses toward the middle/ring fingers; a backward curl stays by the index.
- const resting=coverage>.2&&coverage<1.3&&Math.min(d(4,10),d(4,14),d(4,11),d(4,15))/palm<.65;
- return {x:(image[2].x-image[4].x)/span,straight,resting};
+ // Continuous retraction: a fully wrapped thumb reaches the backward end of the stick.
+ const proximity=Math.min(d(4,10),d(4,14),d(4,11),d(4,15))/palm;
+ const retraction=Math.max(0,Math.min(1,(coverage-.1)/.4))*Math.max(0,Math.min(1,(.8-proximity)/.4));
+ return {x:(image[2].x-image[4].x)/span,straight,retraction};
 }
 export class ThumbJoystick {
  constructor(){this.speed=4.5;this.reset();}
@@ -24,14 +25,13 @@ export class ThumbJoystick {
  receive(sample,time){
   if(!sample){this.reset();return;}
   if(!Number.isFinite(sample.straight)||!Number.isFinite(sample.x)){this.reset();return;}
-  if(sample.resting){this.x=0;this.z=0;this.seen=time;this.reason='RESTING THUMB';return;}
   this.neutral??={...sample};this.seen=time;
-  // Preserve sideways sensitivity and centre; only the forward/back/rest mapping changes.
+  // Keep v23 lateral response; allow both axes to contribute at every angle.
   const dead=v=>Math.sign(v)*Math.max(0,(Math.abs(v)-.2)/.8);
   this.x=dead(clamp((sample.x-this.neutral.x)/.55));
-  this.z=sample.straight>.88?-Math.min(1,(sample.straight-.88)/.1):sample.straight<.78?Math.min(1,(.78-sample.straight)/.25):0;
-  // A sideways stroke must not also walk forward just because the thumb is straight.
-  if(Math.abs(this.x)>0)this.z=0;
+  this.z=sample.straight>.85?-Math.min(1,(sample.straight-.85)/.13):sample.straight<.81?Math.min(1,(.81-sample.straight)/.28):0;
+  const retract=Math.max(0,Math.min(1,sample.retraction||0));
+  this.z+=(1-this.z)*retract;
   const length=Math.hypot(this.x,this.z);if(length>1){this.x/=length;this.z/=length;}
   this.reason=length>.01?'MOVING':'THUMB CENTRED';
  }
