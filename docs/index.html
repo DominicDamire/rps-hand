@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 34)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 35)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -49,7 +49,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 import { makeGun } from "./gun.mjs";
 
-const BUILD = 34;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 35;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -529,6 +529,7 @@ const CHAIN_OF = {}; for (const [k, js] of Object.entries(CHAINS)) for (const j 
 // like any rigged character (planar finger chains with a hyperextension clamp, anchored at the tracked palm centre).
 // Kept as the alternative; it deviates from the tracked fingertips by the tracker's proportion error.
 const HYPER = { mcp: 25, pip: 8, dip: 8 };   // degrees of backward bend allowed at each finger joint
+const THUMB_Z = Q.get("tz") !== "0";        // thumb bones take their depth from their length (see poseFK)
 const F_Q = (Q.get("fist") || "").split(",").map(Number);
 const FIST = F_Q.length === 3 ? { mcp: F_Q[0], pip: F_Q[1], dip: F_Q[2] } : { mcp: 85, pip: 100, dip: 60 };  // a closed fist's joint angles; blended in as the tracked tip approaches the knuckle (the tracker under-reads hidden joints)
 const _b = V(), _c = V(), _e = V(), _pw = V();
@@ -540,7 +541,22 @@ function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing s
   _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize(); if (!chirRight) _n.negate();   // now points OUT of the palm
   const seg = (j, dir) => out[j].copy(out[PARENT[j]]).addScaledVector(dir, s * bind[j].distanceTo(bind[PARENT[j]]));
   for (const j of [1, 5, 9, 13, 17]) seg(j, _d.subVectors(pts[j], pts[0]).normalize());   // palm: tracked directions, scan lengths
-  for (const j of [2, 3, 4]) seg(j, _d.subVectors(pts[j], pts[PARENT[j]]).normalize());   // thumb: as tracked
+  // Thumb: the picture fixes where each joint is, but the tracker under-reads the thumb's tilt toward or away from the
+  // phone (a thumbs-up leaning forward barely moved). So each thumb bone keeps its picture direction and takes its depth
+  // from its known length: |depth| = sqrt(L^2 - picture^2); the sign from the tracker when it is clear (over 25 % of the
+  // bone), else the sign remembered for that bone. A picture longer than the bone is left as tracked. ?tz=0 disables.
+  for (const j of [2, 3, 4]) {
+    _d.subVectors(pts[j], pts[PARENT[j]]);
+    if (THUMB_Z) {
+      _r.copy(pts[PARENT[j]]).normalize(); const L = s * bind[j].distanceTo(bind[PARENT[j]]), dz = _d.dot(_r);   // ray from the phone (origin) through the joint
+      _b.copy(_d).addScaledVector(_r, -dz); const lp = _b.length();                                                     // the picture part
+      if (lp > 1e-6 && lp < 0.98 * L) {
+        const key = "tz" + j; let sign = Math.abs(dz) > 0.25 * L ? Math.sign(dz) : (st && st[key]) || Math.sign(dz) || 1; if (st) st[key] = sign;
+        _d.copy(_b).addScaledVector(_r, sign * Math.sqrt(L * L - lp * lp));
+      }
+    }
+    seg(j, _d.normalize());
+  }
   for (const m of [5, 9, 13, 17]) {
     // bending plane of this finger: contains the metacarpal direction, perpendicular to the across-palm axis. The sideways
     // axis comes from the metacarpal (always well defined), NOT from knuckle->tip, which is ~zero for a folded finger and
@@ -795,10 +811,17 @@ function makeHand(color = 0xdead8f) {
   // colliders: one ball per joint + one for the palm, kinematic (driven by tracking, push everything else)
   const hand = {
     group,
-    draw(pts) {
+    draw(pts, label) {
       if (SKIN) {
         _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize();
-        chir += 0.2 * (Math.sign(_r.subVectors(pts[4], pts[0]).dot(_n)) - chir);
+        // Handedness vote (metres, + = right): the thumb's side of the palm plane, the side any folded finger curls to
+        // (fingers only curl to the palm side, so a fist decides firmly), and the tracker's label as a 5 mm tie-break
+        // for a flat hand, where the geometry cannot tell the palm from the back. The thumb alone was ambiguous on a
+        // thumbs-up (thumb in the palm plane): the guess flipped and the folded fingers curled to the BACK of the hand.
+        const Lp = pts[0].distanceTo(pts[9]); let vote = _r.subVectors(pts[4], pts[0]).dot(_n);
+        for (const m of [5, 9, 13, 17]) { const fold = Math.max(0, 1 - pts[m + 3].distanceTo(pts[m]) / (0.6 * Lp)); if (fold > 0) vote += 2 * fold * _r.subVectors(pts[m + 3], pts[0]).dot(_n); }
+        if (label) vote += (label === "Right" ? 1 : -1) * 0.005 * CHIR_RIGHT;
+        chir += 0.2 * (Math.sign(vote) - chir);
         const right = chir * CHIR_RIGHT >= 0, useMirrored = right !== SKIN.mirroredIsLeft;   // the GLB is a right hand: its mirrored copy is the left hand
         const near = hiR && trackerFps >= LOD_MIN_FPS && pts[0].distanceTo(pts[9]) / Math.max(0.05, -palmCentre(pts).z) > LOD_NEAR;   // close to the camera: full detail
         const on = useMirrored ? (near ? hiL : skinL) : (near ? hiR : skinR);
@@ -1008,7 +1031,7 @@ async function main() {
     for (const s of [slots.Right, slots.Left]) {
       if (shown[s.key]) {
         const pts = shape(shown[s.key]);
-        const tD = performance.now(); s.hand.draw(pts); dbg.tm.draw += performance.now() - tD; displayed.push(shown[s.key]);
+        const tD = performance.now(); s.hand.draw(pts, s.name); dbg.tm.draw += performance.now() - tD; displayed.push(shown[s.key]);
         const pc = palmFlat(shown[s.key]); if (s.lastPalm && pc.distanceTo(s.lastPalm) > 0.1) dbg.dispJumps++; s.lastPalm = pc;   // what the player actually sees jump
       } else { s.hand.hide(); s.lastPalm = null; }
     }
