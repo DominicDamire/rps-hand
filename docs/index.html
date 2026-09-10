@@ -508,10 +508,9 @@ function makeSkin(variant, color) {
   const ratio = {};   // per chain: smoothed tracked length / scan length = the thickness scale of that chain
   return { mesh, update(tracked, chirRight) {
     const pts = FIT_EXACT ? meshPts(tracked) : poseFK(tracked, variant.bind, chirRight), sc = pts[0].distanceTo(pts[9]) / L0;
-    for (const [k, js] of Object.entries(CHAINS)) {
-      const r = js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k];
-      ratio[k] = ratio[k] == null ? r : ratio[k] + 0.08 * (r - ratio[k]);
-    }
+    // thickness: one per-hand size (palm length ratio), settled slowly, so fingers never swell or shrink with distance or pose
+    ratio.all = ratio.all == null ? sc : ratio.all + 0.01 * (sc - ratio.all);
+    for (const k of Object.keys(CHAINS)) ratio[k] = ratio.all;
     SKIN.order.forEach((j, i) => { boneFrame(pts, j, FIT_EXACT ? ratio[CHAIN_OF[j]] : sc, bones[i].matrix); bones[i].matrixWorldNeedsUpdate = true; });
     mesh.visible = true;
   } };
