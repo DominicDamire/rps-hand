@@ -65,7 +65,7 @@ const DELEGATES = Q.get("delegate") === "CPU" ? ["CPU"] : ["GPU", "CPU"];   // ?
 const PAD = Q.get("pad") != null ? +Q.get("pad") : 0.3;   // border added around the frame when the hand is big, fraction of the longer side (?pad=0 to disable)
 const BIG_HAND = [0.22, 0.15];      // palm length (wrist to middle knuckle) / frame short side: pad above the first, unpad below the second (hysteresis)
 const DEBUG_OVERLAY = Q.get("debug") === "1";
-const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "hand.glb";   // rigged hand scan (?skin=0 = the old capsule hand, ?skin=file.glb = another export with the same bones)
+const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "arm";   // default: the owner's pre-rigged arms (arm_L/arm_R.glb); ?skin=hand.glb = the scan rig, ?skin=thing = the Thing rig, ?skin=0 = capsules
 const DS = Q.get("ds") != null ? +Q.get("ds") : 480;   // tracker input width after downscale (?ds=0 = the full camera frame). MediaPipe resizes to 192/224 anyway; 320 lost far hands
 const RVFC = Q.get("rvfc") !== "0";                        // start the tracker from requestVideoFrameCallback (?rvfc=0 = poll currentTime in rAF, the old way)
 const HAND_SHADOW = Q.get("shadow") === "1";               // the skin casts a shadow: a second skinning pass over 79 k triangles per hand, off by default (props still cast)
@@ -574,6 +574,10 @@ function makeRigSkin(variant, color) {
     const d = ex.tail.clone().sub(ex.head), L = d.length(); d.normalize(); rest[key] = { i: ex.i, L };
     inv[ex.i].copy(frameDir(ex.head, d, L, 1, key === "hand" ? bindL : bindN, key === "hand" ? bindN : bindL, new THREE.Matrix4())).invert();
   }
+  // bones the tracker does not drive (root, helpers, upper arm when absent) ride rigidly with the palm: same rest frame as the hand bone
+  const driven = new Set([...variant.edges.map(e => e.i), ...Object.values(rest).map(r => r.i)]);
+  const handRest = rest.hand ? inv[rest.hand.i] : frameDir(bind[0], dir0, bind[0].distanceTo(bind[9]), 1, bindL, bindN, new THREE.Matrix4()).invert();
+  const riders = []; variant.names.forEach((n, i) => { if (!driven.has(i)) { inv[i].copy(handRest); riders.push(i); } });
   const mesh = new THREE.SkinnedMesh(variant.geo, variant.material ? variant.material.clone() : new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
   mesh.add(...bones); mesh.bind(new THREE.Skeleton(bones, inv), new THREE.Matrix4());
   mesh.castShadow = false; mesh.frustumCulled = false; mesh.visible = false;
@@ -585,7 +589,9 @@ function makeRigSkin(variant, color) {
     for (const [k, js] of Object.entries(CHAINS)) { const r = Math.min(1.6 * sc, Math.max(0.6 * sc, js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k])); ratio[k] = ratio[k] == null ? r : ratio[k] + Math.max(0.01, 1 / ratio.n) * (r - ratio[k]); }
     for (const e of variant.edges) { boneFrame(pts, e.j, ratio[CHAIN_OF[e.j]], bones[e.i].matrix); bones[e.i].matrixWorldNeedsUpdate = true; }
     palmRefs(pts); dirW.subVectors(pts[9], pts[0]).normalize();
-    if (rest.hand) { frameDir(pts[0], dirW, rest.hand.L * sc, ratio.palm, _l, _n, bones[rest.hand.i].matrix); bones[rest.hand.i].matrixWorldNeedsUpdate = true; }
+    const handM = rest.hand ? bones[rest.hand.i].matrix : M;
+    frameDir(pts[0], dirW, (rest.hand ? rest.hand.L : L0) * sc, ratio.palm, _l, _n, handM); if (rest.hand) bones[rest.hand.i].matrixWorldNeedsUpdate = true;
+    for (const i of riders) { bones[i].matrix.copy(handM); bones[i].matrixWorldNeedsUpdate = true; }
     if (rest.forearm) {   // straight forearm behind the wrist (an elbow will come from body tracking)
       o.copy(pts[0]).addScaledVector(dirW, -rest.forearm.L * sc); frameDir(o, dirW, rest.forearm.L * sc, ratio.palm, _n, _l, bones[rest.forearm.i].matrix); bones[rest.forearm.i].matrixWorldNeedsUpdate = true;
       if (rest.arm) { o.addScaledVector(dirW, -rest.arm.L * sc); frameDir(o, dirW, rest.arm.L * sc, ratio.palm, _n, _l, bones[rest.arm.i].matrix); bones[rest.arm.i].matrixWorldNeedsUpdate = true; }
