@@ -1,10 +1,9 @@
 import * as THREE from 'three';
-import {MovementController,measureHand} from './controller.mjs?v=4';
-import {setupUI} from './ui.mjs?v=4';
-import {SwipeController,measurePointer} from './swipe.mjs?v=4';
-const $=id=>document.getElementById(id), controller=new MovementController();
-controller.mode='index';const trackingUI=setupUI();
-const swipe=new SwipeController();let navigation='turn';
+import {setupUI} from './ui.mjs?v=5';
+import {SwipeController,measurePointer} from './swipe.mjs?v=5';
+const $=id=>document.getElementById(id);
+const trackingUI=setupUI();
+const swipe=new SwipeController();
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));
 const scene=new THREE.Scene();scene.background=new THREE.Color('#25394a');scene.fog=new THREE.FogExp2('#25394a',.018);
 const camera=new THREE.PerspectiveCamera(65,1,.05,200);camera.position.set(0,1.65,7);
@@ -27,8 +26,8 @@ sign('START',0,.5,7,'#a9edc7');
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}addEventListener('resize',resize);resize();
 let worker=null,stream=null,running=false,busy=false,lastVideo=-1,lastResult=0,demo=false,demoRun=null;
 function status(text,active=false){$('status').textContent=text;$('lamp').classList.toggle('on',active);}
-function apply(sample,time){const r=navigation==='turn'?swipe.update(sample,time):controller.update(sample,time);if(navigation==='turn'){camera.rotation.y+=r.yaw;camera.translateZ(r.dz);$('gestureStats').textContent=`Swipe ${Math.round((r.distance||0)*($('cam').videoWidth||640))} px · ${Math.round((r.speed||0)*($('cam').videoWidth||640))} px/s`;}else{camera.translateX(r.dx);camera.translateZ(r.dz);}status(r.status,r.active);return r;}
-function stop(){running=false;busy=false;worker?.terminate();worker=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('cam').srcObject=null;controller.reset();swipe.reset();trackingUI.camera(false);$('start').textContent='Start camera';}
+function apply(sample,time){const r=swipe.update(sample,time);const yaw=camera.rotation.y;camera.position.x+=Math.cos(yaw)*r.dx+Math.sin(yaw)*r.dz;camera.position.z+=-Math.sin(yaw)*r.dx+Math.cos(yaw)*r.dz;$('gestureStats').textContent=r.active?'MOVE engaged · relax index to release':'Hands free · movement off';status(r.status,r.active);return r;}
+function stop(){running=false;busy=false;worker?.terminate();worker=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('cam').srcObject=null;swipe.reset();trackingUI.camera(false);$('start').textContent='Start camera';}
 async function start(){
  if(running){stop();status('Paused · camera off');return;}
  stop();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('error').textContent='';$('start').disabled=true;status('Starting camera…');
@@ -41,7 +40,7 @@ async function start(){
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
     lastResult=performance.now();if(lastResult-data.time>220){apply(null,lastResult);trackingUI.clear();status('Tracking is delayed · movement paused');return;}
-    const sample=data.landmarks?.length===1?(navigation==='turn'?measurePointer(data.landmarks[0],data.worldLandmarks[0],$('cam').videoWidth/$('cam').videoHeight):measureHand(data.landmarks[0],data.worldLandmarks[0],$('cam').videoWidth/$('cam').videoHeight)):null;
+    const sample=data.landmarks?.length===1?measurePointer(data.landmarks[0],data.worldLandmarks[0],$('cam').videoWidth/$('cam').videoHeight):null;
     const movement=apply(sample,data.time);trackingUI.draw(data.landmarks,$('cam').videoWidth,$('cam').videoHeight,movement.active);if(data.landmarks?.length>1)status('Use one hand to move');
   };
   lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Show one hand');
@@ -49,21 +48,20 @@ async function start(){
  finally{$('start').disabled=false;}
 }
 $('start').onclick=start;
-$('reset').onclick=()=>{camera.position.set(0,1.65,7);camera.rotation.set(0,0,0);controller.reset();swipe.reset();demoRun=null;status('View reset · ready');};
-function controlsChanged(){navigation=$('navigation').value;controller.mode=swipe.mode=$('mode').value;controller.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='One gesture = one action. Flick sideways to turn. Move your pointing hand toward camera = step back; pull toward yourself = step forward. Fold index (or release pinch) between actions. Keep palm visible for depth.';status('Ready · deliberate gestures only');}
-$('mode').onchange=controlsChanged;$('navigation').onchange=controlsChanged;
-$('gain').oninput=()=>controller.gain=swipe.gain=+$('gain').value;
-$('reverse').onchange=()=>{controller.reverse=swipe.reverse=$('reverse').checked;controller.reset();swipe.reset();};
+$('reset').onclick=()=>{camera.position.set(0,1.65,7);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
+function controlsChanged(){swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Index fully straight, middle / ring / pinky curled. Trace your movement path: sideways = strafe; push toward camera = back; pull toward yourself = forward. Combine them for diagonals. Hold still to stop. Relax index to use your hand.';status('Hands free · point deliberately to move');}
+$('gain').oninput=()=>swipe.gain=+$('gain').value;
+$('reverse').onchange=()=>{swipe.reverse=$('reverse').checked;swipe.reset();};
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
-document.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{controller.reset();swipe.reset();demoRun={direction:b.dataset.demo,start:performance.now()};});
-document.addEventListener('visibilitychange',()=>{controller.reset();swipe.reset();demoRun=null;if(document.hidden&&running)stop();});
+document.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{swipe.reset();demoRun={direction:b.dataset.demo,start:performance.now()};});
+document.addEventListener('visibilitychange',()=>{swipe.reset();demoRun=null;if(document.hidden&&running)stop();});
 addEventListener('pagehide',stop);
 function frame(now){
  requestAnimationFrame(frame);
- if(demo&&demoRun){const elapsed=now-demoRun.start,t=Math.max(0,Math.min(1,(elapsed-180)/180));const d=demoRun.direction;apply({x:.5+(d==='right'?.25:d==='left'?-.25:0)*t,z:.5+(d==='forward'?.18:d==='backward'?-.18:0)*t,pinch:.2,extended:true},now);if(elapsed>1050){demoRun=null;controller.reset();status('Demo complete · choose another movement');}}
+ if(demo&&demoRun){const elapsed=now-demoRun.start,t=Math.max(0,Math.min(1,(elapsed-180)/180));const d=demoRun.direction;apply({x:.5+(d.includes('right')?.25:d.includes('left')?-.25:0)*t,z:.5+(d.includes('forward')?.18:d.includes('backward')?-.18:0)*t,pinch:.8,extended:true,pointing:true},now);if(elapsed>1050){demoRun=null;apply(null,now);status('Demo complete · choose another movement');}}
  if(running){
-  if(now-lastResult>220){controller.reset();swipe.update(null,now);trackingUI.clear();status('Waiting for tracking');}
-  const v=$('cam');if(!busy&&v.readyState>=2&&v.currentTime!==lastVideo){lastVideo=v.currentTime;busy=true;const capture=now,owner=worker;createImageBitmap(v).then(bitmap=>{if(worker!==owner||!running){bitmap.close();return;}owner.postMessage({type:'frame',bitmap,time:capture},[bitmap]);}).catch(e=>{busy=false;controller.reset();status('Frame unavailable');$('error').textContent=e.message;});}
+  if(now-lastResult>220){swipe.update(null,now);trackingUI.clear();status('Waiting for tracking');}
+  const v=$('cam');if(!busy&&v.readyState>=2&&v.currentTime!==lastVideo){lastVideo=v.currentTime;busy=true;const capture=now,owner=worker;createImageBitmap(v).then(bitmap=>{if(worker!==owner||!running){bitmap.close();return;}owner.postMessage({type:'frame',bitmap,time:capture},[bitmap]);}).catch(e=>{busy=false;status('Frame unavailable');$('error').textContent=e.message;});}
  }
  $('position').innerHTML=`${['N','NE','E','SE','S','SW','W','NW'][Math.round(((-camera.rotation.y*180/Math.PI)%360+360)%360/45)%8]} · ${((-camera.rotation.y*180/Math.PI%360+360)%360).toFixed(0)}°<br>X ${camera.position.x.toFixed(1)} · Z ${(camera.position.z-7).toFixed(1)}`;
  renderer.render(scene,camera);
