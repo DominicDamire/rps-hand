@@ -18,9 +18,9 @@ export class ThumbJoystick {
   if(!sample){this.reset();return;}
   this.neutral??=sample.x;this.seen=time;
   // Thumb IP bend provides depth; deflection relative to its automatic centre provides strafe.
-  const side=sample.straight>.35?clamp((sample.x-this.neutral)/.65):0;
+  const side=sample.straight>.8?clamp((sample.x-this.neutral)/.65):0;
   this.x=Math.sign(side)*Math.max(0,(Math.abs(side)-.12)/.88);
-  this.z=sample.straight>.72?-Math.min(1,(sample.straight-.72)/.22):sample.straight<.35?Math.min(1,(.35-sample.straight)/.65):0;
+  this.z=sample.straight>.9?-Math.min(1,(sample.straight-.9)/.08):sample.straight<.8?Math.min(1,(.8-sample.straight)/.25):0;
   this.z*=1-Math.abs(this.x);
   const length=Math.hypot(this.x,this.z);if(length>1){this.x/=length;this.z/=length;}
   this.reason=length>.01?'MOVING':'THUMB CENTRED';
