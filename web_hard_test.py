@@ -14,6 +14,7 @@ from playwright.async_api import async_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = "http://localhost:8765/"
+QS = os.environ.get("QS", "")   # extra query string for every run, e.g. QS="&head=0"
 STILLS = [  # (file, expected move or None)
     ("victory.jpg", "SCISSORS"), ("test/peace.jpg", "SCISSORS"), ("test/dirty_peace.jpg", "SCISSORS"), ("test/robbie_v.jpg", "SCISSORS"),
     ("test/fist_pump.jpg", "ROCK"), ("test/raised_fist.jpg", "ROCK"), ("woman_hands.jpg", "PAPER"), ("test/crossed_hands.jpg", "PAPER"),
@@ -44,7 +45,7 @@ async def run():
             ok = n = 0
             for img, expect in STILLS:
                 name = os.path.basename(img).split(".")[0]
-                await pg.goto(f"{BASE}?img={img}", wait_until="load")
+                await pg.goto(f"{BASE}?img={img}{QS}", wait_until="load")
                 try: await pg.wait_for_function("document.getElementById('hand').textContent.length > 12", timeout=20000)
                 except Exception: pass
                 await pg.wait_for_timeout(2500)
@@ -54,15 +55,27 @@ async def run():
                 print(f"[img {name:14s}] {verdict:22s} move={move:9s} {hands}")
                 await pg.screenshot(path=os.path.join(HERE, f"hard_{name}.png"))
             print(f"STILLS: {ok}/{n} labelled moves correct")
-            await pg.goto(f"{BASE}?img=victory.jpg", wait_until="load")
+            await pg.goto(f"{BASE}?img=victory.jpg{QS}", wait_until="load")
             await pg.wait_for_function("document.getElementById('hand').textContent.length > 12", timeout=30000)
             await pg.evaluate("window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', {beta: 60, gamma: 0, alpha: 0}))")
             await pg.wait_for_timeout(1500); await pg.evaluate(RESET); await pg.wait_for_timeout(1500)
             d = await pg.evaluate("window.dbg"); print(f"[tilt 30 up      ] reproj {100 * d['reprojSum'] / max(d['reprojN'], 1):.2f}%  ||  {(await pg.inner_text('#stats')).replace(chr(10), ' / ')}")
+            # face stills (build 16): the tracked eye point projected back into the picture vs the face mesh's outer-eye midpoint, % frame width
+            for img, want in [("woman_hands.jpg", "head"), ("test/seated_desk.jpg", "body")]:
+                name = os.path.basename(img).split(".")[0]
+                await pg.goto(f"{BASE}?img={img}{QS}", wait_until="load")
+                try: await pg.wait_for_function("window.dbg && window.dbg.head && window.dbg.head.reproj != null", timeout=30000)
+                except Exception: pass
+                await pg.wait_for_timeout(6000)
+                h = await pg.evaluate("window.dbg.head"); st = (await pg.inner_text("#stats")).replace(chr(10), " / ")
+                hs = await pg.evaluate("window.dbg.headView ? window.dbg.headView.status(performance.now()) : 'head: off'"); bs = await pg.evaluate("window.dbg.bodyView ? window.dbg.bodyView.status(performance.now()) : 'body: off'")
+                ok = h is not None and h["reproj"] < 0.01
+                print(f"[face {name:11s}] {'OK ' if ok else 'FAIL'} head reproj {100 * h['reproj'] if h else -1:.2f}% depth {h['depth'] if h else 0:.2f} m yaw {h['yaw'] * 180 / 3.14159 if h else 0:.0f}° | {hs} | {bs}  ||  {st}")
+                await pg.screenshot(path=os.path.join(HERE, f"hard_{name}_face.png"))
         if WHAT in ("all", "videos"):
             for vid, mode in VIDEOS:
                 name = os.path.basename(vid).split(".")[0]
-                await pg.goto(f"{BASE}?video={vid}", wait_until="load")
+                await pg.goto(f"{BASE}?video={vid}{QS}", wait_until="load")
                 try: await pg.wait_for_function("!document.getElementById('status')", timeout=60000)
                 except Exception: print(f"[vid {name}] tracker did not start"); continue
                 while (await pg.inner_text("#mode")) != "MODE: " + mode: await pg.click("#mode")

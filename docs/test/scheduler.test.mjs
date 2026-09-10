@@ -1,0 +1,34 @@
+// Cross-tracker token: the face worker takes a frame only when it is idle and >= interval passed; the body worker only
+// after two completed face frames, never while the face is busy; slow devices halve the body rate.
+import assert from 'node:assert/strict';
+import {BodyView} from '../body/BodyView.js';
+import {HeadView} from '../head/HeadView.js';
+globalThis.document={hidden:false};globalThis.addEventListener=()=>{};
+globalThis.Worker=class{constructor(){this.sent=0;}postMessage(){this.sent++;}terminate(){this.stopped=true;}};
+globalThis.createImageBitmap=async()=>({close(){}});
+const video={videoWidth:640,videoHeight:480};
+const head=new HeadView({workerUrl:'x'});
+head.worker.onmessage({data:{type:'ready',delegate:'GPU'}});
+assert.equal(head.ready,true);assert.equal(head.wantsFrame(0),true);
+const body=new BodyView(head,{mode:'seated',workerUrl:'y'});
+body.start();body.worker.onmessage({data:{type:'ready',delegate:'GPU'}});
+head.completedFrames=1;assert.equal(body.wantsFrame(100),false,'Face gets two frames first');
+head.completedFrames=2;assert.equal(body.wantsFrame(100),true);
+assert.equal(await head.capture(video,100),true);assert.equal(head.busy,true);assert.equal(head.worker.sent,1);
+assert.equal(body.wantsFrame(100),false,'Body never overlaps face inference');
+assert.equal(await head.capture(video,110),false,'One face frame in flight');
+head.worker.onmessage({data:{type:'pose',ts:head.lastTs,pose:null}});
+assert.equal(head.busy,false);assert.equal(head.completedFrames,3);
+assert.equal(head.wantsFrame(120),false,'Face frames at least 33 ms apart');assert.equal(head.wantsFrame(134),true);
+assert.equal(await body.capture(video,134),true);assert.equal(body.busy,true);assert.equal(body.worker.sent,1);
+body.worker.onmessage({data:{type:'pose',ts:body.lastTs,pose:null,inferenceMs:5}});
+assert.equal(body.busy,false);assert.equal(body.wantsFrame(150),false,'Body waits for two more face frames and 66 ms');
+head.completedFrames=5;assert.equal(body.wantsFrame(150),false);assert.equal(body.wantsFrame(201),true);
+head.perf.latency=80;assert.equal(body.wantsFrame(201),false,'Slow devices reduce body rate');assert.equal(body.wantsFrame(260),true);
+body.setMode('off');assert.equal(body.wantsFrame(260),false);assert.equal(body.worker,null);
+body.setMode('seated');assert.equal(body.enabled,true);
+head.mode='off';assert.equal(head.wantsFrame(300),false);assert.equal(body.wantsFrame(300),false);
+head.mode='first';head.interval=100;assert.equal(head.wantsFrame(190),false,'Reduced face rate (budget fallback)');assert.equal(head.wantsFrame(200),true);
+document.hidden=true;assert.equal(head.wantsFrame(300),false);
+body.stop();head.worker.terminate();clearTimeout(head.timer);
+console.log('PASS: two-face/one-body scheduling, no concurrent inference, min intervals, off/hidden and adaptive rates');
