@@ -50,13 +50,14 @@ export function thumbVector(tilt){
 }
 export class ThumbJoystick {
  constructor(){this.speed=4.5;this.reset();}
- reset(){this.x=0;this.z=0;this.seen=-Infinity;this.candidate=null;this.lastTilt=null;this.reason='SHOW THUMB';}
+ reset(){this.x=0;this.z=0;this.seen=-Infinity;this.candidate=null;this.lastTilt=null;this.raw={x:0,z:0};this.reason='SHOW THUMB';}
  receive(sample,time){
   if(!valid(sample)){this.reset();return;}
   if(time<=this.seen)return;
   const elapsed=time-this.seen;if(elapsed>250)this.reset();this.seen=time;
   if(sample.rest){this.stop('FIST REST');return;}
   const v=thumbVector(sample.tilt);if(!v){this.stop('THUMB UNCLEAR');return;}
+  this.raw={...v};
   if(Math.hypot(v.x,v.z)<.001){this.stop('NEUTRAL');return;}
   const active=Math.hypot(this.x,this.z)>.01,change=Math.hypot(v.x-this.x,v.z-this.z);
   const normalized=sample.tilt.map(v=>v/Math.hypot(...sample.tilt));
@@ -64,14 +65,16 @@ export class ThumbJoystick {
   if(active&&change<.1){this.candidate=null;return;}
   // Confirm starts and abrupt reversals, while ordinary turns move continuously.
   if(!active||change>.8){
-   if(!this.candidate||Math.hypot(v.x-this.candidate.x,v.z-this.candidate.z)>.25)this.candidate={...v,since:time,count:1};else this.candidate.count++;
+   const agreement=this.candidate?(v.x*this.candidate.x+v.z*this.candidate.z)/(Math.hypot(v.x,v.z)*Math.hypot(this.candidate.x,this.candidate.z)):-1;
+   // A consistent direction may vary in strength; do not restart its confirmation.
+   if(!this.candidate||agreement<Math.cos(Math.PI/5))this.candidate={...v,since:time,count:1};else this.candidate.count++;
    if(this.candidate.count<2||time-this.candidate.since<70){if(!active)this.reason='CONFIRMING TILT';return;}
   }
   this.candidate=null;
   const alpha=active?1-Math.exp(-Math.min(100,elapsed)/30):1;
   this.x+=(v.x-this.x)*alpha;this.z+=(v.z-this.z)*alpha;this.lastTilt=normalized;this.reason='MOVING';
  }
- stop(reason){this.x=this.z=0;this.candidate=null;this.reason=reason;}
+ stop(reason){this.x=this.z=0;this.raw={x:0,z:0};this.candidate=null;this.lastTilt=null;this.reason=reason;}
  get direction(){return Math.hypot(this.x,this.z)>.01?[this.z<-.05?'FORWARD':this.z>.05?'BACKWARD':'',this.x<-.05?'LEFT':this.x>.05?'RIGHT':''].filter(Boolean).join(' '):null;}
  step(now,dt=.016){if(now-this.seen>250)this.reset();const d=this.speed*Math.min(.05,Math.max(0,dt));return {dx:this.x*d,dz:this.z*d};}
 }

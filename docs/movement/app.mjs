@@ -1,12 +1,12 @@
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=39';
-import {setupThumbstick} from './thumbstick.mjs?v=39';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=40';
+import {setupThumbstick} from './thumbstick.mjs?v=40';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=39';
-import {DustMap} from './map.mjs?v=39';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=40';
+import {DustMap} from './map.mjs?v=40';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=39';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=39';
+import {setupUI} from './ui.mjs?v=40';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=40';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const held=new ThumbJoystick();let inputMode='poses',trackedHand=null,resting=false;
@@ -30,7 +30,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=39',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=40',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -46,7 +46,7 @@ async function start(){
       const sample=handIndex>=0?measureThumb(data.landmarks[handIndex],data.worldLandmarks[handIndex],$('cam').videoWidth/$('cam').videoHeight):null;
       held.receive(sample,lastResult);
       const active=!!held.direction;walkReason=handIndex<0?'SHOW ONE HAND':held.reason;
-      $('gestureStats').textContent=`THUMB X ${held.x.toFixed(2)} · Y ${(-held.z).toFixed(2)} · depth ${sample?.tilt?.[2]?.toFixed(2)??"?"} · tracker ${Math.round(data.inferenceMs||0)} ms`;
+      $('gestureStats').textContent=`THUMB X ${held.x.toFixed(2)} · Y ${(-held.z).toFixed(2)} · raw X ${held.raw.x.toFixed(2)} Y ${(-held.raw.z).toFixed(2)} · depth ${sample?.tilt?.[2]?.toFixed(2)??"?"} · tracker ${Math.round(data.inferenceMs||0)} ms`;
       trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,active);
       status(active?'THUMB · '+held.direction:walkReason,active);
     }
