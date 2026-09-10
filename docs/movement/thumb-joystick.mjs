@@ -22,33 +22,52 @@ const valid=s=>s?.tilt?.length===3&&s.tilt.every(Number.isFinite);
 const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
 // Thumb-angle references only, not full hand poses or image matching.
 export const THUMB_TILTS={"NEUTRAL":[0.7984262,-0.4986223,-0.3374779],"FORWARD":[0.5432355,-0.2159375,-0.8113361],"BACKWARD":[0.6139758,-0.7153458,0.3336377],"LEFT":[0.9311239,-0.1177362,-0.3451759],"RIGHT":[0.1658621,-0.8552083,-0.491028]};
-const vectors={FORWARD:[0,-1],BACKWARD:[0,1],LEFT:[-1,0],RIGHT:[1,0]};
-const targets=Object.entries(vectors).map(([name,move])=>({name,move,tilt:THUMB_TILTS[name]}));
-for(const a of ['FORWARD','BACKWARD'])for(const b of ['LEFT','RIGHT']){const tilt=THUMB_TILTS[a].map((v,i)=>v+THUMB_TILTS[b][i]),n=Math.hypot(...tilt);targets.push({name:a+' '+b,move:[vectors[b][0]/Math.SQRT2,vectors[a][1]/Math.SQRT2],tilt:tilt.map(v=>v/n)});}
+const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
+const unit=a=>{const n=Math.hypot(...a);return a.map(v=>v/n);};
+const neutral=unit(THUMB_TILTS.NEUTRAL);
+const side=THUMB_TILTS.RIGHT.map((v,i)=>v-THUMB_TILTS.LEFT[i]);
+const right=unit(side.map((v,i)=>v-dot(side,neutral)*neutral[i]));
+let back=unit([neutral[1]*right[2]-neutral[2]*right[1],neutral[2]*right[0]-neutral[0]*right[2],neutral[0]*right[1]-neutral[1]*right[0]]);
+if(dot(back,THUMB_TILTS.BACKWARD)<dot(back,THUMB_TILTS.FORWARD))back=back.map(v=>-v);
+const tau=2*Math.PI,positive=a=>(a%tau+tau)%tau;
+const knots=Object.entries({RIGHT:0,BACKWARD:Math.PI/2,LEFT:Math.PI,FORWARD:3*Math.PI/2}).map(([name,output])=>({angle:positive(Math.atan2(dot(THUMB_TILTS[name],back),dot(THUMB_TILTS[name],right))),output})).sort((a,b)=>a.angle-b.angle);
+export function thumbVector(tilt){
+ const n=Math.hypot(...tilt);if(!Number.isFinite(n)||n<.5)return null;
+ tilt=tilt.map(v=>v/n);const alignment=dot(tilt,neutral);
+ if(alignment<.05)return null;
+ const lean=Math.acos(Math.max(-1,Math.min(1,alignment)));
+ if(lean<=.18)return {x:0,z:0};
+ let angle=positive(Math.atan2(dot(tilt,back),dot(tilt,right)));
+ // Continuous angular interpolation; reference directions orient the axes, never quantize them.
+ let index=knots.findLastIndex(k=>k.angle<=angle);if(index<0){index=knots.length-1;angle+=tau;}
+ const a=knots[index],b=knots[(index+1)%knots.length];
+ const span=positive(b.angle-a.angle),fraction=(angle-a.angle)/span;
+ const output=a.output+positive(b.output-a.output)*fraction;
+ const speed=Math.min(1,(lean-.18)/.4);
+ return {x:Math.cos(output)*speed,z:Math.sin(output)*speed};
+}
 export class ThumbJoystick {
  constructor(){this.speed=4.5;this.reset();}
- reset(){this.x=0;this.z=0;this.seen=-Infinity;this.active=null;this.candidate=null;this.reason='SHOW THUMB';}
+ reset(){this.x=0;this.z=0;this.seen=-Infinity;this.candidate=null;this.reason='SHOW THUMB';}
  receive(sample,time){
   if(!valid(sample)){this.reset();return;}
   if(time<=this.seen)return;
-  if(time-this.seen>250)this.reset();
-  this.seen=time;
+  const elapsed=time-this.seen;if(elapsed>250)this.reset();this.seen=time;
   if(sample.rest){this.stop('FIST REST');return;}
-  const n=Math.hypot(...sample.tilt);if(n<.5){this.stop('THUMB UNCLEAR');return;}
-  const tilt=sample.tilt.map(v=>v/n);
-  if(distance(tilt,THUMB_TILTS.NEUTRAL)<.22){this.stop('NEUTRAL');return;}
-  const ranked=targets.map(t=>({...t,error:distance(tilt,t.tilt)})).sort((a,b)=>a.error-b.error),best=ranked[0];
-  if(best.error>.55){this.stop('THUMB UNCLEAR');return;}
-  if(this.active){
-   const current=targets.find(t=>t.name===this.active);
-   // Hysteresis: a neighbouring guess must be substantially better to change direction.
-   if(best.name===this.active||distance(tilt,current.tilt)-best.error<.12){this.candidate=null;return;}
-  }else if(ranked[1].error-best.error<.04){this.candidate=null;this.reason='THUMB BETWEEN DIRECTIONS';return;}
-  if(this.candidate?.name!==best.name)this.candidate={name:best.name,since:time,count:1};else this.candidate.count++;
-  if(this.candidate.count>=2&&time-this.candidate.since>=90){this.active=best.name;[this.x,this.z]=best.move;this.candidate=null;this.reason='MOVING';}
-  else if(!this.active)this.reason='CONFIRMING TILT';
+  const v=thumbVector(sample.tilt);if(!v){this.stop('THUMB UNCLEAR');return;}
+  if(Math.hypot(v.x,v.z)<.001){this.stop('NEUTRAL');return;}
+  const active=Math.hypot(this.x,this.z)>.01,change=Math.hypot(v.x-this.x,v.z-this.z);
+  if(active&&change<.1){this.candidate=null;return;}
+  // Confirm starts and abrupt reversals, while ordinary turns move continuously.
+  if(!active||change>.8){
+   if(!this.candidate||Math.hypot(v.x-this.candidate.x,v.z-this.candidate.z)>.25)this.candidate={...v,since:time,count:1};else this.candidate.count++;
+   if(this.candidate.count<2||time-this.candidate.since<70){if(!active)this.reason='CONFIRMING TILT';return;}
+  }
+  this.candidate=null;
+  const alpha=active?1-Math.exp(-Math.min(100,elapsed)/30):1;
+  this.x+=(v.x-this.x)*alpha;this.z+=(v.z-this.z)*alpha;this.reason='MOVING';
  }
- stop(reason){this.x=this.z=0;this.active=null;this.candidate=null;this.reason=reason;}
- get direction(){return this.active;}
+ stop(reason){this.x=this.z=0;this.candidate=null;this.reason=reason;}
+ get direction(){return Math.hypot(this.x,this.z)>.01?[this.z<-.05?'FORWARD':this.z>.05?'BACKWARD':'',this.x<-.05?'LEFT':this.x>.05?'RIGHT':''].filter(Boolean).join(' '):null;}
  step(now,dt=.016){if(now-this.seen>250)this.reset();const d=this.speed*Math.min(.05,Math.max(0,dt));return {dx:this.x*d,dz:this.z*d};}
 }
