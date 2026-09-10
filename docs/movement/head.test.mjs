@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {ViewPose} from '../head/pose.mjs';
+test('head angles are relative to neutral and recenter restores forward',()=>{const p=new ViewPose();p.mode='first';p.sensitivity=1.5;p.receive({yaw:.2,pitch:.1},0);assert.deepEqual(p.update(0,.1),{yaw:0,pitch:0});p.receive({yaw:.4,pitch:.3},40);const r=p.update(40,.1);assert.ok(r.yaw<0);assert.ok(r.pitch>0);p.recenter();p.receive({yaw:.4,pitch:.3},80);const centered=p.update(80,.1);assert.ok(Math.abs(centered.yaw)<.001);assert.ok(Math.abs(centered.pitch)<.001);});
