@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {ThumbJoystick,thumbVector,measureThumb} from './thumb-joystick.mjs';
 import {drawThumbJoystick} from './ui.mjs';
 const s=(x=0,y=0,rest=false,scale=1)=>({point:[x,y],rest,scale});
-const ready=()=>{const c=new ThumbJoystick();for(const t of [-400,-300,-200,-100,0])c.receive(s(0,.35,true),t);return c;};
+const ready=()=>{const c=new ThumbJoystick();c.size=1;for(const t of [-400,-300,-200,-100,0])c.receive(s(0,.35,true),t);return c;};
 test('fist captures a fixed circle above its resting thumb',()=>{const c=ready();assert.deepEqual(c.centre,[0,0]);assert.equal(c.scale,1);assert.equal(c.direction,null);});
 test('hand position and size changes cannot drag or resize the circle',()=>{
  const c=ready();for(let t=40;t<1000;t+=40)c.receive(s(.7,.8,true,2),t);
  assert.deepEqual(c.centre,[0,0]);assert.equal(c.scale,1);assert.deepEqual(c.step(1000),{dx:0,dz:0});
 });
 test('all held screen directions move with equal maximum speed',()=>{
- for(const [x,z,name] of [[-.5,0,'LEFT'],[.5,0,'RIGHT'],[0,-.5,'FORWARD'],[0,.5,'BACKWARD'],[.5,-.5,'FORWARD RIGHT']]){
+ for(const [x,z,name] of [[-.5,0,'LEFT'],[.5,0,'RIGHT'],[0,-.5,'FORWARD'],[0,.5,'BACKWARD'],[Math.SQRT1_2*.5,-Math.SQRT1_2*.5,'FORWARD RIGHT']]){
  const c=ready();c.receive(s(x,z),100);c.receive(s(x,z),180);assert.equal(c.direction,name);
  assert.ok(Math.abs(Math.hypot(c.x,c.z)-1)<1e-10);assert.deepEqual(c.step(200),c.step(220));}
 });
@@ -38,13 +38,24 @@ test('rendered circle stays put while thumb marker moves',()=>{
  const hand=Array.from({length:21},()=>({x:.5,y:.5}));const joystick={centre:[.5,.4],scale:.2,active:false};
  drawThumbJoystick(ctx,hand,640,480,joystick);const first=arcs.map(a=>a.slice());arcs.length=0;
  hand[2]={x:.9,y:.9};hand[4]={x:.7,y:.6};drawThumbJoystick(ctx,hand,640,480,joystick);
- assert.deepEqual(arcs.slice(0,3),first.slice(0,3));assert.notDeepEqual(arcs[3],first[3]);
+ assert.deepEqual(arcs.slice(0,4),first.slice(0,4));assert.notDeepEqual(arcs[4],first[4]);
 });
 
 test('size changes preserve anchor, require rest and adjust thumb travel',()=>{
  const c=ready(),anchor=[...c.centre];c.setSize(.65);assert.deepEqual(c.centre,anchor);assert.equal(c.effectiveScale,.65);
  c.receive(s(.4),100);c.receive(s(.4),180);assert.equal(c.direction,null);
- c.receive(s(0,.35,true),220);c.receive(s(.4),260);c.receive(s(.4),340);assert.equal(c.x,1);
+ c.receive(s(0,.35,true),220);c.receive(s(.4),260);c.receive(s(.4),340);assert.ok(c.x>1&&c.x<=1.6);
  c.setSize(1.6);c.receive(s(0,.35,true),380);c.receive(s(.4),420);c.receive(s(.4),500);assert.ok(c.x>0&&c.x<.4);assert.deepEqual(c.centre,anchor);
  c.reset();assert.equal(c.size,1.6);
+});
+
+test('compact default reaches forward and reverse boost within a small thumb span',()=>{
+ const c=new ThumbJoystick();assert.equal(c.size,.55);for(let t=0;t<=400;t+=100)c.receive(s(0,.35,true),t);
+ c.receive(s(0,-.44),440);c.receive(s(0,-.44),520);assert.ok(c.z<=-1.59);
+ c.receive(s(0,.44),560);c.receive(s(0,.44),640);c.receive(s(0,.44),680);assert.ok(c.z>1.5);
+ c.receive(s(),720);assert.deepEqual(c.step(720),{dx:0,dz:0});
+});
+test('boost starts continuously at circle edge and stays capped in every direction',()=>{
+ assert.equal(thumbVector([.5,0],[0,0]).x,1);assert.ok(thumbVector([.50001,0],[0,0]).x<1.001);
+ for(let i=0;i<360;i++){const a=i*Math.PI/180,v=thumbVector([100*Math.cos(a),100*Math.sin(a)],[0,0]);assert.ok(Math.abs(Math.hypot(v.x,v.z)-1.6)<1e-10);}
 });
