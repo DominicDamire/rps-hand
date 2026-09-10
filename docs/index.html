@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 14)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 15)</div></div>
     <div class="hud" id="bottom"><div id="score">SCORE you 0 : 0 cpu</div><div id="game">Tap PLAY for a round</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
@@ -51,7 +51,7 @@ import * as THREE from "three";
 import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.20.0/dist/rapier.mjs";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js";
 
-const BUILD = 14;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 15;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -66,6 +66,10 @@ const PAD = Q.get("pad") != null ? +Q.get("pad") : 0.3;   // border added around
 const BIG_HAND = [0.22, 0.15];      // palm length (wrist to middle knuckle) / frame short side: pad above the first, unpad below the second (hysteresis)
 const DEBUG_OVERLAY = Q.get("debug") === "1";
 const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "hand.glb";   // rigged hand scan (?skin=0 = the old capsule hand, ?skin=file.glb = another export with the same bones)
+const DS = Q.get("ds") != null ? +Q.get("ds") : 480;   // tracker input width after downscale (?ds=0 = the full camera frame). MediaPipe resizes to 192/224 anyway; 320 lost far hands
+const RVFC = Q.get("rvfc") !== "0";                        // start the tracker from requestVideoFrameCallback (?rvfc=0 = poll currentTime in rAF, the old way)
+const HAND_SHADOW = Q.get("shadow") === "1";               // the skin casts a shadow: a second skinning pass over 79 k triangles per hand, off by default (props still cast)
+const LOD_MIN_FPS = Q.get("lodfps") != null ? +Q.get("lodfps") : 25;   // high-detail mesh only while the tracker runs at least this fast
 const TRACKER_OPTS = { runningMode: "VIDEO", numHands: 2, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.4 };
 
 // --- skeleton (MediaPipe's 21 landmarks) --------------------------------------------------------
@@ -325,11 +329,11 @@ onmessage = async e => {
   const t = performance.now(), f = e.data.frame, W = f.width, H = f.height, b = Math.round(Math.max(W, H) * e.data.pad);
   if (!oc || oc.width !== W + 2 * b || oc.height !== H + 2 * b) { oc = new OffscreenCanvas(W + 2 * b, H + 2 * b); octx = oc.getContext("2d"); }
   octx.fillStyle = "#777"; octx.fillRect(0, 0, oc.width, oc.height); octx.drawImage(f, b, b); f.close();
-  const bmp = oc.transferToImageBitmap();
+  const bmp = oc.transferToImageBitmap(); const t1 = performance.now();
   const r = lm.detectForVideo(bmp, e.data.ts); bmp.close();
   const hands = pack(r);
   for (const h of hands) h.landmarks = h.landmarks.map(l => ({ x: (l.x * (W + 2 * b) - b) / W, y: (l.y * (H + 2 * b) - b) / H, z: l.z }));   // back to the unpadded frame
-  postMessage({ id: e.data.id, ms: performance.now() - t, hands });
+  postMessage({ id: e.data.id, ms: performance.now() - t, prep: t1 - t, hands });
 };`;
 
 async function makeTracker() {
@@ -347,8 +351,8 @@ async function makeTracker() {
     return {
       where: "worker/" + ready.delegate,
       async detect(src, ts, pad) {
-        const frame = await createImageBitmap(src);
-        return new Promise(res => { const my = ++id; waiting.set(my, res); w.postMessage({ id: my, frame, ts, pad }, [frame]); });
+        const t0 = performance.now(); const frame = await createImageBitmap(src, DS ? { resizeWidth: DS, resizeHeight: Math.round(DS * frameH / frameW), resizeQuality: "low" } : {}); const pre = performance.now() - t0;
+        return new Promise(res => { const my = ++id; waiting.set(my, r => { r.pre = pre; res(r); }); w.postMessage({ id: my, frame, ts, pad }, [frame]); });
       },
     };
   } catch (e) {
@@ -361,9 +365,9 @@ async function makeTracker() {
         const lm = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: MODEL, delegate }, ...TRACKER_OPTS });
         const pc = document.createElement("canvas"), pctx = pc.getContext("2d");
         return { where: "main/" + delegate, async detect(src, ts, pad) {
-          const t = performance.now(), W = src.videoWidth || src.naturalWidth, H = src.videoHeight || src.naturalHeight, b = Math.round(Math.max(W, H) * pad);
+          const t = performance.now(), W0 = src.videoWidth || src.naturalWidth, H0 = src.videoHeight || src.naturalHeight, W = DS || W0, H = DS ? Math.round(DS * H0 / W0) : H0, b = Math.round(Math.max(W, H) * pad);
           if (pc.width !== W + 2 * b || pc.height !== H + 2 * b) { pc.width = W + 2 * b; pc.height = H + 2 * b; }
-          pctx.fillStyle = "#777"; pctx.fillRect(0, 0, pc.width, pc.height); pctx.drawImage(src, b, b);
+          pctx.fillStyle = "#777"; pctx.fillRect(0, 0, pc.width, pc.height); pctx.drawImage(src, b, b, W, H);
           const r = lm.detectForVideo(pc, ts), hands = pack(r);
           for (const h of hands) h.landmarks = h.landmarks.map(l => ({ x: (l.x * pc.width - b) / W, y: (l.y * pc.height - b) / H, z: l.z }));
           return { ms: performance.now() - t, hands };
@@ -514,7 +518,7 @@ function boneFrame(pts, j, s, out) {
   out.makeBasis(_x.multiplyScalar(s), _y.multiplyScalar(L), _z.multiplyScalar(s)); out.setPosition(a);
   return out;
 }
-let SKIN = null, SKIN_HI = null;   // phone mesh, and the high-detail mesh (same bones) shown when the hand is close
+let SKIN = null, SKIN_HI = null, trackerFps = 60;   // phone mesh, and the high-detail mesh (same bones) shown when the hand is close
 const LOD_NEAR = 0.15;             // palm length / depth (radians): above this the hand is close enough to show the high-detail mesh
 async function loadSkin(url) {
   const metaUrl = url.replace(/(_hi)?\.glb$/, ".json");   // each export carries its own bind joints (hand_u.glb, hand_u_hi.glb -> hand_u.json)
@@ -536,7 +540,7 @@ function makeSkinFrom(SK, variant, color) {
   const bones = SK.order.map(() => { const b = new THREE.Bone(); b.matrixAutoUpdate = false; return b; });
   const mesh = new THREE.SkinnedMesh(variant.geo, SK.material ? SK.material.clone() : new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
   mesh.add(...bones); mesh.bind(new THREE.Skeleton(bones, variant.inv.map(m => m.clone())), new THREE.Matrix4());
-  mesh.castShadow = true; mesh.frustumCulled = false; mesh.visible = false;
+  mesh.castShadow = HAND_SHADOW; mesh.frustumCulled = false; mesh.visible = false;
   const L0 = variant.bind[0].distanceTo(variant.bind[9]);
   const bindLen = {}; for (const [k, js] of Object.entries(CHAINS)) bindLen[k] = js.reduce((t, j) => t + variant.bind[j].distanceTo(variant.bind[PARENT[j]]), 0);
   const ratio = {};   // per chain: smoothed tracked length / scan length = the thickness scale of that chain
@@ -589,7 +593,7 @@ function makeHand(color = 0xdead8f) {
         _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize();
         chir += 0.2 * (Math.sign(_r.subVectors(pts[4], pts[0]).dot(_n)) - chir);
         const right = chir * CHIR_RIGHT >= 0, useMirrored = right !== SKIN.mirroredIsLeft;   // the GLB is a right hand: its mirrored copy is the left hand
-        const near = hiR && pts[0].distanceTo(pts[9]) / Math.max(0.05, -palmCentre(pts).z) > LOD_NEAR;   // close to the camera: full detail
+        const near = hiR && trackerFps >= LOD_MIN_FPS && pts[0].distanceTo(pts[9]) / Math.max(0.05, -palmCentre(pts).z) > LOD_NEAR;   // close to the camera: full detail
         const on = useMirrored ? (near ? hiL : skinL) : (near ? hiR : skinR);
         for (const k of all()) if (k !== on) k.mesh.visible = false;
         on.update(pts, right);
@@ -729,19 +733,20 @@ async function main() {
     if (Math.abs(best.t - cap) > 40) return;
     const pr = toImage(best.a); dbg.lagSum += pr.reduce((t, q, i) => t + Math.hypot(q.x - lm[i].x, q.y - lm[i].y), 0) / 21; dbg.lagN++;
   }
-  let lastT = -1, ts = 0, inflight = false, move = null, nHands = 0, lastRecv = 0, hold = HOLD_MS, bigHand = false, bigUntil = 0;
-  const dbg = window.dbg = { lm: () => ovHands, slots, get frameW() { return frameW; }, get frameH() { return frameH; }, frames: 0, two: 0, held: 0, labelFlips: 0, maxJump: 0, bigJumps: 0, spikes: 0, snaps: 0, handovers: 0, dispJumps: 0, reprojN: 0, reprojSum: 0, lagSum: 0, lagN: 0, depthClamps: 0, palmClamps: 0, fingerClamps: 0, pinches: 0, nav, pitch: 0, tiltOn: false, moves: { ROCK: 0, PAPER: 0, SCISSORS: 0, none: 0 }, fitSum: 0, padded: 0 };   // test metrics
+  let framePending = false, lastT = -1, ts = 0, inflight = false, move = null, nHands = 0, lastRecv = 0, hold = HOLD_MS, bigHand = false, bigUntil = 0;
+  const dbg = window.dbg = { lm: () => ovHands, slots, get frameW() { return frameW; }, get frameH() { return frameH; }, frames: 0, two: 0, held: 0, labelFlips: 0, maxJump: 0, bigJumps: 0, spikes: 0, snaps: 0, handovers: 0, dispJumps: 0, reprojN: 0, reprojSum: 0, lagSum: 0, lagN: 0, depthClamps: 0, palmClamps: 0, fingerClamps: 0, pinches: 0, nav, pitch: 0, tiltOn: false, moves: { ROCK: 0, PAPER: 0, SCISSORS: 0, none: 0 }, fitSum: 0, padded: 0, tm: { pre: 0, prep: 0, worker: 0, lat: 0, n: 0, render: 0, loop: 0, draw: 0, loops: 0, leadSum: 0, leadN: 0, rvfc: 0 } };   // test metrics + timing (ms sums; pre = createImageBitmap on the main thread, prep = the worker's padding copy, lat = capture to result)
   let stat = { ms: 0, lat: 0, n: 0, t: performance.now() }, prev = performance.now();
 
   const pump = async () => {
-    const fresh = imgSrc || dbg.freeze || (video.currentTime !== lastT && video.readyState >= 2);   // dbg.freeze: tests re-track a paused clip frame
+    const fresh = imgSrc || dbg.freeze || (useRvfc ? framePending : (video.currentTime !== lastT && video.readyState >= 2));   // dbg.freeze: tests re-track a paused clip frame
     if (inflight || !fresh) return;
-    inflight = true; lastT = video.currentTime;
+    inflight = true; lastT = video.currentTime; framePending = false;
     const cap = performance.now(); ts = Math.max(ts + 1, Math.floor(cap));
     const pad = bigHand || (nHands === 0 && dbg.frames % 3 === 2) ? PAD : 0;   // adaptive input padding
     const r = await tracker.detect(video, ts, pad);
     inflight = false;
     const recv = performance.now();
+    dbg.tm.pre += r.pre || 0; dbg.tm.prep += r.prep || 0; dbg.tm.worker += r.ms; dbg.tm.lat += recv - cap; dbg.tm.n++;
     hold = Math.max(HOLD_MS, 2.5 * (recv - lastRecv)); lastRecv = recv;   // slow devices get a longer hold so hands don't flicker between results
     stat.ms += r.ms; stat.lat += recv - cap; stat.n++; nHands = r.hands.length; dbg.frames++; if (nHands === 2) dbg.two++;
     const span = Math.max(0, ...r.hands.map(h => Math.hypot((h.landmarks[0].x - h.landmarks[9].x) * frameW, (h.landmarks[0].y - h.landmarks[9].y) * frameH) / Math.min(frameW, frameH)));
@@ -781,17 +786,23 @@ async function main() {
       const o = other(s);   // remember where the other hand was, in case this one vanishes behind it
       if (o.filt.x && recv - o.lastSeen < hold) { s.otherPalm = palmFlat(o.gl); s.nearOther = palmFlat(s.gl).distanceTo(s.otherPalm); } else { s.otherPalm = null; s.nearOther = Infinity; }
     }
+    if (useRvfc && framePending) pump();   // a newer camera frame arrived while this one was in the tracker: start it now, not at the next rAF
   };
+  // New camera frames start the tracker the moment they arrive. Polling currentTime once per rAF added up to a display frame
+  // of delay and ran createImageBitmap inside the busy render callback (measured: 12 ms less capture-to-result latency).
+  const useRvfc = RVFC && !imgSrc && typeof video.requestVideoFrameCallback === "function";
+  if (useRvfc) { const onFrame = () => { framePending = true; dbg.tm.rvfc++; pump(); video.requestVideoFrameCallback(onFrame); }; video.requestVideoFrameCallback(onFrame); }
 
   const loop = () => {
     const now = performance.now(), dt = Math.min((now - prev) / 1000, 1 / 30); prev = now;
-    pump();
+    pump(); const tLoop0 = performance.now();
     const hud = [], displayed = [];
     move = null;
     const shown = {};   // slot key -> flat GL points displayed this frame
     for (const s of [slots.Right, slots.Left]) {
       if (now - s.lastSeen >= hold) continue;   // tracked, or dead-reckoned through a short dropout
       const lead = Math.min(MAX_LEAD, Math.max(0, (now - s.capT) / 1000 + 0.016));   // age of the data since the frame was captured + one display frame
+      dbg.tm.leadSum += lead; dbg.tm.leadN++;
       shown[s.key] = camToGL(MODES[mode] === "predict" ? s.filt.predict(lead) : MODES[mode] === "smooth" ? s.filt.x : s.raw);
       if (s.det && ovW) { const pr = toImage(shown[s.key]); dbg.reprojSum += pr.reduce((t, q, i) => t + Math.hypot(q.x - s.det.lm[i].x, q.y - s.det.lm[i].y), 0) / 21; dbg.reprojN++; }
       s.hist.push({ t: now, a: Float32Array.from(shown[s.key]) }); if (s.hist.length > 12) s.hist.shift();
@@ -822,7 +833,7 @@ async function main() {
         const pts = shape(shown[s.key]);
         if (fp) for (const q of pts) { q.applyAxisAngle(YAXIS, nav.yaw); q.x += nav.x; q.z += nav.z; }   // the hands travel with you
         else for (const q of pts) { q.applyAxisAngle(YAXIS, -nav.yaw); q.x -= nav.x; q.z += nav.z; }     // mirrored render: the same move, mirrored in x
-        s.hand.draw(pts); displayed.push(shown[s.key]);
+        const tD = performance.now(); s.hand.draw(pts); dbg.tm.draw += performance.now() - tD; displayed.push(shown[s.key]);
         const pc = palmFlat(shown[s.key]); if (s.lastPalm && pc.distanceTo(s.lastPalm) > 0.1) dbg.dispJumps++; s.lastPalm = pc;   // what the player actually sees jump
       } else { s.hand.hide(); s.lastPalm = null; }
     }
@@ -831,12 +842,12 @@ async function main() {
     for (const p of props) { p.mesh.position.copy(p.body.translation()); p.mesh.quaternion.copy(p.body.rotation()); }
     if (now - stat.t > 1000) {
       $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | ${SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"} | nav ${Math.hypot(nav.x, nav.z).toFixed(1)}m ${(nav.yaw * 180 / Math.PI).toFixed(0)}° (point+drag) | build ${BUILD}`;
-      stat = { ms: 0, lat: 0, n: 0, t: now }; dbg.pitch = pitch; dbg.tiltOn = tiltOn;
+      trackerFps = stat.n; stat = { ms: 0, lat: 0, n: 0, t: now }; dbg.pitch = pitch; dbg.tiltOn = tiltOn;
     }
     $("hand").textContent = "HANDS: " + (hud.join("  |  ") || "-");
     $("move").textContent = "MOVE: " + (move ?? "?"); $("move").style.color = move ? "#78ff78" : "#ffc850";
     updateGame(now, move);
-    applyView(false); renderer.render(scene, camera);
+    applyView(false); const tR = performance.now(); renderer.render(scene, camera); const tE = performance.now(); dbg.tm.render += tE - tR; dbg.tm.loop += tE - tLoop0; dbg.tm.loops++;
     requestAnimationFrame(loop);
   };
   loop();

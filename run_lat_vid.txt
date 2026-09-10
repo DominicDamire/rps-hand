@@ -1,0 +1,3 @@
+[vid wave      ] frames 473 | two-hand 99% | held 0 | flips 2 | rawJumps 259 | spikes 3 snaps 3 handovers 0 | dispJumps 209 | depthClamps 9 | reproj 0.15% | lag 0.35% | fit 0.0% | moves R0 P472 S0 -1  ||  tracker: 25 ms | 30 fps | latency 26 ms | hands 2 / worker/GPU | mesh exact | mode predict | tilt off | nav 5.4m -33° (point+drag) | build 15
+[vid counting  ] frames 566 | two-hand 100% | held 0 | flips 2 | rawJumps 2 | spikes 0 snaps 0 handovers 0 | dispJumps 3 | depthClamps 0 | reproj 0.28% | lag 0.40% | fit 0.3% | moves R153 P341 S71 -1  ||  tracker: 29 ms | 28 fps | latency 31 ms | hands 2 / worker/GPU | mesh exact | mode predict | tilt off | nav 0.0m 1° (point+drag) | build 15
+ERRORS: none

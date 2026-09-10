@@ -1,0 +1,17 @@
+[img victory       ] OK                     move=SCISSORS  HANDS: R 0.29m 2up fit 2.1%
+[img peace         ] OK                     move=SCISSORS  HANDS: L 0.20m 2up fit 2.3%
+[img dirty_peace   ] WRONG (want SCISSORS)  move=?         HANDS: -
+[img robbie_v      ] WRONG (want SCISSORS)  move=?         HANDS: -
+[img fist_pump     ] WRONG (want ROCK)      move=?         HANDS: -
+[img raised_fist   ] OK                     move=ROCK      HANDS: L 0.19m 0up fit 2.4%
+[img woman_hands   ] OK                     move=PAPER     HANDS: L 0.40m 4up fit 2.1% | R 0.52m 4up fit 0.9%
+[img crossed_hands ] OK                     move=PAPER     HANDS: L 0.29m 4up fit 0.9%
+[img scissors_png  ] WRONG (want SCISSORS)  move=PAPER     HANDS: R 0.18m 3up fit 3.8%
+[img count5        ]                        move=?         HANDS: -
+[img crossed1      ]                        move=SCISSORS  HANDS: R 0.15m 2up fit 3.7%
+[img crossed2      ]                        move=?         HANDS: -
+[img handshake1    ]                        move=?         HANDS: -
+[img handshake2    ]                        move=SCISSORS  HANDS: L 0.51m 2up fit 0.6%
+STILLS: 5/9 labelled moves correct
+[tilt 30 up      ] reproj 0.07%  ||  tracker: 21 ms | 30 fps | latency 31 ms | hands 1 / worker/GPU | mesh exact | mode predict | tilt 30° | nav 0.0m 0° (point+drag) | build 15
+ERRORS: none
