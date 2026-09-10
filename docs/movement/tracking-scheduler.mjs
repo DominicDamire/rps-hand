@@ -8,4 +8,4 @@ export class TrackingScheduler {
   return next;
  }
 }
-export function freshHead(result,now){return !!result?.pose&&Number.isFinite(result.ts)&&now>=result.ts&&now-result.ts<180;}
+export function freshHead(result,now){return !!result?.pose&&Number.isFinite(result.ts)&&now>=result.ts&&now-result.ts<450;}

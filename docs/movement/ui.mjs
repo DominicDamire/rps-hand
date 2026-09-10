@@ -70,11 +70,9 @@ export function drawThumbJoystick(ctx,hand,w,h,joystick){
  ctx.strokeStyle=active?'#ffdb68':'#6dffb3';ctx.lineWidth=3;
  ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(tx,ty);ctx.stroke();
  ctx.fillStyle='#ffdb68';ctx.beginPath();ctx.arc(tx,ty,Math.max(7,w/75),0,Math.PI*2);ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#101b25';ctx.stroke();
- const font=Math.max(12,w/42),gap=font+5;
- const clampX=x=>Math.max(font*2,Math.min(w-font*2,x));
- const clampY=y=>Math.max(font,Math.min(h-font,y));
- label('FORWARD',clampX(cx),clampY(cy-r-gap));label('BACK',clampX(cx),clampY(cy+r+gap));
- label('LEFT',clampX(cx-r-gap-font),clampY(cy));label('RIGHT',clampX(cx+r+gap+font),clampY(cy));
+ const font=Math.max(7,unit*.14);ctx.font=`bold ${font}px sans-serif`;
+ label('↑',cx,cy-.66*unit);label('↓',cx,cy+.66*unit);
+ label('←',cx-.66*unit,cy);label('→',cx+.66*unit,cy);
  const direction=[vz<-.05?'FORWARD':vz>.05?'BACK':'',vx<-.05?'LEFT':vx>.05?'RIGHT':''].filter(Boolean).join(' ');
  const waiting=!hand||reason==='SHOW FIST TO RESUME'||reason==='TRACKING LOST';
  label(active?`${speed>1.01?'BOOST · ':''}${direction} ${Math.round(speed*100)}%`:waiting?'SHOW FIST TO RESUME':reason?.includes('FIST')?'FIST REST':'CENTRE = STOP',w/2,20);
@@ -90,12 +88,12 @@ export function handViewport(w,h,hand,joystick){
  if(!w||!h)return {x:0,y:0,width:1,height:.75};
  let cx,cy,width;
  if(joystick?.centre&&joystick?.viewScale>0){
-  const span=joystick.viewScale*w;cx=joystick.centre[0]*w;cy=joystick.centre[1]*w+.35*span;width=span*2.2;
+  const unit=(joystick.scale||joystick.viewScale*.55)*w;cx=joystick.centre[0]*w;cy=joystick.centre[1]*w;width=unit*2.65;
  }else if(hand?.length===21){
-  const xs=hand.map(p=>(1-p.x)*w),ys=hand.map(p=>p.y*h);
+  const thumb=hand.slice(2,5);const xs=thumb.map(p=>(1-p.x)*w),ys=thumb.map(p=>p.y*h);
   cx=(Math.min(...xs)+Math.max(...xs))/2;cy=(Math.min(...ys)+Math.max(...ys))/2;
   width=Math.max(Math.max(...xs)-Math.min(...xs),(Math.max(...ys)-Math.min(...ys))*4/3)*1.35;
  }else{return {x:0,y:0,width:w,height:h};}
- width=Math.max(w*.22,Math.min(width,w,h*4/3));const height=width*.75;
+ width=Math.min(Math.max(w*.12,width),w,h*4/3);const height=width*.75;
  return {x:Math.max(0,Math.min(w-width,cx-width/2)),y:Math.max(0,Math.min(h-height,cy-height/2)),width,height};
 }

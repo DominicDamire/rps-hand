@@ -11,3 +11,14 @@ test('recenter clears look without changing body; body basis rotates walking',()
 test('gentle nine-degree hold turns with the new default but a brief glance does not',()=>{const c=new HeadLook();c.mode='hold';for(let i=0;i<10;i++)c.update(rad(9),1/60);assert.equal(c.heading,0);for(let i=0;i<10;i++)c.update(rad(9),1/60);assert.ok(c.heading>0);const h=c.heading;c.update(0,1/60);assert.equal(c.heading,h);});
 
 test('quick flick is the default and turns each way once with centre rearm',()=>{const c=new HeadLook();assert.equal(c.mode,'quick');c.update(0,.05,true,0);c.update(rad(12),.05,true,50);assert.ok(Math.abs(c.heading-rad(30))<1e-10);c.update(rad(12),.05,true,100);assert.ok(Math.abs(c.heading-rad(30))<1e-10);for(let i=0;i<4;i++)c.update(0,.05,true,150+i*50);c.update(rad(-12),.05,true,350);assert.ok(Math.abs(c.heading)<1e-10);});
+
+test('flick spread across small high-rate deltas turns, holding does not repeat',()=>{
+ const c=new HeadLook();for(let i=0;i<=6;i++)c.update(rad(i*2),.02,true,i*20);
+ assert.ok(Math.abs(c.heading-rad(30))<1e-10);
+ for(let i=7;i<30;i++)c.update(rad(12),.02,true,i*20);
+ assert.ok(Math.abs(c.heading-rad(30))<1e-10);
+});
+test('flick uses selected threshold and tolerates phone-rate samples',()=>{
+ const c=new HeadLook();c.deadzoneDegrees=12;c.update(0,.1,true,0);c.update(rad(9),.1,true,100);assert.equal(c.heading,0);
+ c.update(rad(16),.1,true,220);assert.ok(c.heading>0);
+});
