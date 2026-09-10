@@ -10,10 +10,10 @@ test('recenter clears look without changing body; body basis rotates walking',()
 
 test('gentle nine-degree hold turns with the new default but a brief glance does not',()=>{const c=new HeadLook();c.mode='hold';for(let i=0;i<10;i++)c.update(rad(9),1/60);assert.equal(c.heading,0);for(let i=0;i<10;i++)c.update(rad(9),1/60);assert.ok(c.heading>0);const h=c.heading;c.update(0,1/60);assert.equal(c.heading,h);});
 
-test('quick flick is the default and turns each way once with centre rearm',()=>{const c=new HeadLook();assert.equal(c.mode,'quick');c.update(0,.05,true,0);c.update(rad(12),.05,true,50);assert.ok(Math.abs(c.heading-rad(30))<1e-10);c.update(rad(12),.05,true,100);assert.ok(Math.abs(c.heading-rad(30))<1e-10);for(let i=0;i<4;i++)c.update(0,.05,true,150+i*50);c.update(rad(-12),.05,true,350);assert.ok(Math.abs(c.heading)<1e-10);});
+test('quick-only mode turns each way once with centre rearm',()=>{const c=new HeadLook();c.mode='quick';c.update(0,.05,true,0);c.update(rad(12),.05,true,50);assert.ok(Math.abs(c.heading-rad(30))<1e-10);c.update(rad(12),.05,true,100);assert.ok(Math.abs(c.heading-rad(30))<1e-10);for(let i=0;i<4;i++)c.update(0,.05,true,150+i*50);c.update(rad(-12),.05,true,350);assert.ok(Math.abs(c.heading)<1e-10);});
 
 test('flick spread across small high-rate deltas turns, holding does not repeat',()=>{
- const c=new HeadLook();for(let i=0;i<=6;i++)c.update(rad(i*2),.02,true,i*20);
+ const c=new HeadLook();c.mode='quick';for(let i=0;i<=6;i++)c.update(rad(i*2),.02,true,i*20);
  assert.ok(Math.abs(c.heading-rad(30))<1e-10);
  for(let i=7;i<30;i++)c.update(rad(12),.02,true,i*20);
  assert.ok(Math.abs(c.heading-rad(30))<1e-10);
@@ -21,4 +21,20 @@ test('flick spread across small high-rate deltas turns, holding does not repeat'
 test('flick uses selected threshold and tolerates phone-rate samples',()=>{
  const c=new HeadLook();c.deadzoneDegrees=12;c.update(0,.1,true,0);c.update(rad(9),.1,true,100);assert.equal(c.heading,0);
  c.update(rad(16),.1,true,220);assert.ok(c.heading>0);
+});
+
+test('default hybrid flicks immediately then supports sustained 360 turning',()=>{
+ const c=new HeadLook();assert.equal(c.mode,'hybrid');c.update(0,.05,true,0);c.update(rad(12),.05,true,50);assert.ok(c.heading>=rad(30));
+ for(let i=2;i<160;i++)c.update(rad(16),.05,true,i*50);assert.ok(c.heading>Math.PI*2);
+ const h=c.heading;c.update(0,.05,true,8000);assert.equal(c.heading,h);assert.equal(c.speed,0);
+});
+test('hybrid works equally left and right and holds still in centre',()=>{
+ for(const sign of [-1,1]){const c=new HeadLook();c.update(0,.05,true,0);
+ for(let i=1;i<100;i++)c.update(sign*rad(14),.05,true,i*50);assert.ok(c.heading*sign>Math.PI*2);
+ const h=c.heading;for(let i=100;i<200;i++)c.update(rad(Math.sin(i)*3),.05,true,i*50);assert.equal(c.heading,h);}
+});
+test('up and down look respond rapidly with no accumulating pitch or drift',()=>{
+ const c=new HeadLook();assert.ok(c.updatePitch(rad(15),.05)>rad(25));assert.ok(c.updatePitch(rad(-15),.1)<rad(-28));
+ for(let i=0;i<10;i++)c.updatePitch(0,.05);assert.ok(Math.abs(c.pitch)<.001);assert.equal(c.heading,0);
+ c.updatePitch(.3,.05);const p=c.pitch;assert.equal(c.updatePitch(-.3,.1,false),p);
 });
