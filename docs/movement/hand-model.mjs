@@ -315,16 +315,27 @@ function locate(world, image, W, H) {
   const Tz = (Sxb - (Sx * Sbu + Sy * Sbv) / n) / (Sxx - (Sx * Sx + Sy * Sy) / n);
   return [Tz, xu, yv];
 }
-export function makeHandModel(camera) {   // sync: the rig loads in the background, update() shows it once it is there
-  const group = new THREE.Group(); camera.add(group);
-  group.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.2));   // the map is unlit; the skin needs light
-  const lamp = new THREE.DirectionalLight(0xffffff, 1.4); lamp.position.set(-0.3, 0.6, 0.2); group.add(lamp);
+let rigPromise = null;   // one download of arm_L/arm_R for every hand on the page (the player's and the other player's)
+export function makeHandModel(parent, lights = true) {   // sync: the rig loads in the background, update() shows it once it is there
+  const group = new THREE.Group(); parent.add(group);
+  if (lights) {   // the map is unlit; the skin needs light (once per page: the lights are global)
+    group.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.2));
+    const lamp = new THREE.DirectionalLight(0xffffff, 1.4); lamp.position.set(-0.3, 0.6, 0.2); lamp.target.position.set(0, 0, -1); group.add(lamp, lamp.target);   // from over the shoulder toward the view (the target rides with the eye; the default target is the world origin, which lit the hand from wherever the player stood)
+  }
   let skinR = null, skinL = null, chir = 0;   // both sides, chosen by the thumb's side of the palm as the main page does (the label flickers, the geometry does not)
-  const ready = loadRig("../arm").then(rig => { skinR = makeRigSkin(rig.R, 0xd9a58a); skinL = makeRigSkin(rig.L, 0xd9a58a); group.add(skinR.mesh, skinL.mesh); }).catch(e => console.warn("hand mesh unavailable:", e));
+  rigPromise ??= loadRig("../arm");
+  const ready = rigPromise.then(rig => { skinR = makeRigSkin(rig.R, 0xd9a58a); skinL = makeRigSkin(rig.L, 0xd9a58a); group.add(skinR.mesh, skinL.mesh); }).catch(e => console.warn("hand mesh unavailable:", e));
   const pts = Array.from({ length: 21 }, () => new THREE.Vector3()), q = new THREE.Quaternion(), ax = new THREE.Vector3(1, 0, 0), _w = new THREE.Vector3();
   let shown = false;
-  const model = { group, ready, get visible() { return shown; }, get right() { return chir * CHIR_RIGHT >= 0; },
-    update(image, world, W, H) {
+  function drive() {   // the rig follows pts
+    shown = true; if (!skinR) return;
+    _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize();
+    chir += 0.2 * (Math.sign(_r.subVectors(pts[4], pts[0]).dot(_n)) - chir);
+    const right = model.right, on = right ? skinR : skinL, off = right ? skinL : skinR;
+    off.mesh.visible = false; on.update(pts, right);
+  }
+  const model = { group, ready, points: pts, get visible() { return shown; }, get right() { return chir * CHIR_RIGHT >= 0; },
+    update(image, world, W, H) {   // from the tracker: picture + world landmarks -> eye frame
       const [Tz, xu, yv] = locate(world, image, W, H); if (!Number.isFinite(Tz) || Tz <= 0.05) return;
       q.setFromAxisAngle(ax, view.tilt * Math.PI / 180);
       const a = shown ? view.smooth : 1;   // one-pole smoothing; the main page's error-adaptive filter if this jitters
@@ -334,12 +345,12 @@ export function makeHandModel(camera) {   // sync: the rig loads in the backgrou
         _w.set(-_w.x, -_w.y - view.height, _w.z - view.dist);              // eye frame
         pts[i].lerp(_w, a);
       }
-      shown = true; window.dbg = Object.assign(window.dbg || {}, { model: pts });
-      if (!skinR) return;
-      _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize();
-      chir += (shown ? 0.2 : 1) * (Math.sign(_r.subVectors(pts[4], pts[0]).dot(_n)) - chir);
-      const right = model.right, on = right ? skinR : skinL, off = right ? skinL : skinR;
-      off.mesh.visible = false; on.update(pts, right);
+      window.dbg = Object.assign(window.dbg || {}, { model: pts }); drive();
+    },
+    setPoints(flat) {   // from the network: 63 numbers already in the other player's eye frame
+      if (flat?.length !== 63) { model.hide(); return; }
+      for (let i = 0; i < 21; i++) pts[i].set(flat[3 * i], flat[3 * i + 1], flat[3 * i + 2]);
+      drive();
     },
     hide() { shown = false; if (skinR) skinR.mesh.visible = skinL.mesh.visible = false; } };
   return model;

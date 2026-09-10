@@ -1,24 +1,41 @@
-import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=61';
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=61';
-import {setupThumbstick} from './thumbstick.mjs?v=61';
+import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=62';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=62';
+import {setupThumbstick} from './thumbstick.mjs?v=62';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=61';
-import {DustMap} from './map.mjs?v=61';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=62';
+import {DustMap} from './map.mjs?v=62';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=61';
+import {setupUI} from './ui.mjs?v=62';
 import {phoneCamera} from './camlink.mjs';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=61';
-import {makeHandModel,view as handView} from './hand-model.mjs?v=61';   // the right hand as the rigged arm model, in front of the eye
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=62';
+import {makeHandModel,view as handView} from './hand-model.mjs?v=62';
+import {createNet} from './net.mjs?v=62';   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
-$('saveTracking').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:61,frames:trackingLog},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='thumb-tracking-v61.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('saveTracking').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:62,frames:trackingLog},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='thumb-tracking-v62.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const held=new ThumbJoystick();let inputMode='poses',fingerMode='index',trackedHand=null,resting=false;
 const scheduler=new TrackingScheduler();const swipe=new SwipeController();const headLook=new HeadLook();let lookDemo=0;
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:false});renderer.setPixelRatio(Math.min(1,Math.sqrt(900000/(innerWidth*innerHeight))));
 const scene=new THREE.Scene();scene.background=new THREE.Color('#25394a');scene.fog=new THREE.FogExp2('#25394a',.018);
 const camera=new THREE.PerspectiveCamera(65,1,.05,200);camera.position.set(0,1.65,7);scene.add(camera);const handModel=makeHandModel(camera);window.handModel=handModel;
+const remote={group:new THREE.Group(),eye:new THREE.Group(),seen:-Infinity,target:{p:new THREE.Vector3(),pitch:0,yaw:0}};remote.group.visible=false;scene.add(remote.group);remote.group.add(remote.eye);
+{const skin=new THREE.MeshStandardMaterial({color:0xd9a58a,roughness:.7}),body=new THREE.Mesh(new THREE.CapsuleGeometry(.18,1.05,4,10),new THREE.MeshStandardMaterial({color:0x7d8fa6,roughness:.8}));body.position.y=-.95;remote.group.add(body);
+ const head=new THREE.Mesh(new THREE.SphereGeometry(.12,16,12),skin);remote.eye.add(head);}
+remote.hand=makeHandModel(remote.eye,false);
+let net=null,lastSent=0;
+function onRemote(pkt){if(!Array.isArray(pkt.p)||!Array.isArray(pkt.r))return;remote.target.p.fromArray(pkt.p);remote.target.pitch=pkt.r[0];remote.target.yaw=pkt.r[1];
+ if(!remote.group.visible){remote.group.position.copy(remote.target.p);remote.group.rotation.y=remote.target.yaw;remote.eye.rotation.x=remote.target.pitch;remote.group.visible=true;}
+ if(pkt.h)remote.hand.setPoints(pkt.h);else remote.hand.hide();remote.seen=performance.now();}
+function renderRooms(list){const box=$('rooms');box.textContent=list.length?'':'open lobbies: none (create one or QUICK MATCH)';
+ for(const r of list){const row=document.createElement('div');row.innerHTML=`<span>Lobby ${r.k} · host ${r.host}</span>`;const b=document.createElement('button');b.className='primary';b.textContent='JOIN';b.onclick=()=>net.joinRoom(r.k);row.appendChild(b);box.appendChild(row);}}
+function ensureNet(){if(net)return net;net=createNet({status:t=>$('net').textContent=t,hands:onRemote,rooms:renderRooms,
+ matched:role=>{$('online').textContent='Online: matched';$('lobby').hidden=true;if(role==='guest')dustMap.move(camera.position,1.2,0);},
+ lost:()=>{$('online').textContent='Online';remote.group.visible=false;remote.hand.hide();}});net.start();window.mv={camera,remote,net};return net;}
+$('online').onclick=()=>{ensureNet();if(net.opp)return;const l=$('lobby');l.hidden=!l.hidden;if(!l.hidden)net.listRooms();};
+$('closeLobby').onclick=()=>$('lobby').hidden=true;$('refresh').onclick=()=>{$('rooms').textContent='searching…';ensureNet().listRooms();};
+$('quick').onclick=()=>{$('rooms').textContent='looking for a player…';ensureNet().quickMatch();};$('create').onclick=()=>ensureNet().createRoom();
 scene.background=new THREE.Color('#abc9d9');scene.fog=new THREE.Fog('#abc9d9',90,180);
 const dustMap=new DustMap(scene);
 dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · auto-step on';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
@@ -36,7 +53,7 @@ async function start(){
   if(!useCam&&!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=useCam?await phoneCamera(t=>status(t)):await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=61',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=62',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -61,7 +78,7 @@ async function start(){
       status(active?fingerMode.toUpperCase()+' · '+held.direction:walkReason,active);
     }
   };
-  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:33,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=61',import.meta.url)});head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
+  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:33,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=62',import.meta.url)});head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
  }catch(e){stop();status('Camera not started');$('error').textContent=e.name==='NotAllowedError'?'Camera access was declined. Allow camera access in your browser, then retry.':e.message;}
  finally{$('start').disabled=false;}
 }
@@ -118,6 +135,8 @@ function frame(now){
  $('turnIndicator').style.color=headLook.state.includes('BODY')?'#ffdf75':'#b8ebd1';
  const dot=$('joystickDot');dot.style.transform=`translate(${held.x*30}px,${held.z*30}px)`;$('joystickState').textContent=resting?'REST':held.direction||held.reason;
  }
+ if(remote.group.visible){const k=Math.min(1,dt*12);remote.group.position.lerp(remote.target.p,k);remote.group.rotation.y+=(remote.target.yaw-remote.group.rotation.y)*k;remote.eye.rotation.x+=(remote.target.pitch-remote.eye.rotation.x)*k;if(now-remote.seen>3000){remote.group.visible=false;remote.hand.hide();}}
+ if(net?.opp?.open&&now-lastSent>=50){lastSent=now;const h=handModel.visible?handModel.points.flatMap(p=>[+p.x.toFixed(3),+p.y.toFixed(3),+p.z.toFixed(3)]):null;net.sendHands({t:'h',p:[+camera.position.x.toFixed(2),+camera.position.y.toFixed(2),+camera.position.z.toFixed(2)],r:[+camera.rotation.x.toFixed(3),+camera.rotation.y.toFixed(3)],h,ts:Math.round(now)});}
  renderer.render(scene,camera);
 }controlsChanged();requestAnimationFrame(frame);
 if(new URLSearchParams(location.search).has('cam')){$('start').textContent='Connect phone camera';start();}   // phone-as-camera mode: no local permission prompt, connect right away
