@@ -93,3 +93,27 @@ test('default joystick gives the thumb more room while preserving full speed',()
  const c=new ThumbJoystick();c.receive(s(),0);assert.equal(c.effectiveScale,.8);
  c.receive(s(.4),40);c.receive(s(.4),80);assert.ok(Math.abs(c.x-1)<1e-10);
 });
+
+test('fist translation carries the circle without adding movement',()=>{
+ const c=new ThumbJoystick();c.receive({...s(.4,.3),palm:[.4,.5]},0);
+ for(let i=1;i<30;i++){c.receive({...s(.4+i*.01,.3+i*.004),palm:[.4+i*.01,.5+i*.004]},i*40);assert.equal(c.direction,null);}
+ assert.ok(Math.abs(c.centre[0]-.69)<1e-9);
+});
+test('held finger deflection remains stable while the fist moves',()=>{
+ const c=new ThumbJoystick();c.receive({...s(.4,.3),palm:[.4,.5]},0);
+ c.receive({...s(.8,.3),palm:[.4,.5]},40);c.receive({...s(.8,.3),palm:[.4,.5]},80);
+ for(let i=1;i<15;i++){c.receive({...s(.8+i*.01,.3),palm:[.4+i*.01,.5]},80+i*40);assert.ok(Math.abs(c.x-1)<1e-9);assert.ok(Math.abs(c.z)<1e-9);}
+});
+test('open palm stops and clears layout until a new closed pose',()=>{
+ const c=ready();c.receive(s(.5),40);c.receive(s(.5),80);c.receive({...s(.8,.9),open:true},120);
+ assert.equal(c.centre,null);assert.equal(c.direction,null);c.receive({...s(.9,.9),open:true},160);assert.equal(c.centre,null);
+ c.receive({...s(.7,.6),palm:[.7,.8]},200);assert.deepEqual(c.centre,[.7,.6]);assert.equal(c.direction,null);
+});
+test('index and thumb measurement use their own tips and share the palm anchor',()=>{
+ const world=Array.from({length:21},(_,i)=>({x:Math.sin(i)*.04,y:Math.cos(i)*.04,z:.01}));const image=world.map(p=>({x:.5+p.x*3,y:.5+p.y*3}));
+ const a=measureThumb(image,world,1,'thumb'),b=measureThumb(image,world,1,'index');assert.equal(a.tip,4);assert.equal(b.tip,8);assert.deepEqual(a.palm,b.palm);assert.deepEqual(b.point,[1-image[8].x,image[8].y]);
+});
+test('index overlay follows index tip rather than thumb',()=>{
+ const arcs=[];const ctx=new Proxy({arc:(...a)=>arcs.push(a)},{get:(o,k)=>o[k]??(()=>{}),set:(o,k,v)=>(o[k]=v,true)});
+ const hand=Array.from({length:21},()=>({x:.5,y:.5}));hand[8]={x:.7,y:.3};drawThumbJoystick(ctx,hand,640,480,{centre:[.5,.4],scale:.2,tip:8});assert.ok(arcs.some(a=>Math.abs(a[0]-192)<1e-8&&a[1]===144));
+});

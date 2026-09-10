@@ -19,20 +19,20 @@ export function setupUI(){
   box.style.aspectRatio='4/3';$('cam').style.visibility=hands?.length||joystick?.centre?'visible':'hidden';const zoom=box.clientWidth/crop.width;
   for(const el of [$('cam'),canvas]){el.style.width=w*zoom+'px';el.style.height=h*zoom+'px';el.style.left=-crop.x*zoom+'px';el.style.top=-crop.y*zoom+'px';}
   const speed=Math.hypot(joystick?.x||0,joystick?.z||0);
-  $('handZoomState').textContent=!joystick?.centre?'Show thumb':joystick.active?(speed>1.01?'BOOST ':'MOVE ')+Math.round(speed*100)+'%':joystick.reason==='RETURN THUMB TO CENTRE'?'Thumb to green centre':joystick.reason?.includes('TRACKING')||!hands?.length?'Show hand to resume':'Centre / fist = stop';
+  $('handZoomState').textContent=!joystick?.centre?(joystick?.reason==='OPEN PALM · RESET'?'Open palm · reset':'Show selected finger'):joystick.active?(speed>1.01?'BOOST ':'MOVE ')+Math.round(speed*100)+'%':joystick.reason==='RETURN FINGER TO CENTRE'?'Finger to green centre':joystick.reason?.includes('TRACKING')||!hands?.length?'Show hand to resume':'Centre / fist = stop';
  };
 
  const edges=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
  return {clear(){trail=[];ctx.clearRect(0,0,canvas.width,canvas.height);},camera(on){$('previewNote').hidden=on;this.clear();},draw(hands,w,h,active=false,joystick=null){
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;$('previewImage').style.aspectRatio=w+'/'+h;}
   ctx.clearRect(0,0,w,h);if(preview.hidden)return;zoomView(hands,w,h,joystick);
-  const point=p=>[(1-p.x)*w,p.y*h];
-  const now=performance.now();trail=trail.filter(p=>now-p.t<350);if(active&&hands?.length===1)trail.push({xy:point(hands[0][4]),t:now});else trail=[];
+  const tip=joystick?.tip??4;const point=p=>[(1-p.x)*w,p.y*h];
+  const now=performance.now();trail=trail.filter(p=>now-p.t<350);if(active&&hands?.length===1)trail.push({xy:point(hands[0][tip]),t:now});else trail=[];
   for(const hand of hands??[]){if(hand.length!==21)continue;
    ctx.lineWidth=Math.max(2,w/240);ctx.lineCap='round';
-   for(const [a,b]of edges){ctx.strokeStyle=a>=1&&b<=4?'#ffdf75':'#67ffbb';ctx.beginPath();ctx.moveTo(...point(hand[a]));ctx.lineTo(...point(hand[b]));ctx.stroke();}
-   for(let i=0;i<21;i++){ctx.fillStyle=i===4?'#ffdf75':'#e5fff3';ctx.beginPath();ctx.arc(...point(hand[i]),i===4?w/65:w/160,0,Math.PI*2);ctx.fill();}
-   const [x,y]=point(hand[4]);ctx.strokeStyle=active?'#ffdf75':'#ffffff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,w/38,0,Math.PI*2);ctx.stroke();
+   for(const [a,b]of edges){ctx.strokeStyle=(tip===8?a>=5&&b<=8:a>=1&&b<=4)?'#ffdf75':'#67ffbb';ctx.beginPath();ctx.moveTo(...point(hand[a]));ctx.lineTo(...point(hand[b]));ctx.stroke();}
+   for(let i=0;i<21;i++){ctx.fillStyle=i===tip?'#ffdf75':'#e5fff3';ctx.beginPath();ctx.arc(...point(hand[i]),i===tip?w/65:w/160,0,Math.PI*2);ctx.fill();}
+   const [x,y]=point(hand[tip]);ctx.strokeStyle=active?'#ffdf75':'#ffffff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,w/38,0,Math.PI*2);ctx.stroke();
   }
   if(joystick)drawThumbJoystick(ctx,hands?.[0],w,h,joystick);
   if(trail.length>1){ctx.strokeStyle='#ffab45';ctx.lineWidth=Math.max(3,w/140);ctx.beginPath();trail.forEach((p,i)=>i?ctx.lineTo(...p.xy):ctx.moveTo(...p.xy));ctx.stroke();}
@@ -41,18 +41,18 @@ export function setupUI(){
 
 // Captured screen anchor and scale stay fixed while the live thumb moves.
 export function drawThumbJoystick(ctx,hand,w,h,joystick){
- const {centre,scale,active,reason}=joystick;
+ const {centre,scale,active,reason}=joystick;const tip=joystick.tip??4;
  const vx=joystick.x||0,vz=joystick.z||0,speed=Math.min(1.6,Math.hypot(vx,vz));
 
  ctx.save();ctx.font=`bold ${Math.max(12,w/42)}px sans-serif`;
  ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
  const label=(text,x,y)=>{ctx.lineWidth=5;ctx.strokeStyle='#07131fee';ctx.strokeText(text,x,y);ctx.fillStyle='#ffffff';ctx.fillText(text,x,y);};
  if(!centre||!Number.isFinite(scale)){
-  label('SHOW THUMB',w/2,h-24);ctx.restore();return;
+  label('SHOW FINGER',w/2,h-24);ctx.restore();return;
  }
  const unit=scale*w,cx=centre[0]*w,cy=centre[1]*w;
  const r=.5*unit,dead=(active?.14:.20)*unit;
- const tx=hand?.[4]?(1-hand[4].x)*w:cx,ty=hand?.[4]?hand[4].y*h:cy;
+ const tx=hand?.[tip]?(1-hand[tip].x)*w:cx,ty=hand?.[tip]?hand[tip].y*h:cy;
  ctx.lineWidth=Math.max(2,w/300);
  ctx.fillStyle='#06172744';ctx.strokeStyle='#ffffffdd';
  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();ctx.stroke();
@@ -74,8 +74,8 @@ export function drawThumbJoystick(ctx,hand,w,h,joystick){
  label('↑',cx,cy-.66*unit);label('↓',cx,cy+.66*unit);
  label('←',cx-.66*unit,cy);label('→',cx+.66*unit,cy);
  const direction=[vz<-.05?'FORWARD':vz>.05?'BACK':'',vx<-.05?'LEFT':vx>.05?'RIGHT':''].filter(Boolean).join(' ');
- const waiting=!hand||reason==='RETURN THUMB TO CENTRE'||reason==='TRACKING LOST';
- label(active?`${speed>1.01?'BOOST · ':''}${direction} ${Math.round(speed*100)}%`:waiting?'RETURN THUMB TO CENTRE':reason?.includes('FIST')?'FIST REST':'CENTRE = STOP',w/2,20);
+ const waiting=!hand||reason==='RETURN FINGER TO CENTRE'||reason==='TRACKING LOST';
+ label(active?`${speed>1.01?'BOOST · ':''}${direction} ${Math.round(speed*100)}%`:waiting?'RETURN FINGER TO CENTRE':reason?.includes('FIST')?'FIST REST':'CENTRE = STOP',w/2,20);
  const barWidth=w*.24,bx=(w-barWidth)/2;
  ctx.fillStyle='#08151dcc';ctx.fillRect(bx,36,barWidth,7);
  ctx.fillStyle=active?'#ffdb68':'#6dffb3';ctx.fillRect(bx,36,barWidth*Math.min(1,speed/1.6),7);
@@ -90,7 +90,7 @@ export function handViewport(w,h,hand,joystick){
  if(joystick?.centre&&joystick?.viewScale>0){
   const unit=(joystick.scale||joystick.viewScale*.55)*w;cx=joystick.centre[0]*w;cy=joystick.centre[1]*w;width=unit*2.65;
  }else if(hand?.length===21){
-  const thumb=hand.slice(2,5);const xs=thumb.map(p=>(1-p.x)*w),ys=thumb.map(p=>p.y*h);
+  const thumb=joystick?.tip===8?hand.slice(5,9):hand.slice(2,5);const xs=thumb.map(p=>(1-p.x)*w),ys=thumb.map(p=>p.y*h);
   cx=(Math.min(...xs)+Math.max(...xs))/2;cy=(Math.min(...ys)+Math.max(...ys))/2;
   width=Math.max(Math.max(...xs)-Math.min(...xs),(Math.max(...ys)-Math.min(...ys))*4/3)*1.35;
  }else{return {x:0,y:0,width:w,height:h};}
