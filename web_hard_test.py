@@ -46,7 +46,7 @@ async def run():
             for img, expect in STILLS:
                 name = os.path.basename(img).split(".")[0]
                 await pg.goto(f"{BASE}?img={img}{QS}", wait_until="load")
-                try: await pg.wait_for_function("document.getElementById('hand').textContent.length > 12", timeout=20000)
+                try: await pg.wait_for_function("/HANDS: [RL] /.test(document.getElementById('hand').textContent)", timeout=20000)
                 except Exception: pass
                 await pg.wait_for_timeout(2500)
                 move = (await pg.inner_text("#move")).replace("MOVE: ", ""); hands = await pg.inner_text("#hand")
@@ -56,7 +56,7 @@ async def run():
                 await pg.screenshot(path=os.path.join(HERE, f"hard_{name}.png"))
             print(f"STILLS: {ok}/{n} labelled moves correct")
             await pg.goto(f"{BASE}?img=victory.jpg{QS}", wait_until="load")
-            await pg.wait_for_function("document.getElementById('hand').textContent.length > 12", timeout=30000)
+            await pg.wait_for_function("/HANDS: [RL] /.test(document.getElementById('hand').textContent)", timeout=30000)
             await pg.evaluate("window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', {beta: 60, gamma: 0, alpha: 0}))")
             await pg.wait_for_timeout(1500); await pg.evaluate(RESET); await pg.wait_for_timeout(1500)
             d = await pg.evaluate("window.dbg"); print(f"[tilt 30 up      ] reproj {100 * d['reprojSum'] / max(d['reprojN'], 1):.2f}%  ||  {(await pg.inner_text('#stats')).replace(chr(10), ' / ')}")
