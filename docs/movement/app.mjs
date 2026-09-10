@@ -32,7 +32,7 @@ function renderRooms(list){const box=$('rooms');box.textContent=list.length?'':'
  for(const r of list){const row=document.createElement('div');row.innerHTML=`<span>Lobby ${r.k} · host ${r.host}</span>`;const b=document.createElement('button');b.className='primary';b.textContent='JOIN';b.onclick=()=>net.joinRoom(r.k);row.appendChild(b);box.appendChild(row);}}
 function ensureNet(){if(net)return net;net=createNet({status:t=>$('net').textContent=t,hands:onRemote,rooms:renderRooms,
  matched:role=>{$('online').textContent='Online: matched';$('lobby').hidden=true;if(role==='guest')dustMap.move(camera.position,1.2,0);},
- lost:()=>{$('online').textContent='Online';remote.group.visible=false;remote.hand.hide();}});net.start();window.mv={camera,remote,net};return net;}
+ lost:()=>{$('online').textContent='Online';remote.group.visible=false;remote.hand.hide();}},'rpsh-dust-');net.start();window.mv={camera,remote,net};return net;}
 $('online').onclick=()=>{ensureNet();if(net.opp)return;const l=$('lobby');l.hidden=!l.hidden;if(!l.hidden)net.listRooms();};
 $('closeLobby').onclick=()=>$('lobby').hidden=true;$('refresh').onclick=()=>{$('rooms').textContent='searching…';ensureNet().listRooms();};
 $('quick').onclick=()=>{$('rooms').textContent='looking for a player…';ensureNet().quickMatch();};$('create').onclick=()=>ensureNet().createRoom();

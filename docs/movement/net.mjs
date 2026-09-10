@@ -8,6 +8,8 @@
 // {t:"join", code}; the host then dials the joiner's own player id and both continue over player ids.
 // Quick match = join the first open room, else open one and wait. Limit: ROOMS probes per listing.
 // Requires window.Peer (peerjs.min.js loaded by a classic <script> before this module).
+// Copy of hands-lapse docs/net.mjs with one addition: createNet(cb, ns) takes the id prefix (default 'rpsh-'), so a
+// game with its own prefix never matches players of another game that uses the same broker.
 
 const ICE = { iceServers: [
   { urls: "stun:stun.l.google.com:19302" },
@@ -34,7 +36,7 @@ export const screenCode = (fresh = false) => stored(localStorage, "rpsh_screen" 
 
 // cb: { status(text), hands(pkt, from), game(msg, from), matched(role), lost(who), rooms(list), roomOpen(k),
 //       screenReady(code), linked(phoneCode), unlinked() }
-export function createNet(cb) {
+export function createNet(cb, ns = "rpsh-") {
   let code = myCode();
   const net = { get code() { return code; }, peer: null, opp: null, screen: null, phone: null, host: false, room: null, stats: { sent: 0, recv: 0 } };
   const say = t => cb.status?.(t);
@@ -53,7 +55,7 @@ export function createNet(cb) {
   let retries = 0;
   function ensurePeer() {                                     // the player's own peer, id rpsh-<code>
     if (net.peer && !net.peer.destroyed) return net.peer;
-    const p = net.peer = new Peer("rpsh-" + code, { config: ICE });
+    const p = net.peer = new Peer(ns + code, { config: ICE });
     addEventListener("pagehide", () => { try { p.destroy(); net.room?.peer.destroy(); } catch {} });   // release ids when the tab closes
     p.on("open", () => { retries = 0; say("online as " + code); keepAwake(); });
     p.on("disconnected", () => {                              // broker socket dropped (phone slept, network blip): come back, unless we are replacing this peer
@@ -83,7 +85,7 @@ export function createNet(cb) {
   net.becomeScreen = () => {
     let sc = screenCode(), tries = 0;
     const register = () => {
-      const p = net.peer = new Peer("rpsh-s-" + sc, { config: ICE });
+      const p = net.peer = new Peer(ns + "s-" + sc, { config: ICE });
       p.on("open", () => { say("screen " + sc + ": waiting for a phone…"); cb.screenReady?.(sc); keepAwake(); });
       p.on("disconnected", () => setTimeout(() => { if (!p.dead && !p.destroyed) p.reconnect(); }, 1500));
       p.on("error", e => {
@@ -114,7 +116,7 @@ export function createNet(cb) {
     const dial = () => whenOpen(() => {
       if (stop || net.screen?.open) return;
       tries++; say(tries === 1 ? "linking to screen " + sc + "…" : `waiting for screen ${sc}… (${tries}) is the SCREEN page open on the PC?`);
-      const conn = net.peer.connect("rpsh-s-" + sc, { reliable: true });
+      const conn = net.peer.connect(ns + "s-" + sc, { reliable: true });
       let opened = false, done = false;
       const again = ms => { if (done || stop) return; done = true; try { conn.close(); } catch {} setTimeout(dial, ms); };
       conn.on("open", () => { opened = true; conn.send({ t: "hello", role: "player", code }); net.screen = conn; wire(conn, "screen"); say("PC linked (screen " + sc + ")"); try { localStorage.setItem("rpsh_last_screen", sc); } catch {} });
@@ -139,14 +141,14 @@ export function createNet(cb) {
   net.createRoom = (k = 1) => {                               // claim the first free room id and wait there
     if (net.room) return;
     if (k > ROOMS) { say("all " + ROOMS + " lobbies are taken, try again later"); return; }
-    const id = "rpsh-room-" + k, room = new Peer(id, { config: ICE });
+    const id = ns + "room-" + k, room = new Peer(id, { config: ICE });
     room.on("open", () => {
       net.room = { peer: room, k, open: true }; say("lobby " + k + " open, waiting for a player… (your code " + code + ")"); cb.roomOpen?.(k);
       room.on("connection", c => c.on("open", () => c.once("data", m => {
         if (m?.t === "probe") { c.send({ t: "room", k, host: code, open: !!net.room?.open && !net.opp }); setTimeout(() => c.close(), 300); return; }
         if (m?.t === "join" && m.code && net.room?.open && !net.opp) {
           net.room.open = false;
-          const conn = net.peer.connect("rpsh-" + m.code, { reliable: true });   // talk over player ids from now on
+          const conn = net.peer.connect(ns + m.code, { reliable: true });   // talk over player ids from now on
           conn.on("open", () => { conn.send({ t: "hello", role: "player", code }); becomeOpp(conn, "host"); net.leaveRoom(); });
           setTimeout(() => c.close(), 1500);
         }
@@ -159,7 +161,7 @@ export function createNet(cb) {
   net.listRooms = () => new Promise(res => whenOpen(() => {   // probe every room id; open rooms answer within PROBE_MS
     const found = [], conns = [];
     for (let k = 1; k <= ROOMS; k++) {
-      const c = net.peer.connect("rpsh-room-" + k, { reliable: true }); conns.push(c);
+      const c = net.peer.connect(ns + "room-" + k, { reliable: true }); conns.push(c);
       c.on("open", () => c.send({ t: "probe" }));
       c.on("data", m => { if (m?.t === "room") found.push(m); });
     }
@@ -168,7 +170,7 @@ export function createNet(cb) {
 
   net.joinRoom = k => whenOpen(() => {                        // knock on a room; its host dials our player id back
     say("joining lobby " + k + "…");
-    const c = net.peer.connect("rpsh-room-" + k, { reliable: true });
+    const c = net.peer.connect(ns + "room-" + k, { reliable: true });
     c.on("open", () => c.send({ t: "join", code }));
     setTimeout(() => { if (!net.opp) { say("lobby " + k + " did not answer"); try { c.close(); } catch {} } }, 8000);
   });
