@@ -22,8 +22,8 @@ const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
 export function thumbVector(point,centre){
  if(!point||!centre||![...point,...centre].every(Number.isFinite))return null;
  const x=point[0]-centre[0],z=point[1]-centre[1],r=Math.hypot(x,z);
- if(r<=.10)return {x:0,z:0};
- const magnitude=Math.min(1,(r-.10)/.40);
+ if(r<=.14)return {x:0,z:0};
+ const magnitude=Math.min(1,(r-.14)/.36);
  return {x:x/r*magnitude,z:z/r*magnitude};
 }
 export class ThumbJoystick {
@@ -31,22 +31,30 @@ export class ThumbJoystick {
  reset(){this.centre=null;this.settling=[];this.seen=-Infinity;this.stop('SHOW THUMB');}
  stop(reason){this.x=this.z=0;this.raw={x:0,z:0};this.candidate=null;this.lastTilt=null;this.reason=reason;}
  receive(sample,time){
-  if(!valid(sample)){this.stop('TRACKING LOST');this.settling=[];this.seen=-Infinity;return;}
+  if(!valid(sample)){this.reset();this.reason='TRACKING LOST';return;}
   if(time<=this.seen)return;
-  const elapsed=time-this.seen;if(elapsed>250){this.stop('TRACKING RESUMED');this.settling=[];}this.seen=time;
-  if(sample.rest){this.stop('FIST REST');this.settling=[];return;}
+  const elapsed=time-this.seen;if(elapsed>250){this.centre=null;this.stop('TRACKING RESUMED');this.settling=[];}this.seen=time;
+  if(sample.rest){this.centre=null;this.stop('FIST REST');this.settling=[];return;}
   const t=sample.point;if(!t){this.stop('THUMB UNCLEAR');return;}
   if(!this.centre){
    this.reason='HOLD THUMB COMFORTABLY';
    if(this.settling.length&&distance(t,this.settling[0].tilt)>.1)this.settling=[];
    this.settling.push({tilt:t,time});
-   if(this.settling.length>=3&&time-this.settling[0].time>=180){this.centre=[0,1].map(i=>this.settling.reduce((s,p)=>s+p.tilt[i],0)/this.settling.length);this.settling=[];this.stop('NEUTRAL');}
+   if(this.settling.length>=5&&time-this.settling[0].time>=350){this.centre=[0,1].map(i=>this.settling.map(p=>p.tilt[i]).sort((a,b)=>a-b)[Math.floor(this.settling.length/2)]);this.settling=[];this.stop('NEUTRAL');}
    return;
+  }
+  const active=Math.hypot(this.x,this.z)>.01;
+  // Hysteresis: noise cannot start walking inside the wider release zone.
+  // Only adapt centre while stopped, never while holding a movement command.
+  if(!active&&distance(t,this.centre)<.20){
+   const a=1-Math.exp(-Math.min(100,elapsed)/800);
+   this.centre=this.centre.map((v,i)=>v+(t[i]-v)*a);
+   this.stop('NEUTRAL');return;
   }
   const v=thumbVector(t,this.centre);if(!v){this.stop('THUMB UNCLEAR');return;}this.raw={...v};
   if(Math.hypot(v.x,v.z)<.001){this.stop('NEUTRAL');return;}
-  const active=Math.hypot(this.x,this.z)>.01,change=Math.hypot(v.x-this.x,v.z-this.z);
-  if(active&&((this.lastTilt&&distance(t,this.lastTilt)<.035)||change<.07)){this.candidate=null;return;}
+  const change=Math.hypot(v.x-this.x,v.z-this.z);
+  if(active&&Math.hypot(v.x,v.z)>=Math.hypot(this.x,this.z)&&((this.lastTilt&&distance(t,this.lastTilt)<.035)||change<.07)){this.candidate=null;return;}
   if(!active||change>.8){
    const agreement=this.candidate?(v.x*this.candidate.x+v.z*this.candidate.z)/(Math.hypot(v.x,v.z)*Math.hypot(this.candidate.x,this.candidate.z)):-1;
    if(!this.candidate||agreement<Math.cos(Math.PI/5))this.candidate={...v,since:time,count:1};else this.candidate.count++;
@@ -56,5 +64,5 @@ export class ThumbJoystick {
   this.x+=(v.x-this.x)*alpha;this.z+=(v.z-this.z)*alpha;this.lastTilt=t;this.reason='MOVING';
  }
  get direction(){return Math.hypot(this.x,this.z)>.01?[this.z<-.05?'FORWARD':this.z>.05?'BACKWARD':'',this.x<-.05?'LEFT':this.x>.05?'RIGHT':''].filter(Boolean).join(' '):null;}
- step(now,dt=.016){if(now-this.seen>250)this.stop('TRACKING LOST');const d=this.speed*Math.min(.05,Math.max(0,dt));return {dx:this.x*d,dz:this.z*d};}
+ step(now,dt=.016){if(now-this.seen>250){this.centre=null;this.settling=[];this.stop('TRACKING LOST');}const d=this.speed*Math.min(.05,Math.max(0,dt));return {dx:this.x*d,dz:this.z*d};}
 }

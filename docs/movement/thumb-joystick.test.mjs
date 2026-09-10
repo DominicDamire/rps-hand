@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {ThumbJoystick,thumbVector,measureThumb} from './thumb-joystick.mjs';
-const s=(x=0,z=0,rest=false)=>({point:[x,z],rest});const ready=()=>{const c=new ThumbJoystick();for(const t of [0,90,180])c.receive(s(),t);return c;};
-test('centre comes from live input and survives brief tracking loss',()=>{const c=ready(),centre=c.centre;c.receive(null,200);assert.equal(c.centre,centre);assert.equal(c.direction,null);});
+const s=(x=0,z=0,rest=false)=>({point:[x,z],rest});const ready=()=>{const c=new ThumbJoystick();for(const t of [-400,-300,-200,-100,0])c.receive(s(),t);return c;};
+test('tracking loss discards the old centre before reacquisition',()=>{const c=ready();assert.ok(c.centre);c.receive(null,200);assert.equal(c.centre,null);c.receive(s(.5),240);assert.deepEqual(c.step(250),{dx:0,dz:0});});
 test('live left right forward and backward offsets all drive movement',()=>{for(const [x,z,name] of [[-.5,0,'LEFT'],[.5,0,'RIGHT'],[0,-.5,'FORWARD'],[0,.5,'BACKWARD']]){const c=ready();c.receive(s(x,z),200);c.receive(s(x,z),280);assert.equal(c.direction,name);assert.deepEqual(c.step(290,.02),c.step(300,.02));}});
 test('fist neutral and stale tracking stop held movement',()=>{for(const stop of [s(),s(0,0,true),null]){const c=ready();c.receive(s(0,.5),200);c.receive(s(0,.5),280);c.receive(stop,300);assert.deepEqual(c.step(301,.02),{dx:0,dz:0});}});
 test('free circle has continuous direction through all quadrants',()=>{let last;for(let i=0;i<=1440;i++){const a=i*Math.PI/720,v=thumbVector(s(.5*Math.cos(a),.5*Math.sin(a)).point,[0,0]);if(last)assert.ok(Math.hypot(v.x-last.x,v.z-last.z)<.02);last=v;}});
@@ -27,4 +27,22 @@ test('screen measurement ignores depth and compensates hand translation and came
 test('stale held input stops even without another tracker result',()=>{
  const c=ready();c.receive(s(.5),200);c.receive(s(.5),280);
  assert.ok(c.step(300,.02).dx>0);assert.deepEqual(c.step(531,.02),{dx:0,dz:0});
+});
+
+test('fist release establishes a fresh centre without rightward drift',()=>{
+ const c=ready();c.receive(s(.5),200);c.receive(s(.5),280);
+ c.receive(s(0,0,true),300);assert.equal(c.centre,null);
+ for(let t=340;t<=740;t+=100){c.receive(s(.6),t);assert.deepEqual(c.step(t),{dx:0,dz:0});}
+ assert.deepEqual(c.centre,[.6,0]);
+ c.receive(s(.6),780);assert.equal(c.direction,null);
+ c.receive(s(.1),820);c.receive(s(.1),900);assert.equal(c.direction,'LEFT');
+});
+test('small rightward offset remains neutral instead of latching movement',()=>{
+ const c=ready();for(let t=40;t<4000;t+=40){c.receive(s(.16+Math.sin(t)*.01),t);assert.deepEqual(c.step(t),{dx:0,dz:0});}
+});
+test('moving output can decrease through the wobble filter and reach zero',()=>{
+ const c=ready();c.receive(s(.5),100);c.receive(s(.5),180);
+ const start=c.x;c.receive(s(.48),220);assert.ok(c.x<start);
+ for(let t=260;t<=980;t+=40)c.receive(s(Math.max(.12,.48-(t-220)*.0005)),t);
+ assert.deepEqual(c.step(980),{dx:0,dz:0});
 });
