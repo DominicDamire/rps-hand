@@ -1,12 +1,12 @@
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=34';
-import {setupThumbstick} from './thumbstick.mjs?v=34';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=35';
+import {setupThumbstick} from './thumbstick.mjs?v=35';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=34';
-import {DustMap} from './map.mjs?v=34';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=35';
+import {DustMap} from './map.mjs?v=35';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=34';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=34';
+import {setupUI} from './ui.mjs?v=35';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=35';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const held=new ThumbJoystick();let inputMode='poses',trackedHand=null,resting=false;
@@ -30,7 +30,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=34',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=35',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -90,5 +90,6 @@ function frame(now){
  $('turnIndicator').textContent=(running||demo)?headLook.state+(headLook.state==='HOLD TO TURN'?' '+Math.round(headLook.progress*100)+'%':''):'Head control paused';
  $('walkIndicator').textContent=resting?'RESTING · TAP RESUME':inputMode==='poses'?(!running?'START CAMERA':held.direction?'THUMB '+held.direction+' · '+walkReason:'STOP · '+walkReason):inputMode==='index'?'INDEX STROKES':'SCREEN THUMBSTICK';
  $('turnIndicator').style.color=headLook.state.includes('BODY')?'#ffdf75':'#b8ebd1';
+ const dot=$('joystickDot');dot.style.transform=`translate(${held.x*30}px,${held.z*30}px)`;$('joystickState').textContent=resting?'REST':held.direction||held.reason;
  renderer.render(scene,camera);
 }controlsChanged();requestAnimationFrame(frame);
