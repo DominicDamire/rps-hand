@@ -11,3 +11,4 @@ __pycache__/
 # the two big Commons clips (re-download with fetch_test_media.py)
 docs/test/handclap.webm
 docs/test/handwash.webm
+/vid_out/
