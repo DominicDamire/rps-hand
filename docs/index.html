@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 24)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 25)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -48,7 +48,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 
-const BUILD = 24;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 25;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -468,12 +468,16 @@ function poseFK(pts, bind, chirRight, scale) {
     // axis comes from the metacarpal (always well defined), NOT from knuckle->tip, which is ~zero for a folded finger and
     // made the "remove sideways bend" step erase the bend itself (folded fingers came out straight).
     let prev = _c.subVectors(pts[m], pts[0]).normalize();                                                    // metacarpal direction
-    _q.copy(_l).addScaledVector(prev, -_l.dot(prev)).normalize();                                             // sideways axis
+    // Flexion axis of this finger, fixed ONCE at the knuckle: curl = rotation of the segment about this axis toward the
+    // palm. Using it for PIP and DIP too keeps the sense consistent after the knuckle has bent 90 deg (deciding "backward"
+    // per joint from the palm normal became ambiguous there and clamped real curls, so fists had straight phalanges).
+    _b.copy(_n).addScaledVector(prev, -_n.dot(prev)).normalize();                                             // toward the palm, perpendicular to the metacarpal
+    _q.crossVectors(prev, _b).normalize();                                                                    // signed flexion axis (also the sideways axis)
     for (const [j, lim] of [[m + 1, HYPER.mcp], [m + 2, HYPER.pip], [m + 3, HYPER.dip]]) {
       _d.subVectors(pts[j], pts[j - 1]); _d.addScaledVector(_q, -_d.dot(_q)); if (_d.lengthSq() < 1e-10) _d.copy(prev); _d.normalize();   // no sideways bend
-      _b.crossVectors(_q, prev).normalize(); if (_b.dot(_n) > 0) _b.negate();       // in-plane axis pointing to the BACK of the hand: a curl goes toward the palm (+n), hyperextension goes toward -n. (Was inverted: every curl was clamped as a backward bend, so folded fingers rendered straight.)
-      const back = Math.atan2(_d.dot(_b), _d.dot(prev)) * 180 / Math.PI;           // > 0 = hyperextension
-      if (back > lim) { const a = lim * Math.PI / 180; _d.copy(prev).multiplyScalar(Math.cos(a)).addScaledVector(_b, Math.sin(a)); }
+      _b.crossVectors(_q, prev).normalize();                                          // curl direction at this joint (rotating prev about the flexion axis)
+      const flex = Math.atan2(_d.dot(_b), _d.dot(prev)) * 180 / Math.PI;           // > 0 = curl toward the palm, < 0 = hyperextension
+      if (flex < -lim) { const a = -lim * Math.PI / 180; _d.copy(prev).multiplyScalar(Math.cos(a)).addScaledVector(_b, Math.sin(a)); }
       seg(j, _d); prev = _e.copy(_d);
     }
   }
