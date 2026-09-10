@@ -23,8 +23,8 @@
   button { position: absolute; padding: 12px 22px; font: inherit; font-weight: 700; border: 0; border-radius: 999px; }
   #play { right: 12px; bottom: 12px; background: #78ff78; color: #000; }
   #play:disabled { opacity: .4; }
-  #mode, #reset { background: #2a3145; color: #fff; padding: 10px 16px; font-size: 14px; }
-  #mode { left: 12px; bottom: 12px; } #reset { right: 12px; top: 12px; }
+  #mode, #reset, #view { background: #2a3145; color: #fff; padding: 10px 16px; font-size: 14px; }
+  #mode { left: 12px; bottom: 12px; } #reset { right: 12px; top: 12px; } #view { left: 12px; top: 12px; }
 </style>
 </head>
 <body>
@@ -38,6 +38,7 @@
   </div>
   <div class="pane">
     <canvas id="gl"></canvas>
+    <button id="view">VIEW: first person</button>
     <button id="reset">RESET OBJECTS</button>
     <button id="mode">MODE: predict</button>
     <button id="play">PLAY</button>
@@ -94,8 +95,9 @@ function locate(world, image, W, H) {
   return [[Tx, Ty, Tz], err / n / k];
 }
 
-// Camera-frame points (x right, y down, z away) + translation -> flat GL array (y up, z toward viewer), x mirrored to match the mirrored video.
-function toGL(lm, T) { const a = new Float32Array(63); lm.forEach((l, i) => { a[3*i] = -(l.x + T[0]); a[3*i+1] = -(l.y + T[1]); a[3*i+2] = -(l.z + T[2]); }); return a; }
+// Camera-frame points (x right, y down, z away) + translation -> flat GL array (y up, z toward the phone camera).
+// These are TRUE positions (your right hand has x < 0, i.e. on the camera's left); the selfie view mirrors the render.
+function toGL(lm, T) { const a = new Float32Array(63); lm.forEach((l, i) => { a[3*i] = l.x + T[0]; a[3*i+1] = -(l.y + T[1]); a[3*i+2] = -(l.z + T[2]); }); return a; }
 const vec = (a, i) => new THREE.Vector3(a[3*i], a[3*i+1], a[3*i+2]);
 const toVecs = a => Array.from({ length: 21 }, (_, i) => vec(a, i));
 const palmCentre = pts => { const c = V(); for (const i of PALM) c.add(pts[i]); return c.multiplyScalar(1 / PALM.length); };
@@ -149,7 +151,7 @@ class OneEuro {
   }
 }
 const MAX_LEAD = 0.15;             // never extrapolate more than 150 ms ahead
-const HOLD_MS = 250;               // keep a hand alive this long after tracking drops (dead reckoning), then grey it out
+const HOLD_MS = 250;               // keep a hand alive this long after tracking drops (dead reckoning), then remove it
 
 // --- tracker: HandLandmarker in a Web Worker so rendering never waits on inference -----------------
 const WORKER_SRC = `
@@ -212,12 +214,30 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1f2b); scene.fog = new THREE.Fog(0x1a1f2b, 1.2, 3.5);
-// The virtual camera sits where the phone camera is (origin, looking down -z) with the same field of view, so the
-// replica appears at the same place and size on its pane as your hand does on the video pane.
-const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 6); camera.position.set(0, 0, 0); camera.lookAt(0, 0, -1);
+// Two views of the same room. "first person": the camera is at YOUR eyes, behind and above your hand, looking
+// across the table at the opponent (phone plane = middle of the table, z = 0; you are at z < 0, they are at z > 0).
+// "camera": the camera sits where the phone camera is, mirrored like the video pane (debug / comparison).
+const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 8);
+const worldGroup = new THREE.Group(); scene.add(worldGroup);   // everything that must mirror in the selfie view
 let frameW = 640, frameH = 480;   // camera frame size, set once the video is known
+const VIEWS = ["first person", "camera"]; let view = 0;
+$("view").onclick = () => { view = (view + 1) % VIEWS.length; $("view").textContent = "VIEW: " + VIEWS[view]; applyView(true); };
+function applyView(force) {
+  const w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio();
+  if (!force && canvas.width === (w * pr | 0) && canvas.height === (h * pr | 0)) return;
+  renderer.setSize(w, h, false); camera.aspect = w / h;
+  if (VIEWS[view] === "first person") {
+    camera.position.set(0, 0.12, -0.85); camera.lookAt(0, -0.12, 0.5); camera.fov = 62; worldGroup.scale.x = 1;
+  } else {
+    // match the video pane's object-fit:cover crop: a pane taller than the frame shows the full frame height, a wider pane the full width
+    const t = Math.tan(HFOV / 2);
+    camera.position.set(0, 0, 0); camera.lookAt(0, 0, -1); worldGroup.scale.x = -1;
+    camera.fov = 2 * Math.atan(w / h < frameW / frameH ? t * frameH / frameW : t / (w / h)) * 180 / Math.PI;
+  }
+  camera.updateProjectionMatrix();
+}
 scene.add(new THREE.HemisphereLight(0xfff8ee, 0x3a4560, 1.0));
-const key = new THREE.DirectionalLight(0xffffff, 1.8); key.position.set(0.5, 1.6, 0.4); key.target.position.set(0, FLOOR_Y, -0.7); scene.add(key, key.target);
+const key = new THREE.DirectionalLight(0xffffff, 1.8); key.position.set(0.5, 1.8, -0.3); key.target.position.set(0, FLOOR_Y, 0); scene.add(key, key.target);
 key.castShadow = true; key.shadow.mapSize.set(1024, 1024); key.shadow.bias = -0.0005;
 Object.assign(key.shadow.camera, { left: -1.2, right: 1.2, top: 1.2, bottom: -1.2, near: 0.1, far: 5 });
 const checker = (() => {   // procedural floor texture, no external file needed
@@ -226,22 +246,24 @@ const checker = (() => {   // procedural floor texture, no external file needed
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(12, 12); t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), new THREE.MeshStandardMaterial({ map: checker, roughness: 0.95 }));
-floor.rotation.x = -Math.PI / 2; floor.position.set(0, FLOOR_Y, -1.5); floor.receiveShadow = true; scene.add(floor);
-const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 5), new THREE.MeshStandardMaterial({ color: 0x252c3c, roughness: 1 }));
-wall.position.set(0, FLOOR_Y + 2.5, -3.2); wall.receiveShadow = true; scene.add(wall);
+floor.rotation.x = -Math.PI / 2; floor.position.set(0, FLOOR_Y, 0); floor.receiveShadow = true; scene.add(floor);
+for (const z of [-3.2, 3.2]) {   // a wall behind each player
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 5), new THREE.MeshStandardMaterial({ color: 0x252c3c, roughness: 1, side: THREE.DoubleSide }));
+  wall.position.set(0, FLOOR_Y + 2.5, z); wall.receiveShadow = true; scene.add(wall);
+}
 
 // --- physics (Rapier): hands are kinematic colliders that push dynamic props around ----------------
 await RAPIER.init();
 const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
-world.createCollider(RAPIER.ColliderDesc.cuboid(3, 0.05, 3).setTranslation(0, FLOOR_Y - 0.05, -1.5).setFriction(0.8));
+world.createCollider(RAPIER.ColliderDesc.cuboid(3, 0.05, 3).setTranslation(0, FLOOR_Y - 0.05, 0).setFriction(0.8));
 const PROPS = [
-  { ball: 0.045, color: 0xff6b6b, x: -0.18, z: -0.55 }, { ball: 0.040, color: 0xffd166, x: 0.05, z: -0.72 }, { ball: 0.050, color: 0x4dabf7, x: 0.24, z: -0.50 },
-  { box: 0.070, color: 0x69db7c, x: -0.04, z: -0.50 }, { box: 0.060, color: 0xb197fc, x: 0.16, z: -0.74 }, { box: 0.090, color: 0xffa94d, x: -0.27, z: -0.78 },
+  { ball: 0.045, color: 0xff6b6b, x: -0.20, z: -0.30 }, { ball: 0.040, color: 0xffd166, x: 0.06, z: -0.18 }, { ball: 0.050, color: 0x4dabf7, x: 0.26, z: -0.34 },
+  { box: 0.070, color: 0x69db7c, x: -0.05, z: -0.40 }, { box: 0.060, color: 0xb197fc, x: 0.18, z: -0.12 }, { box: 0.090, color: 0xffa94d, x: -0.30, z: -0.10 },
 ];
 const props = PROPS.map(p => {
   const half = (p.ball ?? p.box) / (p.ball ? 1 : 2);
   const mesh = new THREE.Mesh(p.ball ? new THREE.SphereGeometry(p.ball, 24, 16) : new THREE.BoxGeometry(p.box, p.box, p.box), new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.5 }));
-  mesh.castShadow = mesh.receiveShadow = true; scene.add(mesh);
+  mesh.castShadow = mesh.receiveShadow = true; worldGroup.add(mesh);
   const home = { x: p.x, y: FLOOR_Y + half + 0.02, z: p.z };
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(home.x, home.y, home.z).setAngularDamping(0.5));
   world.createCollider((p.ball ? RAPIER.ColliderDesc.ball(p.ball) : RAPIER.ColliderDesc.cuboid(half, half, half)).setRestitution(0.4).setFriction(0.7), body);
@@ -252,15 +274,14 @@ $("reset").onclick = resetProps;
 const FAR = { x: 0, y: 10, z: 0 };   // parking spot for the colliders of a hand that is not in view
 
 // --- 3D replica of one hand + its physics colliders ------------------------------------------------
-function makeHand() {
-  const group = new THREE.Group(); group.visible = false; scene.add(group);
+function makeHand(color = 0xdead8f) {
+  const group = new THREE.Group(); group.visible = false; worldGroup.add(group);
   const cyl = new THREE.CylinderGeometry(1, 1, 1, 14, 1), sph = new THREE.SphereGeometry(1, 14, 10);
-  const skin = new THREE.MeshStandardMaterial({ color: 0xdead8f, roughness: 0.6 }), ghost = new THREE.MeshStandardMaterial({ color: 0x73788a, roughness: 0.8 });
+  const skin = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
   const mk = g => { const m = new THREE.Mesh(g, skin); m.castShadow = true; group.add(m); return m; };
   const bones = BONES.map(b => ({ ...b, mesh: mk(cyl) }));
   const joints = JOINT_R.map(() => mk(sph));
-  const forearm = mk(cyl);
-  const palm = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0xdead8f, roughness: 0.6, side: THREE.DoubleSide }));
+  const palm = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color, roughness: 0.6, side: THREE.DoubleSide }));
   palm.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(27), 3)); palm.castShadow = true; group.add(palm);
   const skel = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x78ff78, depthTest: false }));
   skel.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CONNECTIONS.length * 6), 3)); skel.renderOrder = 1; group.add(skel);
@@ -278,36 +299,46 @@ function makeHand() {
   });
   return {
     group,
-    draw(pts, visible) {
-      const mat = visible ? skin : ghost;
-      for (const bn of bones) { placeCylinder(bn.mesh, pts[bn.a], pts[bn.b], bn.r); bn.mesh.material = mat; }
-      joints.forEach((m, i) => { m.position.copy(pts[i]); m.scale.setScalar(JOINT_R[i]); m.material = mat; });
-      const fore = pts[0].clone().sub(pts[9]).normalize();
-      placeCylinder(forearm, pts[0], pts[0].clone().addScaledVector(fore, 0.16), 0.024); forearm.material = mat;
+    draw(pts) {
+      for (const bn of bones) placeCylinder(bn.mesh, pts[bn.a], pts[bn.b], bn.r);
+      joints.forEach((m, i) => { m.position.copy(pts[i]); m.scale.setScalar(JOINT_R[i]); });
       const pos = palm.geometry.attributes.position; let k = 0;
       for (const [i1, i2] of PALM_EDGES) for (const i of [0, i1, i2]) pos.setXYZ(k++, pts[i].x, pts[i].y, pts[i].z);
-      pos.needsUpdate = true; palm.geometry.computeVertexNormals(); palm.material.color.copy(mat.color);
+      pos.needsUpdate = true; palm.geometry.computeVertexNormals();
       const sp = skel.geometry.attributes.position; let q = 0;
       for (const [a, b] of CONNECTIONS) for (const i of [a, b]) sp.setXYZ(q++, pts[i].x, pts[i].y, pts[i].z);
       sp.needsUpdate = true;
       const dp = dots.geometry.attributes.position; pts.forEach((p, i) => dp.setXYZ(i, p.x, p.y, p.z)); dp.needsUpdate = true;
       group.visible = true;
-      pts.forEach((p, i) => bodies[i].setNextKinematicTranslation(visible ? p : FAR));
-      bodies[21].setNextKinematicTranslation(visible ? palmCentre(pts) : FAR);
+      pts.forEach((p, i) => bodies[i].setNextKinematicTranslation(p));
+      bodies[21].setNextKinematicTranslation(palmCentre(pts));
     },
     hide() { group.visible = false; for (const b of bodies) b.setNextKinematicTranslation(FAR); },
   };
 }
-function resize() {
-  const w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio();
-  if (canvas.width !== (w * pr | 0) || canvas.height !== (h * pr | 0)) {
-    renderer.setSize(w, h, false); camera.aspect = w / h;
-    // Match the video pane's object-fit:cover crop: a pane taller than the frame shows the full frame height,
-    // a wider pane shows the full frame width.
-    const t = Math.tan(HFOV / 2);
-    camera.fov = 2 * Math.atan(w / h < frameW / frameH ? t * frameH / frameW : t / (w / h)) * 180 / Math.PI;
-    camera.updateProjectionMatrix();
-  }
+
+// --- the opponent's hand: a posed hand across the table until a real opponent is networked in ---------
+// Built on the same skeleton: wrist at the origin of a frame (U = finger direction, N = palm normal pointing
+// at you, S = thumb side); each finger is bent by cumulative angles at its three joints.
+const OPP = { at: new THREE.Vector3(0.08, -0.04, 0.30), U: new THREE.Vector3(0, 0.85, -0.5).normalize(), N: new THREE.Vector3(0, -0.5, -0.85).normalize(), S: new THREE.Vector3(-1, 0, 0) };
+const CURL = { open: [0, 0, 0], idle: [25, 30, 15], fist: [85, 100, 60] };
+const MCP = { 5: [0.032, 0.092], 9: [0.011, 0.088], 13: [-0.010, 0.082], 17: [-0.030, 0.076] };   // [thumb-side offset, forward] from the wrist
+const POSE = { ROCK: ["fist", "fist", "fist", "fist", false], PAPER: ["open", "open", "open", "open", true], SCISSORS: ["open", "open", "fist", "fist", false], IDLE: ["idle", "idle", "idle", "idle", true] };
+function synthHand(name, origin) {
+  const { U, N, S } = OPP, pts = Array.from({ length: 21 }, () => origin.clone()), [ci, cm, cr, cp, thumbOut] = POSE[name];
+  const dir = (a, b, c) => V().addScaledVector(S, a).addScaledVector(U, b).addScaledVector(N, c).normalize();
+  [[5, ci], [9, cm], [13, cr], [17, cp]].forEach(([mcp, curl]) => {
+    pts[mcp].addScaledVector(S, MCP[mcp][0]).addScaledVector(U, MCP[mcp][1]);
+    let theta = 0;
+    for (let k = 1; k <= 3; k++) {
+      theta += CURL[curl][k - 1] * Math.PI / 180;
+      pts[mcp + k].copy(pts[mcp + k - 1]).addScaledVector(dir(0, Math.cos(theta), -Math.sin(theta)), LENGTH[mcp + k]);
+    }
+  });
+  pts[1].addScaledVector(S, 0.030).addScaledVector(U, 0.025).addScaledVector(N, -0.01);
+  const thumb = thumbOut ? [dir(0.75, 0.55, 0), dir(0.6, 0.7, 0), dir(0.5, 0.8, 0)] : [dir(0.4, 0.6, -0.4), dir(-0.6, 0.3, -0.5), dir(-0.9, 0.1, -0.3)];
+  for (let k = 2; k <= 4; k++) pts[k].copy(pts[k - 1]).addScaledVector(thumb[k - 2], LENGTH[k]);
+  return pts;
 }
 
 // --- 2D overlay on the camera (raw landmarks, unfiltered, so you can compare against the 3D hands) ------
@@ -334,7 +365,7 @@ const game = { phase: "idle", t0: 0, you: null, cpu: null, score: [0, 0] };
 $("play").onclick = () => { if (game.phase === "idle") { game.phase = "count"; game.t0 = performance.now(); } };
 function updateGame(now, move) {
   if (game.phase === "count" && now - game.t0 >= 3000) {
-    game.you = move; game.cpu = Object.keys(BEATS)[Math.floor(Math.random() * 3)]; game.phase = "result"; game.t0 = now;
+    game.you = move; game.cpu = Q.get("cpu") in BEATS ? Q.get("cpu") : Object.keys(BEATS)[Math.floor(Math.random() * 3)]; game.phase = "result"; game.t0 = now;   // ?cpu=ROCK forces the computer move (tests)
     if (game.you && BEATS[game.you] === game.cpu) game.score[0]++;
     else if (game.you && BEATS[game.cpu] === game.you) game.score[1]++;
   } else if (game.phase === "result" && now - game.t0 >= 3000) game.phase = "idle";
@@ -370,6 +401,7 @@ async function main() {
   // one slot per hand, keyed by MediaPipe's handedness label
   const slots = { Right: null, Left: null };
   for (const k in slots) slots[k] = { key: k, filt: new OneEuro(63), raw: null, lastSeen: -1e9, ext: [0, 0, 0, 0], fit: 0, depth: 0, hand: makeHand() };
+  const opp = makeHand(0xc99a7a); const oppPts = synthHand("IDLE", OPP.at);   // the opponent's hand, a shade darker
   let lastT = -1, ts = 0, inflight = false, move = null, nHands = 0, lastRecv = 0, hold = HOLD_MS;
   let stat = { ms: 0, lat: 0, n: 0, t: performance.now() }, prev = performance.now();
 
@@ -401,14 +433,20 @@ async function main() {
     const hud = [];
     move = null;
     for (const s of [slots.Right, slots.Left]) {
-      const visible = now - s.lastSeen < hold;
-      if (s.filt.x) {
+      const visible = now - s.lastSeen < hold;   // dead-reckon through short dropouts, then remove the hand from the scene
+      if (visible) {
         const lead = Math.min(MAX_LEAD, Math.max(0, (now - s.lastSeen) / 1000 + 0.02));
-        const pts = MODES[mode] === "predict" ? s.filt.predict(visible ? lead : 0) : MODES[mode] === "smooth" ? s.filt.x : s.raw;
-        s.hand.draw(retarget(pts), visible);
+        const pts = MODES[mode] === "predict" ? s.filt.predict(lead) : MODES[mode] === "smooth" ? s.filt.x : s.raw;
+        s.hand.draw(retarget(pts));
       } else s.hand.hide();
       if (visible) { move ??= moveFromFingers(s.ext); hud.push(`${s.key[0]} ${s.depth.toFixed(2)}m ${s.ext.filter(Boolean).length}up fit ${(s.fit * 100).toFixed(1)}%`); }
     }
+    // opponent: pumps a fist during the countdown, shows the computer's move in the result, relaxes otherwise
+    const oppPose = game.phase === "count" ? "ROCK" : game.phase === "result" ? game.cpu : "IDLE";
+    const bob = game.phase === "count" ? 0.07 * Math.abs(Math.sin(Math.PI * (now - game.t0) / 1000)) : 0;
+    const target = synthHand(oppPose, OPP.at.clone().setY(OPP.at.y + bob));
+    oppPts.forEach((p, i) => p.lerp(target[i], 0.25));
+    opp.draw(oppPts);
     world.timestep = dt; world.step();
     for (const p of props) { p.mesh.position.copy(p.body.translation()); p.mesh.quaternion.copy(p.body.rotation()); }
     if (now - stat.t > 1000) {
@@ -418,7 +456,7 @@ async function main() {
     $("hand").textContent = "HANDS: " + (hud.join("  |  ") || "-");
     $("move").textContent = "MOVE: " + (move ?? "?"); $("move").style.color = move ? "#78ff78" : "#ffc850";
     updateGame(now, move);
-    resize(); renderer.render(scene, camera);
+    applyView(false); renderer.render(scene, camera);
     requestAnimationFrame(loop);
   };
   loop();
