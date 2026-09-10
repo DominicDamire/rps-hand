@@ -532,11 +532,69 @@ async function loadSkin(url) {
   const inverses = bind => { const b = meshPts(bind); return order.map(j => boneFrame(b, j, 1, new THREE.Matrix4()).invert()); };
   return { order, material, R: { geo, bind: joints, inv: inverses(joints) }, L: { geo: geoL, bind: jointsL, inv: inverses(jointsL) }, mirroredIsLeft: meta.hand === "right" };
 }
-const skinPromise = SKIN_URL ? loadSkin(SKIN_URL).catch(e => { console.warn("hand mesh unavailable, capsule hand instead:", e); return null; }) : Promise.resolve(null);
+// Pre-rigged hand pairs (one GLB per side, real left and right meshes with textures). <base>_<side>.json gives the 21
+// MediaPipe bind joints, "bones": {"p-j": rigBoneName, "hand": ..., "forearm": ..., "arm": ...} and "extra": rest head/tail of
+// hand/forearm/arm. The rig's own hierarchy is flattened; every bone gets a frame from the tracked points like the scan does.
+const _fa = V(), _fy = V();
+function frameDir(a, dir, L, s, refPrimary, refSecondary, out) {   // origin a, unit direction dir, length L, width scale s
+  _y.copy(dir); const k = Math.min(1, Math.max(0, (Math.abs(refPrimary.dot(_y)) - 0.7) / 0.25));
+  _r.copy(refPrimary).multiplyScalar(1 - k).addScaledVector(refSecondary, k);
+  _x.copy(_r).addScaledVector(_y, -_r.dot(_y)).normalize(); _z.crossVectors(_x, _y);
+  out.makeBasis(_x.multiplyScalar(s), _y.multiplyScalar(L), _z.multiplyScalar(s)); out.setPosition(a); return out;
+}
+function palmRefs(pts) { _l.subVectors(pts[17], pts[5]).normalize(); _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize(); }
+async function loadRigSide(base, side) {
+  const [gltf, meta] = await Promise.all([new GLTFLoader().loadAsync(`${base}_${side}.glb`), fetch(`${base}_${side}.json`).then(r => r.json())]);
+  let src; gltf.scene.traverse(o => { if (o.isSkinnedMesh) src = o; });
+  gltf.scene.updateMatrixWorld(true);
+  const geo = src.geometry.clone().applyMatrix4(src.matrixWorld);   // into the glTF scene space, where the JSON joints live
+  const names = src.skeleton.bones.map(b => b.name), byName = {}; names.forEach((n, i) => byName[n] = i);
+  const bind = meta.joints.map(q => new THREE.Vector3(...q));
+  const edges = []; for (const [k, name] of Object.entries(meta.bones)) { const m = k.match(/^(\d+)-(\d+)$/); if (m && name && byName[name] != null) edges.push({ j: +m[2], i: byName[name] }); }
+  const extra = {}; for (const key of ["hand", "forearm", "arm"]) { const nm = meta.bones[key], e = meta.extra?.[nm] || meta.extra?.[key]; if (nm && byName[nm] != null && e) extra[key] = { i: byName[nm], head: new THREE.Vector3(...e.head), tail: new THREE.Vector3(...e.tail) }; }
+  return { rig: true, geo, names, material: src.material?.isMeshStandardMaterial ? src.material : null, bind, edges, extra, hand: meta.hand };
+}
+async function loadRig(base) {
+  const [L, R] = await Promise.all([loadRigSide(base, "L"), loadRigSide(base, "R")]);
+  return { rig: true, order: [], material: null, L, R, mirroredIsLeft: true };   // right tracked hand -> R variant, left -> L
+}
+const skinPromise = SKIN_URL ? (SKIN_URL.endsWith(".glb") ? loadSkin(SKIN_URL) : loadRig(SKIN_URL)).catch(e => { console.warn("hand mesh unavailable, capsule hand instead:", e); return null; }) : Promise.resolve(null);
 const hands = [];   // every makeHand(), so the high-detail mesh can be attached when it arrives
 const CHIR_RIGHT = 1;    // sign of (thumb tip - wrist) . ((5-0) x (17-0)) for a right hand: the thumb sits on the palm side, and for a right hand that cross product points out of the palm
 function makeSkin(variant, color) { return makeSkinFrom(SKIN, variant, color); }
+function makeRigSkin(variant, color) {
+  const bones = variant.names.map(() => { const b = new THREE.Bone(); b.matrixAutoUpdate = false; return b; });
+  const inv = variant.names.map(() => new THREE.Matrix4());   // identity for undriven bones (they keep their rest place)
+  const bind = variant.bind; palmRefs(bind);
+  const bindL = new THREE.Vector3().copy(_l), bindN = new THREE.Vector3().copy(_n);
+  const dir0 = bind[9].clone().sub(bind[0]).normalize();
+  for (const e of variant.edges) inv[e.i].copy(boneFrame(bind, e.j, 1, new THREE.Matrix4())).invert();
+  const rest = {};   // hand / forearm / arm rest frames: origin at the rest head, direction head->tail
+  for (const [key, ex] of Object.entries(variant.extra)) {
+    const d = ex.tail.clone().sub(ex.head), L = d.length(); d.normalize(); rest[key] = { i: ex.i, L };
+    inv[ex.i].copy(frameDir(ex.head, d, L, 1, key === "hand" ? bindL : bindN, key === "hand" ? bindN : bindL, new THREE.Matrix4())).invert();
+  }
+  const mesh = new THREE.SkinnedMesh(variant.geo, variant.material ? variant.material.clone() : new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
+  mesh.add(...bones); mesh.bind(new THREE.Skeleton(bones, inv), new THREE.Matrix4());
+  mesh.castShadow = false; mesh.frustumCulled = false; mesh.visible = false;
+  const L0 = bind[0].distanceTo(bind[9]); const bindLen = {}; for (const [k, js] of Object.entries(CHAINS)) bindLen[k] = js.reduce((t, j) => t + bind[j].distanceTo(bind[PARENT[j]]), 0);
+  const ratio = {}; const M = new THREE.Matrix4(), dirW = V(), o = V();
+  return { mesh, update(tracked) {
+    const pts = FIT_EXACT ? meshPts(tracked) : tracked, sc = pts[0].distanceTo(pts[9]) / L0;
+    ratio.n = (ratio.n || 0) + 1;
+    for (const [k, js] of Object.entries(CHAINS)) { const r = Math.min(1.6 * sc, Math.max(0.6 * sc, js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k])); ratio[k] = ratio[k] == null ? r : ratio[k] + Math.max(0.01, 1 / ratio.n) * (r - ratio[k]); }
+    for (const e of variant.edges) { boneFrame(pts, e.j, ratio[CHAIN_OF[e.j]], bones[e.i].matrix); bones[e.i].matrixWorldNeedsUpdate = true; }
+    palmRefs(pts); dirW.subVectors(pts[9], pts[0]).normalize();
+    if (rest.hand) { frameDir(pts[0], dirW, rest.hand.L * sc, ratio.palm, _l, _n, bones[rest.hand.i].matrix); bones[rest.hand.i].matrixWorldNeedsUpdate = true; }
+    if (rest.forearm) {   // straight forearm behind the wrist (an elbow will come from body tracking)
+      o.copy(pts[0]).addScaledVector(dirW, -rest.forearm.L * sc); frameDir(o, dirW, rest.forearm.L * sc, ratio.palm, _n, _l, bones[rest.forearm.i].matrix); bones[rest.forearm.i].matrixWorldNeedsUpdate = true;
+      if (rest.arm) { o.addScaledVector(dirW, -rest.arm.L * sc); frameDir(o, dirW, rest.arm.L * sc, ratio.palm, _n, _l, bones[rest.arm.i].matrix); bones[rest.arm.i].matrixWorldNeedsUpdate = true; }
+    }
+    mesh.visible = true;
+  } };
+}
 function makeSkinFrom(SK, variant, color) {
+  if (variant.rig) return makeRigSkin(variant, color);
   const bones = SK.order.map(() => { const b = new THREE.Bone(); b.matrixAutoUpdate = false; return b; });
   const mesh = new THREE.SkinnedMesh(variant.geo, SK.material ? SK.material.clone() : new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
   mesh.add(...bones); mesh.bind(new THREE.Skeleton(bones, variant.inv.map(m => m.clone())), new THREE.Matrix4());
