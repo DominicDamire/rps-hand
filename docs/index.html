@@ -46,6 +46,7 @@
 <script type="module">
 import * as THREE from "three";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js";
+import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 
 const BUILD = 20;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
@@ -61,6 +62,7 @@ const DELEGATES = Q.get("delegate") === "CPU" ? ["CPU"] : ["GPU", "CPU"];   // ?
 const PAD = Q.get("pad") != null ? +Q.get("pad") : 0.3;   // border added around the frame when the hand is big, fraction of the longer side (?pad=0 to disable)
 const BIG_HAND = [0.22, 0.15];      // palm length (wrist to middle knuckle) / frame short side: pad above the first, unpad below the second (hysteresis)
 const DEBUG_OVERLAY = Q.get("debug") === "1";
+const SHOW_LINES = Q.get("lines") === "1";   // green skeleton + dots on the 3D hand (off by default so the skin can be judged)
 const PALMS_ONLY = Q.get("arms") !== "1";   // default: hands from the wrist only
 const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "arm";   // default: the owner's pre-rigged arms (arm_L/arm_R.glb); ?skin=hand.glb = the scan rig, ?skin=thing = the Thing rig, ?skin=0 = capsules
 const DS = Q.get("ds") != null ? +Q.get("ds") : 480;   // tracker input width after downscale (?ds=0 = the full camera frame). MediaPipe resizes to 192/224 anyway; 320 lost far hands
@@ -370,10 +372,12 @@ async function makeTracker() {
 // --- scene: a room seen from where the phone camera is ------------------------------------------
 const canvas = $("gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));   // the tracker shares the GPU: 2x on a phone cost tracker frames
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;   // filmic curve: skin highlights roll off instead of clipping   // the tracker shares the GPU: 2x on a phone cost tracker frames
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1f2b); scene.fog = new THREE.Fog(0x1a1f2b, 1.2, 3.5);
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.45;   // image-based light: soft reflections and skin sheen
 // Two views of the same room. "first person": the camera is at YOUR eyes, behind and above your hand, looking
 // across the table at the opponent (phone plane = middle of the table, z = 0; you are at z < 0, they are at z > 0).
 // "mirror": the camera sits where the phone camera is and the render is mirrored, so it behaves like a mirror.
@@ -398,8 +402,9 @@ function applyView(force) {
     camera.position.set(0, 0, 0); camera.lookAt(0, Math.sin(pitch), -Math.cos(pitch)); worldGroup.scale.x = -1;
   }
 }
-scene.add(new THREE.HemisphereLight(0xfff8ee, 0x3a4560, 1.0));
-const key = new THREE.DirectionalLight(0xffffff, 1.8); key.position.set(0.5, 1.8, -0.3); key.target.position.set(0, FLOOR_Y, 0); scene.add(key, key.target);
+scene.add(new THREE.HemisphereLight(0xfff4e6, 0x2c3448, 0.5));
+const fill = new THREE.DirectionalLight(0xbfd4ff, 0.7); fill.position.set(-1.2, 0.6, -0.8); scene.add(fill);   // cool fill from the other side
+const key = new THREE.DirectionalLight(0xfff1dc, 1.9); key.position.set(0.5, 1.8, -0.3); key.target.position.set(0, FLOOR_Y, 0); scene.add(key, key.target);
 key.castShadow = true; key.shadow.mapSize.set(512, 512); key.shadow.bias = -0.0005;
 Object.assign(key.shadow.camera, { left: -1.2, right: 1.2, top: 1.2, bottom: -1.2, near: 0.1, far: 5 });
 const checker = (() => {   // procedural floor texture, no external file needed
@@ -517,11 +522,19 @@ async function loadRigSide(base, side) {
   let src; gltf.scene.traverse(o => { if (o.isSkinnedMesh) src = o; });
   gltf.scene.updateMatrixWorld(true);
   const geo = src.geometry.clone().applyMatrix4(src.matrixWorld);   // into the glTF scene space, where the JSON joints live
-  const names = src.skeleton.bones.map(b => b.name), byName = {}; names.forEach((n, i) => byName[n] = i);
+  const norm = n => String(n).replace(/[.\s]/g, "");   // exporters drop dots from bone names (Pointy.001 -> Pointy001)
+  const names = src.skeleton.bones.map(b => b.name), byName = {}; names.forEach((n, i) => byName[norm(n)] = i);
+  const restHeads = src.skeleton.bones.map(b => b.getWorldPosition(new THREE.Vector3()));   // where each bone really starts in the rest pose
   const bind = meta.joints.map(q => new THREE.Vector3(...q));
-  const edges = []; for (const [k, name] of Object.entries(meta.bones)) { const m = k.match(/^(\d+)-(\d+)$/); if (m && name && byName[name] != null) edges.push({ j: +m[2], i: byName[name] }); }
-  const extra = {}; for (const key of ["hand", "forearm", "arm"]) { const nm = meta.bones[key], e = meta.extra?.[nm] || meta.extra?.[key]; if (nm && byName[nm] != null && e) extra[key] = { i: byName[nm], head: new THREE.Vector3(...e.head), tail: new THREE.Vector3(...e.tail) }; }
-  return { rig: true, geo, names, material: src.material?.isMeshStandardMaterial ? src.material : null, bind, edges, extra, hand: meta.hand };
+  const edges = []; for (const [k, name] of Object.entries(meta.bones)) { const m = k.match(/^(\d+)-(\d+)$/); if (m && name && byName[norm(name)] != null) edges.push({ j: +m[2], i: byName[norm(name)] }); }
+  const extra = {}; for (const key of ["hand", "forearm", "arm"]) { const nm = meta.bones[key], e = meta.extra?.[nm] || meta.extra?.[key]; if (nm && byName[norm(nm)] != null && e) extra[key] = { i: byName[norm(nm)], head: new THREE.Vector3(...e.head), tail: new THREE.Vector3(...e.tail) }; }
+  let material = null;
+  if (src.material?.isMeshStandardMaterial) {   // skin look: physical material, AO from the packed texture, slight sheen, no metalness glint
+    const m = src.material, pm = new THREE.MeshPhysicalMaterial({ map: m.map, normalMap: m.normalMap, normalScale: m.normalScale?.clone() ?? new THREE.Vector2(1, 1), roughnessMap: m.roughnessMap, metalnessMap: null, metalness: 0, roughness: m.roughness ?? 1, color: m.color });
+    if (m.roughnessMap) { pm.aoMap = m.roughnessMap; pm.aoMapIntensity = 0.6; }   // glTF packs AO in R of the same image
+    pm.sheen = 0.1; pm.sheenRoughness = 0.7; pm.sheenColor = new THREE.Color(0xffc9b0); pm.envMapIntensity = 0.45; pm.specularIntensity = 0.45; material = pm;
+  }
+  return { rig: true, geo, names, material, bind, edges, extra, restHeads, hand: meta.hand };
 }
 async function loadRig(base) {
   const [L, R] = await Promise.all([loadRigSide(base, "L"), loadRigSide(base, "R")]);
@@ -537,7 +550,14 @@ function makeRigSkin(variant, color) {
   const bind = variant.bind; palmRefs(bind);
   const bindL = new THREE.Vector3().copy(_l), bindN = new THREE.Vector3().copy(_n);
   const dir0 = bind[9].clone().sub(bind[0]).normalize();
-  for (const e of variant.edges) inv[e.i].copy(boneFrame(bind, e.j, 1, new THREE.Matrix4())).invert();
+  const handRest0 = frameDir(bind[0], dir0, bind[0].distanceTo(bind[9]), 1, bindL, bindN, new THREE.Matrix4()), handRestInv = handRest0.clone().invert();
+  const dirB = V();
+  for (const e of variant.edges) {
+    const head = variant.restHeads[e.i], p = PARENT[e.j];
+    e.off = head.distanceTo(bind[p]) > 0.01 ? head.clone().applyMatrix4(handRestInv) : null;   // bone head away from the joint: remember it in the palm's frame
+    const a = e.off ? head : bind[p]; dirB.subVectors(bind[e.j], a); const L = dirB.length(); dirB.normalize();
+    inv[e.i].copy(frameDir(a, dirB, L, 1, THUMB.has(e.j) ? bindN : bindL, THUMB.has(e.j) ? bindL : bindN, new THREE.Matrix4())).invert();
+  }
   const rest = {};   // hand / forearm / arm rest frames: origin at the rest head, direction head->tail
   for (const [key, ex] of Object.entries(variant.extra)) {
     const d = ex.tail.clone().sub(ex.head), L = d.length(); d.normalize(); rest[key] = { i: ex.i, L };
@@ -555,11 +575,20 @@ function makeRigSkin(variant, color) {
   return { mesh, update(tracked) {
     const pts = FIT_EXACT ? meshPts(tracked) : tracked, sc = pts[0].distanceTo(pts[9]) / L0;
     ratio.n = (ratio.n || 0) + 1;
-    for (const [k, js] of Object.entries(CHAINS)) { const r = Math.min(1.6 * sc, Math.max(0.6 * sc, js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k])); ratio[k] = ratio[k] == null ? r : ratio[k] + Math.max(0.01, 1 / ratio.n) * (r - ratio[k]); }
-    for (const e of variant.edges) { boneFrame(pts, e.j, ratio[CHAIN_OF[e.j]], bones[e.i].matrix); bones[e.i].matrixWorldNeedsUpdate = true; }
+    for (const [k, js] of Object.entries(CHAINS)) {   // thickness = the chain's PEAK measured length (its extended size, slowly decaying), so a folded finger does not get thin
+      const r = js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k];
+      ratio[k] = Math.min(1.6 * sc, Math.max(0.6 * sc, ratio[k] == null ? r : Math.max(r, ratio[k] * 0.999)));
+    }
     palmRefs(pts); dirW.subVectors(pts[9], pts[0]).normalize();
     const handM = rest.hand ? bones[rest.hand.i].matrix : M;
     frameDir(pts[0], dirW, (rest.hand ? rest.hand.L : L0) * sc, ratio.palm, _l, _n, handM); if (rest.hand) bones[rest.hand.i].matrixWorldNeedsUpdate = true;
+    for (const e of variant.edges) {
+      if (e.off) {   // this bone starts inside the palm: carry its rest head with the palm, point it at the tracked joint
+        o.copy(e.off).applyMatrix4(handM); dirB.subVectors(pts[e.j], o); const L = dirB.length(); dirB.normalize();
+        frameDir(o, dirB, L, ratio[CHAIN_OF[e.j]], THUMB.has(e.j) ? _n : _l, THUMB.has(e.j) ? _l : _n, bones[e.i].matrix);
+      } else boneFrame(pts, e.j, ratio[CHAIN_OF[e.j]], bones[e.i].matrix);
+      bones[e.i].matrixWorldNeedsUpdate = true;
+    }
     for (const i of riders) { bones[i].matrix.copy(handM); bones[i].matrixWorldNeedsUpdate = true; }
     if (rest.forearm && PALMS_ONLY) {   // hands only: the forearm and upper arm collapse into the wrist (owner: "just palms"; ?arms=1 shows them)
       frameDir(pts[0], dirW, 1e-4, 1e-4, _n, _l, bones[rest.forearm.i].matrix); bones[rest.forearm.i].matrixWorldNeedsUpdate = true;
@@ -608,9 +637,9 @@ function makeHand(color = 0xdead8f) {
   const skinR = SKIN && makeSkin(SKIN.R, 0xd9a58a), skinL = SKIN && makeSkin(SKIN.L, 0xd9a58a); if (SKIN) group.add(skinR.mesh, skinL.mesh);
   let hiR = null, hiL = null; const all = () => [skinR, skinL, hiR, hiL].filter(Boolean);
   let chir = 0;   // smoothed handedness sign from the geometry (MediaPipe's label flickers, the thumb's side of the palm does not)
-  const skel = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x78ff78, depthTest: false }));
+  const skel = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x78ff78, depthTest: false })); skel.visible = SHOW_LINES;
   skel.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CONNECTIONS.length * 6), 3)); skel.renderOrder = 1; group.add(skel);
-  const dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xffffff, size: 0.008, depthTest: false }));
+  const dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xffffff, size: 0.008, depthTest: false })); dots.visible = SHOW_LINES;
   dots.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(63), 3)); dots.renderOrder = 2; group.add(dots);
   const UP = new THREE.Vector3(0, 1, 0);
   const placeCylinder = (mesh, a, b, r) => {
@@ -704,7 +733,7 @@ async function main() {
 
   frameW = video.videoWidth || video.naturalWidth || frameW; frameH = video.videoHeight || video.naturalHeight || frameH;
   const tracker = await makeTracker();
-  SKIN = await skinPromise; if (SKIN) $("status").textContent = "Preparing the hand…";   // shader compile below can take seconds on some GPUs
+  SKIN = await skinPromise; window.SKIN = SKIN; if (SKIN) $("status").textContent = "Preparing the hand…";   // shader compile below can take seconds on some GPUs
 
   // one slot per hand, keyed by MediaPipe's handedness label
   const slots = { Right: null, Left: null };
