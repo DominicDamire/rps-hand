@@ -34,6 +34,7 @@ export function setupUI(){
 // Captured screen anchor and scale stay fixed while the live thumb moves.
 export function drawThumbJoystick(ctx,hand,w,h,joystick){
  const {centre,scale,active,reason}=joystick;
+ const vx=joystick.x||0,vz=joystick.z||0,speed=Math.min(1,Math.hypot(vx,vz));
 
  ctx.save();ctx.font=`bold ${Math.max(12,w/42)}px sans-serif`;
  ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
@@ -47,6 +48,11 @@ export function drawThumbJoystick(ctx,hand,w,h,joystick){
  ctx.lineWidth=Math.max(2,w/300);
  ctx.fillStyle='#06172744';ctx.strokeStyle='#ffffffdd';
  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();ctx.stroke();
+ if(active&&speed>0){
+  const angle=Math.atan2(vz,vx);
+  ctx.fillStyle='#ffdb6833';ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,angle-.30,angle+.30);ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#ffdb68';ctx.lineWidth=5;ctx.beginPath();ctx.arc(cx,cy,r,angle-.30,angle+.30);ctx.stroke();
+ }
  ctx.fillStyle='#6dffb344';ctx.strokeStyle='#6dffb3';
  ctx.beginPath();ctx.arc(cx,cy,dead,0,Math.PI*2);ctx.fill();ctx.stroke();
  ctx.setLineDash([4,5]);ctx.strokeStyle='#ffffff77';ctx.beginPath();
@@ -54,12 +60,17 @@ export function drawThumbJoystick(ctx,hand,w,h,joystick){
  ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(cx,cy,3,0,Math.PI*2);ctx.fill();
  ctx.strokeStyle=active?'#ffdb68':'#6dffb3';ctx.lineWidth=3;
  ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(tx,ty);ctx.stroke();
- ctx.fillStyle='#ffdb68';ctx.beginPath();ctx.arc(tx,ty,Math.max(5,w/90),0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#ffdb68';ctx.beginPath();ctx.arc(tx,ty,Math.max(7,w/75),0,Math.PI*2);ctx.fill();ctx.lineWidth=3;ctx.strokeStyle='#101b25';ctx.stroke();
  const font=Math.max(12,w/42),gap=font+5;
  const clampX=x=>Math.max(font*2,Math.min(w-font*2,x));
  const clampY=y=>Math.max(font,Math.min(h-font,y));
  label('FORWARD',clampX(cx),clampY(cy-r-gap));label('BACK',clampX(cx),clampY(cy+r+gap));
  label('LEFT',clampX(cx-r-gap-font),clampY(cy));label('RIGHT',clampX(cx+r+gap+font),clampY(cy));
- label(active?'WALKING':reason?.includes('FIST')?'FIST REST':'CENTRE = STOP',w/2,20);
+ const direction=[vz<-.05?'FORWARD':vz>.05?'BACK':'',vx<-.05?'LEFT':vx>.05?'RIGHT':''].filter(Boolean).join(' ');
+ const waiting=!hand||reason==='SHOW FIST TO RESUME'||reason==='TRACKING LOST';
+ label(active?`${direction} ${Math.round(speed*100)}%`:waiting?'SHOW FIST TO RESUME':reason?.includes('FIST')?'FIST REST':'CENTRE = STOP',w/2,20);
+ const barWidth=w*.24,bx=(w-barWidth)/2;
+ ctx.fillStyle='#08151dcc';ctx.fillRect(bx,36,barWidth,7);
+ ctx.fillStyle=active?'#ffdb68':'#6dffb3';ctx.fillRect(bx,36,barWidth*speed,7);
  ctx.restore();
 }

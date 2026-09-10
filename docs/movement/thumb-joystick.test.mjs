@@ -40,3 +40,11 @@ test('rendered circle stays put while thumb marker moves',()=>{
  hand[2]={x:.9,y:.9};hand[4]={x:.7,y:.6};drawThumbJoystick(ctx,hand,640,480,joystick);
  assert.deepEqual(arcs.slice(0,3),first.slice(0,3));assert.notDeepEqual(arcs[3],first[3]);
 });
+
+test('size changes preserve anchor, require rest and adjust thumb travel',()=>{
+ const c=ready(),anchor=[...c.centre];c.setSize(.65);assert.deepEqual(c.centre,anchor);assert.equal(c.effectiveScale,.65);
+ c.receive(s(.4),100);c.receive(s(.4),180);assert.equal(c.direction,null);
+ c.receive(s(0,.35,true),220);c.receive(s(.4),260);c.receive(s(.4),340);assert.equal(c.x,1);
+ c.setSize(1.6);c.receive(s(0,.35,true),380);c.receive(s(.4),420);c.receive(s(.4),500);assert.ok(c.x>0&&c.x<.4);assert.deepEqual(c.centre,anchor);
+ c.reset();assert.equal(c.size,1.6);
+});
