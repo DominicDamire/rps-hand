@@ -25,21 +25,6 @@
   #play:disabled { opacity: .4; }
   #mode, #reset, #view { background: #2a3145; color: #fff; padding: 10px 16px; font-size: 14px; }
   #mode { left: 12px; bottom: 12px; } #reset { right: 12px; top: 12px; } #view { left: 12px; top: 12px; }
-  #setup-open, #settings-open { background: #2a3145; color: #fff; padding: 10px 16px; font-size: 14px; }
-  #setup-open { left: 12px; top: 58px; } #settings-open { right: 12px; top: 58px; }
-  #map-open { left: 12px; top: 104px; background: #2a3145; color: #fff; padding: 10px 16px; font-size: 14px; }
-  #minimap { position: absolute; right: 12px; bottom: 64px; width: 160px; height: 160px; border-radius: 10px; border: 1px solid #3a4560; background: #1a1f2bcc; pointer-events: none; }
-  #settings { position: absolute; right: 12px; top: 104px; width: min(320px, calc(100% - 24px)); max-height: calc(100% - 170px); overflow: auto; background: #1a1f2bee; border: 1px solid #3a4560; border-radius: 12px; padding: 10px 12px; font-size: 13px; }
-  #settings label { display: flex; gap: 8px; align-items: center; margin: 6px 0; } #settings input[type=range] { flex: 1; accent-color: #78ff78; } #settings output { min-width: 3em; text-align: right; }
-  #settings select, #settings button { position: static; font: inherit; color: #fff; background: #2a3145; border: 0; border-radius: 8px; padding: 6px 10px; margin: 2px 4px 2px 0; }
-  #settings .row { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; } #head-status, #body-status { color: #9aa4b8; margin-top: 4px; }
-  dialog#calibration { color: #fff; background: #1a1f2b; border: 1px solid #3a4560; border-radius: 16px; padding: 20px; width: min(520px, 94vw); max-height: 92dvh; overflow: auto; }
-  dialog#calibration::backdrop { background: #07121ac9; } dialog#calibration h2 { margin: 0 0 10px; font-size: 20px; } dialog#calibration p { font-size: 15px; line-height: 1.4; }
-  dialog#calibration label { display: block; margin: 12px 0; } dialog#calibration input[type=number] { width: 100px; padding: 6px; font: inherit; } dialog#calibration select { margin-top: 6px; display: block; font: inherit; padding: 6px; }
-  dialog#calibration .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; } dialog#calibration button { position: static; min-height: 40px; background: #2a3145; color: #fff; }
-  dialog#calibration #setup-start, dialog#calibration #setup-next, dialog#calibration #setup-finish { background: #78ff78; color: #000; }
-  #setup-camera { display: block; width: 100%; max-height: 32vh; object-fit: contain; background: #000; border-radius: 10px; } #setup-progress { width: 100%; height: 12px; margin-top: 10px; } #setup-feedback { min-height: 40px; }
-  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
@@ -47,76 +32,28 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 17)</div></div>
-    <div class="hud" id="bottom"><div id="score">SCORE you 0 : 0 cpu</div><div id="game">Tap PLAY for a round</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 20)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
     <canvas id="gl"></canvas>
-    <button id="view">VIEW: mirror</button>
-    <button id="reset">RESET OBJECTS</button>
+    <button id="view">VIEW</button>
     <button id="mode">MODE: predict</button>
-    <button id="play">PLAY</button>
-    <button id="setup-open">SETUP</button>
-    <button id="settings-open">MOVE</button>
-    <button id="map-open">MAP</button>
-    <canvas id="minimap" hidden></canvas>
-    <div id="settings" hidden>
-      <div class="row"><select id="head-mode" aria-label="Head tracking"><option value="first">Head: on</option><option value="off">Head: off</option></select>
-      <select id="body-mode" aria-label="Body tracking mode"><option value="seated">Body: seated</option><option value="standing">Body: standing</option><option value="off">Body: off</option></select></div>
-      <div class="row"><button id="recenter">Recenter</button><button id="calibrate-body">Calibrate body</button></div>
-      <label>Head turn <input id="head-sensitivity" aria-label="Head turn sensitivity" type="range" min="0.5" max="4" step="0.25" value="1.5"><output id="gain">1.5×</output></label>
-      <label>Left / right <input id="lateral-sensitivity" aria-label="Left right movement sensitivity" type="range" min="0" max="4" step="0.25" value="1"><output id="lateral-gain">1×</output></label>
-      <label>Forward / back <input id="depth-sensitivity" aria-label="Forward back movement sensitivity" type="range" min="0" max="4" step="0.25" value="1"><output id="depth-gain">1×</output></label>
-      <label>Up / down <input id="vertical-sensitivity" aria-label="Up down movement sensitivity" type="range" min="0" max="4" step="0.25" value="1"><output id="vertical-gain">1×</output></label>
-      <label>View angle <input id="fp-fov" aria-label="First person field of view" type="range" min="40" max="110" step="1" value="62"><output id="fp-fov-out">62°</output></label>
-      <div id="head-status">head: loading</div><div id="body-status">body: loading</div>
-    </div>
   </div>
 </div>
-<dialog id="calibration" aria-labelledby="setup-title">
-  <h2 id="setup-title">Set up your seated view</h2>
-  <div id="setup-intro">
-    <p id="setup-loading" role="status" hidden></p>
-    <p>Get comfortable, keep your phone fixed, and leave your face and shoulders in view. Your legs and hips can stay behind the desk when seated.</p>
-    <label>How are you playing?<select id="setup-mode"><option value="seated">Seated (recommended)</option><option value="standing">Standing</option></select></label>
-    <p>First we save a steady centre; hold one hand up beside your face so the head's depth is matched to the hands. Then you can set how much a comfortable lean moves your view.</p>
-    <details><summary>Camera field of view</summary>
-      <label>Camera horizontal field of view (degrees)<br><input id="setup-fov" type="number" min="40" max="100" step="1" value="60" required></label>
-      <p>Keep 60 unless you know the field of view of your camera stream. Hands and head share it. This is separate from the game's view angle.</p>
-    </details></div>
-  <div id="setup-live" hidden><p id="setup-instruction"></p><canvas id="setup-camera" width="320" height="240" aria-label="Mirrored camera for calibration"></canvas><progress id="setup-progress" max="1" value="0"></progress><p id="setup-feedback" role="status"></p></div>
-  <div id="setup-complete" hidden><p id="setup-result"></p><p>Use Recenter if you change chairs or move the phone. SETUP is always available to try again.</p></div>
-  <div class="actions"><button id="setup-start">Begin calibration</button><button id="setup-next" hidden>Continue</button><button id="setup-finish" hidden>Start playing</button><button id="setup-retry" hidden>Try again</button><button id="setup-skip">Skip setup</button></div>
-</dialog>
 
-<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/" } }</script>
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js" } }</script>
 <script type="module">
 import * as THREE from "three";
-import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.20.0/dist/rapier.mjs";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js";
-import { Reflector } from "three/addons/objects/Reflector.js";
-// head / upper body / avatar / guided calibration, ported from origin/hand-rig-workflow
-import { HeadView } from "./head/HeadView.js";
-import { firstPersonRotation, gentleHeadTranslation } from "./head/pose.mjs";
-import { Calibration } from "./head/Calibration.js";
-import { BodyView } from "./body/BodyView.js";
-import { RiggedAvatar } from "./avatar/RiggedAvatar.js";
-import { createWorld } from "./world/World.js";   // the 3D map world around the home table
 
-const BUILD = 17;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 20;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
 // it; only the absolute depth scale does, so a wrong guess still gives one-for-one relative motion.
-let HFOV = (+Q.get("fov") || 60) * Math.PI / 180;   // one HFOV for hands AND head (the setup dialog can change it)
-const TABLE_Y = +Q.get("floor") || -0.28;   // metres below the camera; the table the objects rest on (?floor=-0.2 to raise it)
-const FLOOR_Y = +Q.get("ground") || -1.2;   // the real floor (decision D2: the avatar's torso needs room below the table)
-// Face / upper-body trackers and the avatar (?head=0, ?body=0, ?avatar=0 switch them off; hand-only runs keep their numbers)
-const HEAD_ON = Q.get("head") !== "0", BODY_ON = HEAD_ON && Q.get("body") !== "0", AVATAR_ON = HEAD_ON && Q.get("avatar") !== "0";
-const WORLD_ON = Q.get("world") !== "0"; let WORLD = null;   // the 120 x 120 m map world (docs/world/World.js); ?world=0 = the old room only (harness runs keep their numbers either way)
-const SETUP_FORCE = Q.get("setup") === "1";   // open the guided setup even on ?img= / ?video= runs (screenshots)
-const FP_FOV = +Q.get("fpfov") || 62;         // first-person vertical field of view, degrees (also the View angle slider)
+const HFOV = (+Q.get("fov") || 60) * Math.PI / 180;
+const FLOOR_Y = +Q.get("floor") || -0.28;   // metres below the camera; the table the objects rest on (?floor=-0.2 to raise it)
 const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
 // Lower presence/tracking thresholds = the tracker holds on longer through motion blur before giving up.
@@ -124,6 +61,7 @@ const DELEGATES = Q.get("delegate") === "CPU" ? ["CPU"] : ["GPU", "CPU"];   // ?
 const PAD = Q.get("pad") != null ? +Q.get("pad") : 0.3;   // border added around the frame when the hand is big, fraction of the longer side (?pad=0 to disable)
 const BIG_HAND = [0.22, 0.15];      // palm length (wrist to middle knuckle) / frame short side: pad above the first, unpad below the second (hysteresis)
 const DEBUG_OVERLAY = Q.get("debug") === "1";
+const PALMS_ONLY = Q.get("arms") !== "1";   // default: hands from the wrist only
 const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "arm";   // default: the owner's pre-rigged arms (arm_L/arm_R.glb); ?skin=hand.glb = the scan rig, ?skin=thing = the Thing rig, ?skin=0 = capsules
 const DS = Q.get("ds") != null ? +Q.get("ds") : 480;   // tracker input width after downscale (?ds=0 = the full camera frame). MediaPipe resizes to 192/224 anyway; 320 lost far hands
 const RVFC = Q.get("rvfc") !== "0";                        // start the tracker from requestVideoFrameCallback (?rvfc=0 = poll currentTime in rAF, the old way)
@@ -356,20 +294,9 @@ addEventListener("pointerdown", () => {           // iOS 13+: permission must be
 function level(a) {
   if (!tiltOn) return a;
   const c = Math.cos(pitch), sn = Math.sin(pitch), out = Float32Array.from(a);
-  for (let i = 0; i < a.length / 3; i++) { const y = a[3 * i + 1], z = a[3 * i + 2]; out[3 * i + 1] = c * y - sn * z; out[3 * i + 2] = sn * y + c * z; }
+  for (let i = 0; i < 21; i++) { const y = a[3 * i + 1], z = a[3 * i + 2]; out[3 * i + 1] = c * y - sn * z; out[3 * i + 2] = sn * y + c * z; }
   return out;
 }
-const level3 = p => Array.from(level(Float32Array.from(p)));                       // one point
-const camToGL3 = p => level3([p[0], -p[1], -p[2]]);                                 // camera frame (x right, y down, z away) -> true frame, one point
-const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-// --- pointing navigation (first-person view): point with the index finger and drag the world -------------------------
-// Index finger out (the other three folded) and pull the hand toward yourself: you move forward. Push it toward the
-// camera: you move back. Drag it across the picture: you turn. Only in the first-person view; the mirror view must
-// In the mirror view the player, camera and hands move together, so the hands stay exactly on the video while the room
-// moves around them. (Was a pinch; the owner found a pinch too hard for the tracker to see.)
-const NAV_MOVE = 4;                // metres travelled per metre of hand pull
-const NAV_TURN = 4;                // radians turned per metre of sideways drag
-const nav = { x: 0, y: 0, z: 0, yaw: 0 }, YAXIS = new THREE.Vector3(0, 1, 0);   // nav.y = the ground under the player (the world's terrain; 0 in the room)
 const HOLD_MS = 250;               // keep a hand alive this long after tracking drops (dead reckoning), then remove it
 const OCCL_HOLD = 1500;            // ...unless it vanished while touching the other hand: then it rides along with that hand this long
 
@@ -450,43 +377,29 @@ scene.background = new THREE.Color(0x1a1f2b); scene.fog = new THREE.Fog(0x1a1f2b
 // Two views of the same room. "first person": the camera is at YOUR eyes, behind and above your hand, looking
 // across the table at the opponent (phone plane = middle of the table, z = 0; you are at z < 0, they are at z > 0).
 // "mirror": the camera sits where the phone camera is and the render is mirrored, so it behaves like a mirror.
-const camera = new THREE.PerspectiveCamera(50, 1, 0.05, WORLD_ON ? 260 : 8);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 8);
 const worldGroup = new THREE.Group(); scene.add(worldGroup);   // everything that must mirror in the selfie view
 let frameW = 640, frameH = 480;   // camera frame size, set once the video is known
-const VIEWS = ["mirror", "first person", "third person"]; let view = 0;   // mirror = the room seen from the phone, mirrored like the video; third person = an observer beside the table (head + body + hands together)
-// head-driven first person (set per frame in the loop): eyeCamGL = the (gained) eye position in the true frame, headYaw/Pitch = gained look angles
-let eyeCamGL = null, headYaw = 0, headPitch = 0;
-const toPlayerV = (v, fp) => fp ? v.applyAxisAngle(YAXIS, nav.yaw).add(new THREE.Vector3(nav.x, nav.y, nav.z)) : v.applyAxisAngle(YAXIS, -nav.yaw).add(new THREE.Vector3(-nav.x, nav.y, nav.z));   // navigation transform: first person R(yaw)+T, mirror the mirrored one
+const VIEWS = ["first person", "mirror"]; let view = Q.get("img") || Q.get("video") ? 1 : 0;   // live camera: first person; test stills/clips: mirror   // mirror = the room seen from the phone, mirrored like the video
 $("view").onclick = () => { view = (view + 1) % VIEWS.length; $("view").textContent = "VIEW: " + VIEWS[view]; applyView(true); };
-if (Q.get("view")) view = Math.max(0, VIEWS.indexOf(Q.get("view").replace("_", " ")));   // ?view=mirror / first_person / third_person
-else if (!Q.get("img") && !Q.get("video")) view = 1;   // live camera: first person by default (head tracking drives it); test stills/clips stay in mirror view
-$("view").textContent = "VIEW: " + VIEWS[view];
 function applyView(force) {
   const w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio(), fp = VIEWS[view] === "first person";
   if (force || canvas.width !== (w * pr | 0) || canvas.height !== (h * pr | 0)) {
     renderer.setSize(w, h, false); camera.aspect = w / h;
     // mirror: match the video pane's object-fit:cover crop (a pane taller than the frame shows the full frame height, a wider pane the full width)
     const t = Math.tan(HFOV / 2);
-    camera.fov = fp ? +($("fp-fov")?.value || FP_FOV) : VIEWS[view] === "third person" ? 50 : 2 * Math.atan(w / h < frameW / frameH ? t * frameH / frameW : t / (w / h)) * 180 / Math.PI;
+    camera.fov = fp ? 62 : 2 * Math.atan(w / h < frameW / frameH ? t * frameH / frameW : t / (w / h)) * 180 / Math.PI;
     camera.updateProjectionMatrix();
   }
   const dbgCam = Q.get("cam")?.split(",").map(Number);   // ?cam=x,y,z,tx,ty,tz: fixed debug camera (renders checks of the hand mesh)
   if (dbgCam) { camera.position.set(dbgCam[0], dbgCam[1], dbgCam[2]); camera.lookAt(dbgCam[3], dbgCam[4], dbgCam[5]); worldGroup.scale.x = 1; }
-  else if (VIEWS[view] === "third person") {   // the observer beside the player, wherever navigation has taken them (kept above the terrain)
-    const P = new THREE.Vector3(nav.x, nav.y, nav.z); camera.position.copy(new THREE.Vector3(-1.1, 0.35, 1.0).applyAxisAngle(YAXIS, nav.yaw).add(P));
-    if (WORLD) camera.position.y = Math.max(camera.position.y, WORLD.heightAt(camera.position.x, camera.position.z) + 0.4);
-    camera.lookAt(new THREE.Vector3(0, -0.25, -0.5).applyAxisAngle(YAXIS, nav.yaw).add(P)); worldGroup.scale.x = 1;
-  }   // an observer on the phone's side, looking back at the player
-  else if (fp && eyeCamGL) {   // the camera at YOUR eyes (face tracker, decision D1 depth scale, movement gains) looking where your head looks, plus navigation
-    camera.position.copy(toPlayerV(new THREE.Vector3(...eyeCamGL), true)); const [rx, ry, rz] = firstPersonRotation(headYaw, headPitch, nav.yaw); camera.rotation.set(rx, ry, rz, "YXZ"); worldGroup.scale.x = 1;
-  }
-  else if (fp) { const fx = Math.sin(nav.yaw), fz = Math.cos(nav.yaw); camera.position.set(nav.x - 0.85 * fx, nav.y + 0.12, nav.z - 0.85 * fz); camera.lookAt(nav.x + 0.5 * fx, nav.y - 0.12, nav.z + 0.5 * fz); worldGroup.scale.x = 1; }   // no face tracker: the old fixed eye
+  else if (fp) { camera.position.set(0, 0.12, -0.85); camera.lookAt(0, -0.12, 0.5); worldGroup.scale.x = 1; }
   else {   // looks where the phone looks, from where navigation has taken the player (the hands move with the player, so the video overlay stays exact)
-    const cp = Math.cos(pitch); camera.position.set(nav.x, nav.y, nav.z); camera.lookAt(nav.x - cp * Math.sin(nav.yaw), nav.y + Math.sin(pitch), nav.z - cp * Math.cos(nav.yaw)); worldGroup.scale.x = -1;
+    camera.position.set(0, 0, 0); camera.lookAt(0, Math.sin(pitch), -Math.cos(pitch)); worldGroup.scale.x = -1;
   }
 }
-const hemi = new THREE.HemisphereLight(0xfff8ee, 0x3a4560, 1.0); scene.add(hemi);
-const key = new THREE.DirectionalLight(0xffffff, 1.8); key.position.set(0.5, 1.8, -0.3); key.target.position.set(0, TABLE_Y, 0); scene.add(key, key.target);
+scene.add(new THREE.HemisphereLight(0xfff8ee, 0x3a4560, 1.0));
+const key = new THREE.DirectionalLight(0xffffff, 1.8); key.position.set(0.5, 1.8, -0.3); key.target.position.set(0, FLOOR_Y, 0); scene.add(key, key.target);
 key.castShadow = true; key.shadow.mapSize.set(512, 512); key.shadow.bias = -0.0005;
 Object.assign(key.shadow.camera, { left: -1.2, right: 1.2, top: 1.2, bottom: -1.2, near: 0.1, far: 5 });
 const checker = (() => {   // procedural floor texture, no external file needed
@@ -496,56 +409,11 @@ const checker = (() => {   // procedural floor texture, no external file needed
 })();
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), new THREE.MeshStandardMaterial({ map: checker, roughness: 0.95 }));
 floor.rotation.x = -Math.PI / 2; floor.position.set(0, FLOOR_Y, 0); floor.receiveShadow = true; scene.add(floor);
-const roomWalls = [];
-for (const z of [-3.2, 3.2]) {   // a wall behind each player (hidden when the map world is on)
+for (const z of [-3.2, 3.2]) {   // a wall behind each player
   const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 5), new THREE.MeshStandardMaterial({ color: 0x252c3c, roughness: 1, side: THREE.DoubleSide }));
-  wall.position.set(0, FLOOR_Y + 2.5, z); wall.receiveShadow = true; scene.add(wall); roomWalls.push(wall);
+  wall.position.set(0, FLOOR_Y + 2.5, z); wall.receiveShadow = true; scene.add(wall);
 }
-// the table (decision D2): its top is at TABLE_Y, where the props rest; z -0.5..0.2 so the phone sits on its far edge and a seated torso fits behind it
-const TABLE = { w: 1.4, d: 0.7, z: -0.15 };
-const table = new THREE.Mesh(new THREE.BoxGeometry(TABLE.w, 0.04, TABLE.d), new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.8 }));
-table.position.set(0, TABLE_Y - 0.02, TABLE.z); table.receiveShadow = table.castShadow = true; scene.add(table);
-for (const x of [-0.65, 0.65]) for (const z of [TABLE.z - 0.3, TABLE.z + 0.3]) {
-  const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, TABLE_Y - FLOOR_Y - 0.04, 0.05), new THREE.MeshStandardMaterial({ color: 0x3a2e22, roughness: 0.7 }));
-  leg.position.set(x, (TABLE_Y - 0.04 + FLOOR_Y) / 2, z); leg.castShadow = true; scene.add(leg);
-}
-// a real mirror on the opponent's side for the first-person view (Reflector renders the scene again: 512², no MSAA, shadow map reused)
-const mirror = new Reflector(new THREE.PlaneGeometry(1.3, 1.6), { color: 0xc5cdd5, textureWidth: 512, textureHeight: 512, clipBias: 0.003, multisample: 0 });
-mirror.position.set(0, -0.1, 1.4); mirror.rotation.y = Math.PI; mirror.visible = false; scene.add(mirror);
-const mirrorFrame = new THREE.Group(); mirrorFrame.visible = false; scene.add(mirrorFrame);
-for (const [x, y, w, h] of [[-0.665, -0.1, 0.03, 1.66], [0.665, -0.1, 0.03, 1.66], [0, 0.715, 1.3, 0.03], [0, -0.915, 1.3, 0.03]]) {
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.035), new THREE.MeshStandardMaterial({ color: 0xb5a791, metalness: 0.65, roughness: 0.3 })); bar.position.set(x, y, 1.41); mirrorFrame.add(bar);
-}
-let mirrorOn = HEAD_ON && Q.get("mirror") !== "0";   // ?mirror=0 or the frame budget (decision D4) switch it off
 
-// --- physics (Rapier): hands are kinematic colliders that push dynamic props around ----------------
-await RAPIER.init();
-const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
-world.createCollider(RAPIER.ColliderDesc.cuboid(3, 0.05, 3).setTranslation(0, FLOOR_Y - 0.05, 0).setFriction(0.8));   // the floor
-world.createCollider(RAPIER.ColliderDesc.cuboid(TABLE.w / 2, 0.02, TABLE.d / 2).setTranslation(0, TABLE_Y - 0.02, TABLE.z).setFriction(0.8));   // the table top
-const PROPS = [
-  { ball: 0.045, color: 0xff6b6b, x: -0.20, z: -0.30 }, { ball: 0.040, color: 0xffd166, x: 0.06, z: -0.18 }, { ball: 0.050, color: 0x4dabf7, x: 0.26, z: -0.34 },
-  { box: 0.070, color: 0x69db7c, x: -0.05, z: -0.40 }, { box: 0.060, color: 0xb197fc, x: 0.18, z: -0.12 }, { box: 0.090, color: 0xffa94d, x: -0.30, z: -0.10 },
-];
-const props = PROPS.map(p => {
-  const half = (p.ball ?? p.box) / (p.ball ? 1 : 2);
-  const mesh = new THREE.Mesh(p.ball ? new THREE.SphereGeometry(p.ball, 24, 16) : new THREE.BoxGeometry(p.box, p.box, p.box), new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.5 }));
-  mesh.castShadow = mesh.receiveShadow = true; worldGroup.add(mesh);
-  const home = { x: p.x, y: TABLE_Y + half + 0.02, z: p.z };
-  const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(home.x, home.y, home.z).setAngularDamping(0.5));
-  world.createCollider((p.ball ? RAPIER.ColliderDesc.ball(p.ball) : RAPIER.ColliderDesc.cuboid(half, half, half)).setRestitution(0.4).setFriction(0.7), body);
-  return { mesh, body, home };
-});
-function resetProps() { for (const p of props) { p.body.setTranslation(p.home, true); p.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true); p.body.setLinvel({ x: 0, y: 0, z: 0 }, true); p.body.setAngvel({ x: 0, y: 0, z: 0 }, true); } }
-$("reset").onclick = () => { resetProps(); nav.x = nav.z = nav.yaw = 0; };
-// --- the 3D map world (build 17): terrain heightfield, loop road, town, park, river, landmarks around the home table ---
-if (WORLD_ON) {
-  WORLD = createWorld({ RAPIER, physics: world, scene, key, hemi, floorY: FLOOR_Y, minimap: $("minimap"), Q });
-  floor.visible = false; for (const w of roomWalls) w.visible = false;   // the terrain replaces the room's floor and walls; the table stays as the home spot
-  $("minimap").hidden = false;
-} else $("map-open").hidden = true;
-$("map-open").onclick = () => { $("minimap").hidden = !$("minimap").hidden; };
-const FAR = { x: 0, y: 10, z: 0 };   // parking spot for the colliders of a hand that is not in view
 
 // --- skinned hand mesh driven by the 21 tracked points -----------------------------------------------
 // The GLB (docs/hand.glb, built from the owner's hand scan hand1.OBJ) has one bone per skeleton edge, named
@@ -693,7 +561,10 @@ function makeRigSkin(variant, color) {
     const handM = rest.hand ? bones[rest.hand.i].matrix : M;
     frameDir(pts[0], dirW, (rest.hand ? rest.hand.L : L0) * sc, ratio.palm, _l, _n, handM); if (rest.hand) bones[rest.hand.i].matrixWorldNeedsUpdate = true;
     for (const i of riders) { bones[i].matrix.copy(handM); bones[i].matrixWorldNeedsUpdate = true; }
-    if (rest.forearm) {   // straight forearm behind the wrist (an elbow will come from body tracking)
+    if (rest.forearm && PALMS_ONLY) {   // hands only: the forearm and upper arm collapse into the wrist (owner: "just palms"; ?arms=1 shows them)
+      frameDir(pts[0], dirW, 1e-4, 1e-4, _n, _l, bones[rest.forearm.i].matrix); bones[rest.forearm.i].matrixWorldNeedsUpdate = true;
+      if (rest.arm) { frameDir(pts[0], dirW, 1e-4, 1e-4, _n, _l, bones[rest.arm.i].matrix); bones[rest.arm.i].matrixWorldNeedsUpdate = true; }
+    } else if (rest.forearm) {   // straight forearm behind the wrist
       o.copy(pts[0]).addScaledVector(dirW, -rest.forearm.L * sc); frameDir(o, dirW, rest.forearm.L * sc, ratio.palm, _n, _l, bones[rest.forearm.i].matrix); bones[rest.forearm.i].matrixWorldNeedsUpdate = true;
       if (rest.arm) { o.addScaledVector(dirW, -rest.arm.L * sc); frameDir(o, dirW, rest.arm.L * sc, ratio.palm, _n, _l, bones[rest.arm.i].matrix); bones[rest.arm.i].matrixWorldNeedsUpdate = true; }
     }
@@ -747,10 +618,6 @@ function makeHand(color = 0xdead8f) {
     mesh.position.copy(a).addScaledVector(d, 0.5); mesh.scale.set(r, L, r); mesh.quaternion.setFromUnitVectors(UP, d.normalize());
   };
   // colliders: one ball per joint + one for the palm, kinematic (driven by tracking, push everything else)
-  const bodies = Array.from({ length: 22 }, (_, i) => {
-    const b = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(FAR.x, FAR.y, FAR.z));
-    world.createCollider(RAPIER.ColliderDesc.ball(i < 21 ? Math.max(JOINT_R[i], 0.01) : 0.035), b); return b;
-  });
   const hand = {
     group,
     draw(pts) {
@@ -774,11 +641,8 @@ function makeHand(color = 0xdead8f) {
       sp.needsUpdate = true;
       const dp = dots.geometry.attributes.position; pts.forEach((p, i) => dp.setXYZ(i, p.x, p.y, p.z)); dp.needsUpdate = true;
       group.visible = true;
-      pts.forEach((p, i) => bodies[i].setNextKinematicTranslation(p));
-      bodies[21].setNextKinematicTranslation(palmCentre(pts));
     },
-    hide() { group.visible = false; for (const b of bodies) b.setNextKinematicTranslation(FAR); },
-    get right() { return chir * CHIR_RIGHT >= 0; },   // this slot currently shows a right hand (geometry-based, smoothed)
+    hide() { group.visible = false; },
     addHi(hi) { hiR = makeSkinFrom(hi, hi.R, 0xd9a58a); hiL = makeSkinFrom(hi, hi.L, 0xd9a58a); group.add(hiR.mesh, hiL.mesh); },
   };
   hands.push(hand); return hand;
@@ -799,7 +663,7 @@ function skeleton(pts, color, width) {   // pts: [{x, y}] in normalised image co
 // GL point (true coords) -> normalised image coords, the inverse of toGL/locate
 function toImage(a) {
   const k = 2 * Math.tan(HFOV / 2), c = Math.cos(-pitch), sn = Math.sin(-pitch);   // back into the camera frame first
-  return Array.from({ length: a.length / 3 }, (_, i) => {
+  return Array.from({ length: 21 }, (_, i) => {
     const y = tiltOn ? c * a[3*i+1] - sn * a[3*i+2] : a[3*i+1], z = -(tiltOn ? sn * a[3*i+1] + c * a[3*i+2] : a[3*i+2]);
     return { x: 0.5 + a[3*i] / z / k, y: 0.5 + (-y) / z / (k * ovH / ovW) };
   });
@@ -816,24 +680,6 @@ function renderOverlay(displayed) {   // displayed: flat GL arrays of the hands 
     });
   }
   if (DEBUG_OVERLAY) for (const a of displayed) skeleton(toImage(a), "#4de3ff", Math.max(1.5, ovW / 400));   // cyan = 3D hand reprojected; ?debug=1 (the owner wants one overlay)
-}
-
-// --- game ---------------------------------------------------------------------------------------
-const game = { phase: "idle", t0: 0, you: null, cpu: null, score: [0, 0] };
-$("play").onclick = () => { if (game.phase === "idle") { game.phase = "count"; game.t0 = performance.now(); } };
-function updateGame(now, move) {
-  if (game.phase === "count" && now - game.t0 >= 3000) {
-    game.you = move; game.cpu = Q.get("cpu") in BEATS ? Q.get("cpu") : Object.keys(BEATS)[Math.floor(Math.random() * 3)]; game.phase = "result"; game.t0 = now;   // ?cpu=ROCK forces the computer move (tests)
-    if (game.you && BEATS[game.you] === game.cpu) game.score[0]++;
-    else if (game.you && BEATS[game.cpu] === game.you) game.score[1]++;
-  } else if (game.phase === "result" && now - game.t0 >= 3000) game.phase = "idle";
-  $("play").disabled = game.phase !== "idle";
-  $("score").textContent = `SCORE you ${game.score[0]} : ${game.score[1]} cpu`;
-  if (game.phase === "count") $("game").textContent = `SHOOT IN ${3 - Math.floor((now - game.t0) / 1000)}`;
-  else if (game.phase === "result") {
-    const v = !game.you ? "NO MOVE SEEN" : game.you === game.cpu ? "DRAW" : BEATS[game.you] === game.cpu ? "YOU WIN" : "CPU WINS";
-    $("game").textContent = `YOU ${game.you ?? "?"} vs CPU ${game.cpu} - ${v}`;
-  } else $("game").textContent = "Tap PLAY for a round";
 }
 
 // --- main ---------------------------------------------------------------------------------------
@@ -858,16 +704,7 @@ async function main() {
 
   frameW = video.videoWidth || video.naturalWidth || frameW; frameH = video.videoHeight || video.naturalHeight || frameH;
   const tracker = await makeTracker();
-  // face + upper-body trackers (file workers under docs/head, docs/body) and the skinned avatar (decision D3: anatomical
-  // rig, wrists handed to the hand tracker). They load alongside the hand mesh; the page never waits on them to play.
-  const workerUrl = (dir, key) => new URL(`./${dir}/worker.mjs` + (Q.get(key) === "CPU" ? "?delegate=CPU" : ""), location.href);   // ?hdel=CPU / ?bdel=CPU: CPU delegate for the face / body worker
-  const head = HEAD_ON ? new HeadView({ hfov: HFOV, interval: +Q.get("hint") || 50, workerUrl: workerUrl("head", "hdel") }) : null;   // face frames at most every 50 ms (?hint=33 costs the hands 20-30 % here, 66 costs nothing)
-  const body = head && BODY_ON ? new BodyView(head, { mode: $("body-mode").value, workerUrl: workerUrl("body", "bdel") }) : null;
-  const avatarRoot = new THREE.Group(); worldGroup.add(avatarRoot);   // turned to face +z (the phone) like the player; mirrored with the hands in the mirror view
-  const avatar = head && AVATAR_ON ? new RiggedAvatar(avatarRoot, null, null) : null; avatar?.ready.catch(e => console.warn("avatar unavailable:", e));
-  const headMarker = new THREE.Mesh(new THREE.SphereGeometry(0.012, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff7878, depthTest: false })); headMarker.renderOrder = 3; headMarker.visible = false; worldGroup.add(headMarker);   // the tracked eye point (mirror view / ?debug=1)
   SKIN = await skinPromise; if (SKIN) $("status").textContent = "Preparing the hand…";   // shader compile below can take seconds on some GPUs
-  if (avatar) await Promise.race([avatar.ready.catch(() => null), new Promise(r => setTimeout(r, 8000))]);   // compile its shader behind the loading text too, but never wait long
 
   // one slot per hand, keyed by MediaPipe's handedness label
   const slots = { Right: null, Left: null };
@@ -877,22 +714,8 @@ async function main() {
     const warm = SKIN.R.bind.map(p => p.clone().multiplyScalar(0.02).add(new THREE.Vector3(0, 0, -0.4)));
     for (const s of Object.values(slots)) { s.hand.draw(warm); s.hand.draw(warm.map(p => new THREE.Vector3(-p.x, p.y, p.z))); }
     renderer.compile(scene, camera); for (const s of Object.values(slots)) s.hand.hide();
-  } else if (avatar?.loaded) renderer.compile(scene, camera);
+  }
   $("status").remove();
-  // --- head / body settings UI and the guided calibration (DOM ids as on the branch, head/Calibration.js) ---
-  const gains = () => [+$("lateral-sensitivity").value, +$("depth-sensitivity").value, +$("vertical-sensitivity").value];
-  for (const [input, output, unit] of [["head-sensitivity", "gain", "×"], ["lateral-sensitivity", "lateral-gain", "×"], ["depth-sensitivity", "depth-gain", "×"], ["vertical-sensitivity", "vertical-gain", "×"], ["fp-fov", "fp-fov-out", "°"]])
-    $(input).oninput = () => { $(output).textContent = $(input).value + unit; if (input === "fp-fov") applyView(true); };
-  $("settings-open").onclick = () => { $("settings").hidden = !$("settings").hidden; };
-  $("head-mode").onchange = () => { if (head) { head.mode = $("head-mode").value; head.recenter(); } };
-  $("body-mode").onchange = () => body?.setMode($("body-mode").value);
-  $("recenter").onclick = () => { head?.recenter(); body?.recenter(); };
-  $("calibrate-body").onclick = () => body?.recenter();
-  const liveHandDepth = () => { const d = Object.values(slots).filter(s => s.filt.x && performance.now() - s.lastSeen < hold).map(s => s.depth); return d.length ? Math.min(...d) : null; };   // nearest live hand, metres (decision D1)
-  const setup = new Calibration(head, body, { autoOpen: false, video, handDepth: liveHandDepth, onHfov: f => { HFOV = f; applyView(true); } });
-  if (!head) { $("setup-open").disabled = true; $("head-status").textContent = "head: off (?head=0)"; }
-  if (head && (SETUP_FORCE || (!imgSrc && !vidSrc))) setup.open();   // live camera: guide the player once; test runs (?img= / ?video=) never get a modal unless ?setup=1
-  let headGL = null, headSeen = false, budget = 0, slowSeconds = 0, auxReadyAt = 0;   // budget (decision D4): 1 = body off, 2 = mirror off, 3 = face at 1/3 rate
   if (SKIN) loadSkin(SKIN_URL.replace(/\.glb$/, "_hi.glb")).then(hi => { SKIN_HI = hi; for (const h of hands) h.addHi(hi); }).catch(() => {});   // high-detail mesh, if this export has one
   const imgCentre = lm => PALM.reduce((c, i) => [c[0] + lm[i].x / PALM.length, c[1] + lm[i].y / PALM.length], [0, 0]);
   const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -923,7 +746,7 @@ async function main() {
     const pr = toImage(best.a); dbg.lagSum += pr.reduce((t, q, i) => t + Math.hypot(q.x - lm[i].x, q.y - lm[i].y), 0) / 21; dbg.lagN++;
   }
   let framePending = false, lastT = -1, ts = 0, inflight = false, move = null, nHands = 0, lastRecv = 0, hold = HOLD_MS, bigHand = false, bigUntil = 0;
-  const dbg = window.dbg = { lm: () => ovHands, slots, get frameW() { return frameW; }, get frameH() { return frameH; }, frames: 0, two: 0, held: 0, labelFlips: 0, maxJump: 0, bigJumps: 0, spikes: 0, snaps: 0, handovers: 0, dispJumps: 0, reprojN: 0, reprojSum: 0, lagSum: 0, lagN: 0, depthClamps: 0, palmClamps: 0, fingerClamps: 0, pinches: 0, nav, pitch: 0, tiltOn: false, moves: { ROCK: 0, PAPER: 0, SCISSORS: 0, none: 0 }, fitSum: 0, padded: 0, head: null, get headView() { return head; }, get bodyView() { return body; }, get avatar() { return avatar; }, get setup() { return setup; }, get world() { return WORLD; }, get budget() { return budget; }, tm: { pre: 0, prep: 0, worker: 0, lat: 0, n: 0, render: 0, loop: 0, draw: 0, loops: 0, leadSum: 0, leadN: 0, rvfc: 0 } };   // test metrics + timing (ms sums; pre = createImageBitmap on the main thread, prep = the worker's padding copy, lat = capture to result)
+  const dbg = window.dbg = { lm: () => ovHands, slots, get frameW() { return frameW; }, get frameH() { return frameH; }, frames: 0, two: 0, held: 0, labelFlips: 0, maxJump: 0, bigJumps: 0, spikes: 0, snaps: 0, handovers: 0, dispJumps: 0, reprojN: 0, reprojSum: 0, lagSum: 0, lagN: 0, depthClamps: 0, palmClamps: 0, fingerClamps: 0, pinches: 0, pitch: 0, tiltOn: false, moves: { ROCK: 0, PAPER: 0, SCISSORS: 0, none: 0 }, fitSum: 0, padded: 0, tm: { pre: 0, prep: 0, worker: 0, lat: 0, n: 0, render: 0, loop: 0, draw: 0, loops: 0, leadSum: 0, leadN: 0, rvfc: 0 } };   // test metrics + timing (ms sums; pre = createImageBitmap on the main thread, prep = the worker's padding copy, lat = capture to result)
   let stat = { ms: 0, lat: 0, n: 0, t: performance.now() }, prev = performance.now();
 
   const pump = async () => {
@@ -935,9 +758,6 @@ async function main() {
     const r = await tracker.detect(video, ts, pad);
     inflight = false;
     const recv = performance.now();
-    // cross-tracker token: the face worker takes a frame only once the hand result is back (>= 33 ms apart), the body
-    // worker only after two face results and never while the face is busy (BodyView.wantsFrame)
-    if (body?.wantsFrame(recv)) body.capture(video, recv); else head?.capture(video, recv);
     dbg.tm.pre += r.pre || 0; dbg.tm.prep += r.prep || 0; dbg.tm.worker += r.ms; dbg.tm.lat += recv - cap; dbg.tm.n++;
     hold = Math.max(HOLD_MS, 2.5 * (recv - lastRecv)); lastRecv = recv;   // slow devices get a longer hold so hands don't flicker between results
     stat.ms += r.ms; stat.lat += recv - cap; stat.n++; nHands = r.hands.length; dbg.frames++; if (nHands === 2) dbg.two++;
@@ -998,7 +818,7 @@ async function main() {
       shown[s.key] = camToGL(MODES[mode] === "predict" ? s.filt.predict(lead) : MODES[mode] === "smooth" ? s.filt.x : s.raw);
       if (s.det && ovW) { const pr = toImage(shown[s.key]); dbg.reprojSum += pr.reduce((t, q, i) => t + Math.hypot(q.x - s.det.lm[i].x, q.y - s.det.lm[i].y), 0) / 21; dbg.reprojN++; }
       s.hist.push({ t: now, a: Float32Array.from(shown[s.key]) }); if (s.hist.length > 12) s.hist.shift();
-      move ??= moveFromFingers(s.ext); hud.push(`${s.name[0]} ${s.depth.toFixed(2)}m ${s.ext.filter(Boolean).length}up fit ${(s.fit * 100).toFixed(1)}%${s.pinch ? " pointing" : ""}`);
+      move ??= moveFromFingers(s.ext); hud.push(`${s.name[0]} ${s.depth.toFixed(2)}m ${s.ext.filter(Boolean).length}up fit ${(s.fit * 100).toFixed(1)}%`);
     }
     // handshake rule: a hand that vanished while touching the other hand keeps its pose and rides along with that hand
     for (const s of [slots.Right, slots.Left]) {
@@ -1008,89 +828,26 @@ async function main() {
       shown[s.key] = s.gl.map((v, i) => v + delta.getComponent(i % 3));
       hud.push(`${s.name[0]} held`); dbg.held++;
     }
-    const fp = VIEWS[view] === "first person", tp = fp || VIEWS[view] === "third person"; let navBy = null;   // tp: the unmirrored player transform (first and third person)
-    for (const s of [slots.Right, slots.Left]) {   // pinch navigation: one pinching hand steers
-      if (!shown[s.key]) { s.pinch = false; continue; }
-      const p = shape(shown[s.key]), pointing = s.ext[0] && !s.ext[1] && !s.ext[2] && !s.ext[3];   // index out, the rest folded
-      if (!s.pinch && pointing) { s.pinch = true; s.pinchStart = { palm: palmCentre(p), x: nav.x, z: nav.z, yaw: nav.yaw }; dbg.pinches++; }
-      else if (s.pinch && !pointing) s.pinch = false;
-      if (s.pinch && !navBy) {
-        const d = palmCentre(p).sub(s.pinchStart.palm), m = -d.z * NAV_MOVE;   // pull toward you (z more negative) = forward
-        nav.yaw = s.pinchStart.yaw - d.x * NAV_TURN; const nx = s.pinchStart.x + Math.sin(nav.yaw) * m, nz = s.pinchStart.z + Math.cos(nav.yaw) * m;
-        [nav.x, nav.z] = WORLD ? WORLD.clampMove(nav.x, nav.z, nx, nz) : [nx, nz]; navBy = s;   // the world: never into a building, a tree or deep water
-      }
-    }
-    if (Q.get("nav") && !dbg.navSet) { [nav.x, nav.z, nav.yaw] = Q.get("nav").split(",").map(Number); dbg.navSet = true; }   // ?nav=x,z,yaw: preset for render checks
-    if (WORLD) nav.y = WORLD.heightAt(nav.x, nav.z);   // the player stands on the terrain
-    // --- head: camera frame -> the same true frame as the hands (camToGL3 = (x, -y, -z) + level()), then the same navigation transform
-    const H = head ? head.update(now, dt) : null;
-    headSeen = !!H?.seen; headGL = H?.pos ? camToGL3(H.pos) : null;   // pos eases back to the saved centre 650 ms after the face is lost
-    if (H?.pos) {   // first-person eye = centre + gained displacement (sliders / guided setup); look angles are ViewPose's gained, dead-zoned ones
-      if (head.pose.sensitivity !== +$("head-sensitivity").value) head.pose.sensitivity = +$("head-sensitivity").value;
-      const n = head.spatial.neutral, sc = H.scale, g = gentleHeadTranslation(H.offset, 0.45, ...gains());
-      eyeCamGL = camToGL3([n[0] * sc + g[0], n[1] * sc + g[1], n[2] * sc + g[2]]); headYaw = H.yaw; headPitch = H.pitch;
-    } else eyeCamGL = null;
-    if (headGL && headSeen && H.latest && ovW) {   // head reproj: the eye point projected back into the picture vs the outer-eye midpoint the face mesh saw (like the hand reproj)
-      const pr = toImage(Float32Array.from(headGL))[0]; dbg.head = { x: pr.x, y: pr.y, reproj: Math.hypot(pr.x - H.latest.centerX, pr.y - H.latest.centerY), depth: H.pos[2], yaw: H.physicalYaw, pitch: H.physicalPitch, scale: H.scale };
-    }
-    headMarker.visible = !!headGL && headSeen && !fp && (VIEWS[view] === "mirror" || DEBUG_OVERLAY);
-    if (headMarker.visible) headMarker.position.copy(toPlayerV(new THREE.Vector3(...headGL), false));
-    // --- upper body: joints come eye-relative in the branch player frame (x = the user's right, y up, z toward the back) -> true frame
-    const J = body ? body.update(now, dt, headSeen, H?.pos ? [-H.pos[0], -H.pos[1], H.pos[2]] : [0, 0, 0]) : null;
-    const jointsGL = {}; if (J && headGL) for (const [k, j] of Object.entries(J)) jointsGL[k] = j ? add3(headGL, level3([-j[0], j[1], -j[2]])) : null;
-    if (avatar?.loaded && headGL) {
-      const eyeGL = fp && eyeCamGL ? eyeCamGL : headGL;   // in first person the avatar's eyes sit on the camera (its head is hidden for that camera only)
-      const toA = p => [-p[0], p[1], -p[2]];               // true frame -> avatar frame (the root is turned pi about y)
-      const rel = {}; for (const [k, p] of Object.entries(jointsGL)) rel[k] = p ? toA(sub3(p, headGL)) : null;
-      // wrist hand-off (decision D3): a live hand's landmark 0 is the metric, picture-exact wrist; the pose elbow stays the bend guide
-      for (const s of [slots.Right, slots.Left]) if (shown[s.key]) rel[s.hand.right ? "rightWrist" : "leftWrist"] = toA(sub3([shown[s.key][0], shown[s.key][1], shown[s.key][2]], eyeGL));
-      avatarRoot.position.set(tp ? nav.x : -nav.x, nav.y, nav.z); avatarRoot.rotation.y = tp ? Math.PI + nav.yaw : Math.PI - nav.yaw;   // the same navigation transform as the hands
-      avatar.playerCamera = fp ? camera : null;
-      avatar.update(new THREE.Vector3(...toA(eyeGL)), H, Object.keys(rel).length ? rel : null, true);   // torso always shown (arms hang, or reach the hands, when the body tracker is off)
-      avatar.object.visible = true;
-    } else if (avatar?.loaded) avatar.object.visible = false;
-    mirror.visible = mirrorFrame.visible = fp && mirrorOn && !!eyeCamGL;
-    if (WORLD) { scene.fog.near = WORLD.FOG[0]; scene.fog.far = WORLD.FOG[1]; } else if (mirror.visible) { scene.fog.near = 3; scene.fog.far = 9; } else { scene.fog.near = 1.2; scene.fog.far = 3.5; }   // the reflected avatar is ~5 m from the reflection camera: keep it out of the room fog
     for (const s of [slots.Right, slots.Left]) {
       if (shown[s.key]) {
         const pts = shape(shown[s.key]);
-        if (tp) for (const q of pts) { q.applyAxisAngle(YAXIS, nav.yaw); q.x += nav.x; q.y += nav.y; q.z += nav.z; }   // the hands travel with you
-        else for (const q of pts) { q.applyAxisAngle(YAXIS, -nav.yaw); q.x -= nav.x; q.y += nav.y; q.z += nav.z; }     // mirrored render: the same move, mirrored in x
         const tD = performance.now(); s.hand.draw(pts); dbg.tm.draw += performance.now() - tD; displayed.push(shown[s.key]);
         const pc = palmFlat(shown[s.key]); if (s.lastPalm && pc.distanceTo(s.lastPalm) > 0.1) dbg.dispJumps++; s.lastPalm = pc;   // what the player actually sees jump
       } else { s.hand.hide(); s.lastPalm = null; }
     }
     renderOverlay(displayed);
-    world.timestep = dt; world.step();
-    for (const p of props) { p.mesh.position.copy(p.body.translation()); p.mesh.quaternion.copy(p.body.rotation()); }
     if (now - stat.t > 1000) {
-      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | ${SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"} | nav ${Math.hypot(nav.x, nav.z).toFixed(1)}m ${(nav.yaw * 180 / Math.PI).toFixed(0)}° (point+drag) | build ${BUILD}${WORLD ? ` | world ${(WORLD.tris / 1000).toFixed(0)}k tri, render ${(dbg.tm.render / Math.max(1, dbg.tm.loops)).toFixed(1)} ms` : ""}${head ? `\n${head.status(now)}${dbg.head && headSeen ? ` ${dbg.head.depth.toFixed(2)}m yaw ${(dbg.head.yaw * 180 / Math.PI).toFixed(0)}° pitch ${(dbg.head.pitch * 180 / Math.PI).toFixed(0)}° reproj ${(dbg.head.reproj * 100).toFixed(2)}%` : ""} | ${body ? body.status(now) : "body: off"} | ${avatar?.loaded ? "avatar" : "no avatar"}${mirror.visible ? " | mirror" : ""}${budget ? ` | budget ${budget}` : ""}` : ""}`;
-      // frame budget (decision D4): three consecutive seconds under 20 hand-tracker fps shed one stage: body off -> mirror off -> face at 1/3 rate
-      const auxReady = head?.ready && (!body || body.ready || body.failed || !body.enabled);   // do not count the seconds while the extra models are still loading (+4 s of settling)
-      if (auxReady && !auxReadyAt) auxReadyAt = now;
-      slowSeconds = auxReadyAt && now - auxReadyAt > 4000 && stat.n < 20 && stat.n > 0 ? slowSeconds + 1 : 0;
-      if (head && slowSeconds >= 3 && budget < 3) {
-        budget++; slowSeconds = 0;
-        if (budget === 1 && body) { body.setMode("off"); $("body-mode").value = "off"; } else if (budget === 1) budget++;
-        if (budget === 2 && mirrorOn) mirrorOn = false; else if (budget === 2) budget++;
-        if (budget === 3) head.interval = 100;
-      }
-      if (head) $("head-status").textContent = head.status(now) + (budget ? ` | budget ${budget}` : "");
-      $("body-status").textContent = body ? body.status(now) : "body: off";
+      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | ${SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"} | build ${BUILD}`;
       trackerFps = stat.n; stat = { ms: 0, lat: 0, n: 0, t: now }; dbg.pitch = pitch; dbg.tiltOn = tiltOn;
     }
     $("hand").textContent = "HANDS: " + (hud.join("  |  ") || "-");
     $("move").textContent = "MOVE: " + (move ?? "?"); $("move").style.color = move ? "#78ff78" : "#ffc850";
-    updateGame(now, move);
-    setup.update(now);
-    applyView(false); if (WORLD) { WORLD.update(now, nav, camera); WORLD.fixCamera(camera); }   // sun + shadow camera follow the player, sky follows the camera, mini-map
-    if (mirror.visible) { renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true; } else renderer.shadowMap.autoUpdate = true;   // the reflection pass reuses this frame's shadow map
-    const tR = performance.now(); renderer.render(scene, camera); const tE = performance.now(); dbg.tm.render += tE - tR; dbg.tm.loop += tE - tLoop0; dbg.tm.loops++;
+    applyView(false); const tR = performance.now(); renderer.render(scene, camera); const tE = performance.now(); dbg.tm.render += tE - tR; dbg.tm.loop += tE - tLoop0; dbg.tm.loops++;
     requestAnimationFrame(loop);
   };
   loop();
 }
-main().catch(e => { console.error(e); const s = $("status"); if (s) s.textContent = "Error: " + e.message; else $("game").textContent = "Error: " + e.message; });
+main().catch(e => { console.error(e); const s = $("status"); if (s) s.textContent = "Error: " + e.message; else $("hand").textContent = "Error: " + e.message; });
 </script>
 </body>
 </html>
