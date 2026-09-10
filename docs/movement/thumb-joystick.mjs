@@ -4,15 +4,12 @@ export function measureThumb(image,world,aspect=4/3){
  const d=(a,b)=>Math.hypot(world[a].x-world[b].x,world[a].y-world[b].y,world[a].z-world[b].z);
  const reach=m=>d(m,m+3)/(d(m,m+1)+d(m+1,m+2)+d(m+2,m+3)||1);
  if([5,9,13,17].filter(m=>reach(m)>.82).length>=2)return null;
- // Screen-plane offset from curled index PIP (6) to thumb tip (4).
- // The wrist-to-knuckle axis cancels hand roll; palm size cancels distance/scale.
- const point=i=>({x:image[i].x,y:image[i].y/aspect});
- const wrist=point(0),knuckle=point(9),anchor=point(6),tip=point(4),index=point(5),pinky=point(17);
- const ux=knuckle.x-wrist.x,uy=knuckle.y-wrist.y,length=Math.hypot(ux,uy);
- const scale=(length+Math.hypot(index.x-pinky.x,index.y-pinky.y))/2;
- if(length<.015||scale<.015)return null;
- const dx=tip.x-anchor.x,dy=tip.y-anchor.y;
- return {x:(dx*uy-dy*ux)/length/scale,y:(dx*ux+dy*uy)/length/scale};
+ // Thumb position relative to index PIP, in the camera's lateral/depth plane.
+ // MediaPipe image z uses the same approximate scale as x; normalize both by hand size.
+ if(!Number.isFinite(image[4].z)||!Number.isFinite(image[6].z))return null;
+ const span=(Math.hypot(image[0].x-image[9].x,(image[0].y-image[9].y)/aspect)+Math.hypot(image[5].x-image[17].x,(image[5].y-image[17].y)/aspect))/2;
+ if(span<.015)return null;
+ return {x:(image[4].x-image[6].x)/span,y:-(image[4].z-image[6].z)/span};
 }
 export class ThumbJoystick {
  constructor(){this.speed=4.5;this.reset();}
