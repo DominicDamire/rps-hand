@@ -13,29 +13,18 @@ export function measureThumb(image,world,aspect=4/3){
  const row2=row[0]**2+row[1]**2;
  const along=row2>1e-8?((image[4].x-image[6].x)*row[0]+(image[4].y-image[6].y)/aspect*row[1])/row2:-Infinity;
  const wrapped=[5,9,13,17].filter(m=>reach(m)<.82).length>=3&&along>-.16&&d(4,6)/d(5,17)<.72;
- // Thumb tilt from its own base; whole-hand translation cannot steer it.
- const vector=['x','y','z'].map(k=>world[4][k]-world[2][k]);
- const length=Math.hypot(...vector);if(length<.008)return null;
- return {rest:wrapped,tilt:vector.map(v=>v/length)};
+ // Screen-space thumb displacement from its own base, scaled by palm size.
+ // Mirroring happens once here, matching the visible selfie preview.
+ return {rest:wrapped,point:[-(image[4].x-image[2].x)/span,(image[4].y-image[2].y)/aspect/span]};
 }
-const valid=s=>s?.tilt?.length===3&&s.tilt.every(Number.isFinite);
+const valid=s=>s?.point?.length===2&&s.point.every(Number.isFinite);
 const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
-const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
-const unit=a=>{const n=Math.hypot(...a);return n>1e-8?a.map(v=>v/n):null;};
-export function thumbVector(tilt,centre){
- const t=unit(tilt),c=centre&&unit(centre);if(!t||!c)return null;
- const wrap=a=>Math.atan2(Math.sin(a),Math.cos(a));
- // Two independent live angles: image-plane tilt and depth elevation.
- // A depth tilt cannot rotate the sideways basis as it did in the tangent-plane mapping.
- let x=-wrap(Math.atan2(t[1],t[0])-Math.atan2(c[1],c[0]));
- let z=Math.asin(Math.max(-1,Math.min(1,t[2])))-Math.asin(Math.max(-1,Math.min(1,c[2])));
- const lean=Math.hypot(x,z);if(lean<.12)return {x:0,z:0};
- // Stabilize cardinal movements while preserving continuous angles between them.
- const ax=Math.abs(x),az=Math.abs(z),assist=.6;
- if(ax>=az)z=Math.sign(z)*Math.max(0,az-assist*ax)/(1-assist);
- else x=Math.sign(x)*Math.max(0,ax-assist*az)/(1-assist);
- const r=Math.hypot(x,z);if(r<1e-8)return {x:0,z:0};
- const magnitude=Math.min(1,(lean-.12)/.45);return {x:x/r*magnitude,z:z/r*magnitude};
+export function thumbVector(point,centre){
+ if(!point||!centre||![...point,...centre].every(Number.isFinite))return null;
+ const x=point[0]-centre[0],z=point[1]-centre[1],r=Math.hypot(x,z);
+ if(r<=.10)return {x:0,z:0};
+ const magnitude=Math.min(1,(r-.10)/.40);
+ return {x:x/r*magnitude,z:z/r*magnitude};
 }
 export class ThumbJoystick {
  constructor(){this.speed=4.5;this.reset();}
@@ -46,12 +35,12 @@ export class ThumbJoystick {
   if(time<=this.seen)return;
   const elapsed=time-this.seen;if(elapsed>250){this.stop('TRACKING RESUMED');this.settling=[];}this.seen=time;
   if(sample.rest){this.stop('FIST REST');this.settling=[];return;}
-  const t=unit(sample.tilt);if(!t){this.stop('THUMB UNCLEAR');return;}
+  const t=sample.point;if(!t){this.stop('THUMB UNCLEAR');return;}
   if(!this.centre){
-   this.reason='HOLD UPRIGHT BRIEFLY';
+   this.reason='HOLD THUMB COMFORTABLY';
    if(this.settling.length&&distance(t,this.settling[0].tilt)>.1)this.settling=[];
    this.settling.push({tilt:t,time});
-   if(this.settling.length>=3&&time-this.settling[0].time>=180){this.centre=unit([0,1,2].map(i=>this.settling.reduce((s,p)=>s+p.tilt[i],0)));this.settling=[];this.stop('NEUTRAL');}
+   if(this.settling.length>=3&&time-this.settling[0].time>=180){this.centre=[0,1].map(i=>this.settling.reduce((s,p)=>s+p.tilt[i],0)/this.settling.length);this.settling=[];this.stop('NEUTRAL');}
    return;
   }
   const v=thumbVector(t,this.centre);if(!v){this.stop('THUMB UNCLEAR');return;}this.raw={...v};
