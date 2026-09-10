@@ -7,6 +7,7 @@ import {DustMap} from './map.mjs?v=60';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
 import {setupUI} from './ui.mjs?v=60';
+import {phoneCamera} from './camlink.mjs';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
 import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=60';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
@@ -30,8 +31,9 @@ async function start(){
  if(running){stop();status('Paused · camera off');return;}
  stop();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('error').textContent='';$('start').disabled=true;status('Starting camera…');
  try{
-  if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
-  stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
+  const useCam=new URLSearchParams(location.search).has('cam');
+  if(!useCam&&!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
+  stream=useCam?await phoneCamera(t=>status(t)):await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
   worker=new Worker(new URL('./tracker.mjs?v=60',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
@@ -108,3 +110,5 @@ function frame(now){
  }
  renderer.render(scene,camera);
 }controlsChanged();requestAnimationFrame(frame);
+if(new URLSearchParams(location.search).has('cam')){$('start').textContent='Connect phone camera';start();}   // phone-as-camera mode: no local permission prompt, connect right away
+$('phoneCam').onclick=()=>{const u=new URL(location.href);u.searchParams.set('cam','');location.href=u.href;};
