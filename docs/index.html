@@ -546,7 +546,7 @@ function makeSkinFrom(SK, variant, color) {
     // so it does not swell or shrink with distance or pose
     ratio.n = (ratio.n || 0) + 1;
     for (const [k, js] of Object.entries(CHAINS)) {   // clamped to a sane range; settles fast at first (bad first frames must not stick), slowly later
-      const r = Math.min(1.6, Math.max(0.6, js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k]));
+      const r = Math.min(1.6 * sc, Math.max(0.6 * sc, js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k]));   // within 0.6-1.6 of the palm's own ratio
       ratio[k] = ratio[k] == null ? r : ratio[k] + Math.max(0.01, 1 / ratio.n) * (r - ratio[k]);
     }
     SK.order.forEach((j, i) => { boneFrame(pts, j, FIT_EXACT ? ratio[CHAIN_OF[j]] : sc, bones[i].matrix); bones[i].matrixWorldNeedsUpdate = true; });
@@ -830,7 +830,6 @@ async function main() {
     world.timestep = dt; world.step();
     for (const p of props) { p.mesh.position.copy(p.body.translation()); p.mesh.quaternion.copy(p.body.rotation()); }
     if (now - stat.t > 1000) {
-      renderer.shadowMap.enabled = stat.n >= 20;   // tracker under 20 fps: give the GPU back (no shadows)
       $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | ${SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"} | nav ${Math.hypot(nav.x, nav.z).toFixed(1)}m ${(nav.yaw * 180 / Math.PI).toFixed(0)}° (point+drag) | build ${BUILD}`;
       stat = { ms: 0, lat: 0, n: 0, t: now }; dbg.pitch = pitch; dbg.tiltOn = tiltOn;
     }
