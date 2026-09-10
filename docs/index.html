@@ -485,7 +485,8 @@ function boneFrame(pts, j, s, out) {
 }
 let SKIN = null;
 async function loadSkin() {
-  const [gltf, meta] = await Promise.all([new GLTFLoader().loadAsync(SKIN_URL), fetch("hand.json").then(r => r.json())]);
+  const metaUrl = SKIN_URL.replace(/\.glb$/, ".json");   // each export carries its own bind joints (hand_v4.glb -> hand_v4.json)
+  const [gltf, meta] = await Promise.all([new GLTFLoader().loadAsync(SKIN_URL), fetch(metaUrl).then(r => r.ok ? r.json() : fetch("hand.json").then(q => q.json()))]);
   let src; gltf.scene.traverse(o => { if (o.isSkinnedMesh) src = o; });
   const geo = src.geometry, order = src.skeleton.bones.map(b => +b.name.slice(1));   // bone i drives joint order[i]
   const material = src.material?.isMeshStandardMaterial ? src.material : null;        // the scan's material (colour, roughness, baked normal map)
