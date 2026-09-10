@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 22)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 23)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -48,7 +48,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 
-const BUILD = 22;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 23;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -59,13 +59,13 @@ const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
 // Lower presence/tracking thresholds = the tracker holds on longer through motion blur before giving up.
 const DELEGATES = Q.get("delegate") === "CPU" ? ["CPU"] : ["GPU", "CPU"];   // ?delegate=CPU: headless tests have no real GPU
-const PAD = Q.get("pad") != null ? +Q.get("pad") : 0.3;   // border added around the frame when the hand is big, fraction of the longer side (?pad=0 to disable)
+const PAD = Q.get("pad") != null ? +Q.get("pad") : 0.3;   // border used only on the every-third-frame retry while NO hand is found (frame-filling fists); never on tracked frames (it doubled inference cost on the phone when the hand was close)   // border added around the frame when the hand is big, fraction of the longer side (?pad=0 to disable)
 const BIG_HAND = [0.22, 0.15];      // palm length (wrist to middle knuckle) / frame short side: pad above the first, unpad below the second (hysteresis)
 const DEBUG_OVERLAY = Q.get("debug") === "1";
 const SHOW_LINES = Q.get("lines") === "1";   // green skeleton + dots on the 3D hand (off by default so the skin can be judged)
 const PALMS_ONLY = Q.get("arms") !== "1";   // default: hands from the wrist only
 const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "armthing";   // arms mesh with the Thing's skin baked on (?skin=arm = original arms textures)   // default: the owner's pre-rigged arms (arm_L/arm_R.glb); ?skin=hand.glb = the scan rig, ?skin=thing = the Thing rig, ?skin=0 = capsules
-const DS = Q.get("ds") != null ? +Q.get("ds") : 480;   // tracker input width after downscale (?ds=0 = the full camera frame). MediaPipe resizes to 192/224 anyway; 320 lost far hands
+const DS = Q.get("ds") != null ? +Q.get("ds") : 384;   // tracker input width after downscale (?ds=0 = the full camera frame). MediaPipe resizes to 192/224 anyway; 320 lost far hands
 const RVFC = Q.get("rvfc") !== "0";                        // start the tracker from requestVideoFrameCallback (?rvfc=0 = poll currentTime in rAF, the old way)
 const HAND_SHADOW = Q.get("shadow") === "1";               // the skin casts a shadow: a second skinning pass over 79 k triangles per hand, off by default (props still cast)
 const LOD_MIN_FPS = Q.get("lodfps") != null ? +Q.get("lodfps") : 25;   // high-detail mesh only while the tracker runs at least this fast
@@ -136,7 +136,7 @@ const Z_SMOOTH = Q.get("zs") !== "0";
 // Folded fingers cannot pass through the palm. After smoothing, every finger joint is kept at least PALM_MIN in front of
 // the palm plane (through wrist and knuckles, palm side given by the thumb tip's side) by moving it along its view ray,
 // so its place in the picture does not change. ?pc=0 disables it.
-const PALM_CLAMP = Q.get("pc") !== "0", PALM_MIN = 0.006;
+const PALM_CLAMP = Q.get("pc") === "1", PALM_MIN = 0.006;   // off by default: it blocked crossed fingers
 function palmClamp(c) {
   const P = i => [c[3 * i] * c[3 * i + 2], c[3 * i + 1] * c[3 * i + 2], c[3 * i + 2]];
   const p0 = P(0), p5 = P(5), p17 = P(17), p4 = P(4);
@@ -300,7 +300,7 @@ function level(a) {
   return out;
 }
 const HOLD_MS = 250;               // keep a hand alive this long after tracking drops (dead reckoning), then remove it
-const OCCL_HOLD = 1500;            // ...unless it vanished while touching the other hand: then it rides along with that hand this long
+const OCCL_HOLD = Q.get("hold") === "1" ? 1500 : 0;   // handshake "held" ghost off by default (a second hand appeared when one was shaken)            // ...unless it vanished while touching the other hand: then it rides along with that hand this long
 
 // --- tracker: HandLandmarker in a Web Worker so rendering never waits on inference -----------------
 const WORKER_SRC = `
@@ -372,9 +372,9 @@ async function makeTracker() {
 // --- scene: a room seen from where the phone camera is ------------------------------------------
 const canvas = $("gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setPixelRatio(Q.get("pr") ? +Q.get("pr") : 1);   // 1 on every device: the tracker shares the GPU
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;   // filmic curve: skin highlights roll off instead of clipping   // the tracker shares the GPU: 2x on a phone cost tracker frames
-renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.enabled = Q.get("shadow") === "1";
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1f2b); scene.fog = new THREE.Fog(0x1a1f2b, 1.2, 3.5);
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.45;   // image-based light: soft reflections and skin sheen
@@ -448,7 +448,7 @@ function meshPts(pts) {
 // scaled by that finger's own tracked-to-scan length ratio (a shape fit, as hand-model fitting does), smoothed over
 // time so it cannot flicker; the palm and thumb use their own ratios. Joint positions stay exactly the tracked ones
 // (only sideways PIP/DIP noise is projected out, see meshPts). ?fit=rigged switches to the rotation-only drive below.
-const FIT_EXACT = Q.get("fit") !== "rigged";
+const FIT_EXACT = Q.get("fit") === "exact";   // default: rigged drive (fixed hand volume, only the joints bend); ?fit=exact stretches to the tracked lengths
 const CHAINS = { palm: [1, 5, 9, 13, 17], thumb: [2, 3, 4], index: [6, 7, 8], middle: [10, 11, 12], ring: [14, 15, 16], pinky: [18, 19, 20] };
 const CHAIN_OF = {}; for (const [k, js] of Object.entries(CHAINS)) for (const j of js) CHAIN_OF[j] = k;
 // "Rigged" drive (?fit=rigged): the skin keeps the scan's own bone lengths and only takes joint ROTATIONS from the tracker,
@@ -456,8 +456,8 @@ const CHAIN_OF = {}; for (const [k, js] of Object.entries(CHAINS)) for (const j 
 // Kept as the alternative; it deviates from the tracked fingertips by the tracker's proportion error.
 const HYPER = { mcp: 25, pip: 8, dip: 8 };   // degrees of backward bend allowed at each finger joint
 const _b = V(), _c = V(), _e = V();
-function poseFK(pts, bind, chirRight) {
-  const s = pts[0].distanceTo(pts[9]) / bind[0].distanceTo(bind[9]), out = pts.map(p => p.clone());
+function poseFK(pts, bind, chirRight, scale) {
+  const s = scale ?? pts[0].distanceTo(pts[9]) / bind[0].distanceTo(bind[9]), out = pts.map(p => p.clone());
   _l.subVectors(pts[17], pts[5]).normalize();
   _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize(); if (!chirRight) _n.negate();   // now points OUT of the palm
   const seg = (j, dir) => out[j].copy(out[PARENT[j]]).addScaledVector(dir, s * bind[j].distanceTo(bind[PARENT[j]]));
@@ -530,9 +530,9 @@ async function loadRigSide(base, side) {
   const extra = {}; for (const key of ["hand", "forearm", "arm"]) { const nm = meta.bones[key], e = meta.extra?.[nm] || meta.extra?.[key]; if (nm && byName[norm(nm)] != null && e) extra[key] = { i: byName[norm(nm)], head: new THREE.Vector3(...e.head), tail: new THREE.Vector3(...e.tail) }; }
   let material = null;
   if (src.material?.isMeshStandardMaterial) {   // skin look: physical material, AO from the packed texture, slight sheen, no metalness glint
-    const m = src.material, pm = new THREE.MeshPhysicalMaterial({ map: m.map, normalMap: m.normalMap, normalScale: m.normalScale?.clone() ?? new THREE.Vector2(1, 1), roughnessMap: m.roughnessMap, metalnessMap: null, metalness: 0, roughness: m.roughness ?? 1, color: m.color });
+    const m = src.material, pm = new THREE.MeshStandardMaterial({ map: m.map, normalMap: m.normalMap, normalScale: m.normalScale?.clone() ?? new THREE.Vector2(1, 1), roughnessMap: m.roughnessMap, metalness: 0, roughness: m.roughness ?? 1, color: m.color });   // standard, not physical: half the shader cost on a phone
     if (m.roughnessMap) { pm.aoMap = m.roughnessMap; pm.aoMapIntensity = 0.6; }   // glTF packs AO in R of the same image
-    pm.sheen = 0.1; pm.sheenRoughness = 0.7; pm.sheenColor = new THREE.Color(0xffc9b0); pm.envMapIntensity = 0.45; pm.specularIntensity = 0.45; material = pm;
+    pm.envMapIntensity = 0.45; material = pm;
   }
   return { rig: true, geo, names, material, bind, edges, extra, restHeads, hand: meta.hand };
 }
@@ -572,11 +572,14 @@ function makeRigSkin(variant, color) {
   mesh.castShadow = false; mesh.frustumCulled = false; mesh.visible = false;
   const L0 = bind[0].distanceTo(bind[9]); const bindLen = {}; for (const [k, js] of Object.entries(CHAINS)) bindLen[k] = js.reduce((t, j) => t + bind[j].distanceTo(bind[PARENT[j]]), 0);
   const ratio = {}; const M = new THREE.Matrix4(), dirW = V(), o = V();
-  return { mesh, update(tracked) {
-    const pts = FIT_EXACT ? meshPts(tracked) : tracked, sc = pts[0].distanceTo(pts[9]) / L0;
-    ratio.n = (ratio.n || 0) + 1;
-    for (const [k, js] of Object.entries(CHAINS)) {   // thickness = the chain's PEAK measured length (its extended size, slowly decaying), so a folded finger does not get thin
-      const r = js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k];
+  return { mesh, update(tracked, chirRight) {
+    // rigged (default): the mesh keeps its own proportions at one size (the hand's palm ratio, settled slowly); only the joints bend
+    ratio.n = (ratio.n || 0) + 1; const scNow = tracked[0].distanceTo(tracked[9]) / L0;
+    ratio.size = ratio.size == null ? scNow : ratio.size + Math.max(0.01, 1 / ratio.n) * (scNow - ratio.size);
+    const pts = FIT_EXACT ? meshPts(tracked) : poseFK(tracked, bind, chirRight, ratio.size), sc = FIT_EXACT ? scNow : ratio.size;
+    for (const [k, js] of Object.entries(CHAINS)) {
+      if (!FIT_EXACT) { ratio[k] = sc; continue; }
+      const r = js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k];   // exact: thickness = the chain's PEAK measured length
       ratio[k] = Math.min(1.6 * sc, Math.max(0.6 * sc, ratio[k] == null ? r : Math.max(r, ratio[k] * 0.999)));
     }
     palmRefs(pts); dirW.subVectors(pts[9], pts[0]).normalize();
@@ -783,7 +786,7 @@ async function main() {
     if (inflight || !fresh) return;
     inflight = true; lastT = video.currentTime; framePending = false;
     const cap = performance.now(); ts = Math.max(ts + 1, Math.floor(cap));
-    const pad = bigHand || (nHands === 0 && dbg.frames % 3 === 2) ? PAD : 0;   // adaptive input padding
+    const pad = nHands === 0 && dbg.frames % 3 === 2 ? PAD : 0;   // adaptive input padding
     const r = await tracker.detect(video, ts, pad);
     inflight = false;
     const recv = performance.now();
