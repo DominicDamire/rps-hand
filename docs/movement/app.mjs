@@ -1,12 +1,12 @@
-import {thumbReferences} from './thumb-reference.mjs?v=20';
-import {setupThumbstick} from './thumbstick.mjs?v=20';
-import {HeldPose,poseFeature} from './held-pose.mjs?v=20';
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=20';
-import {DustMap} from './map.mjs?v=20';
+import {thumbReferences} from './thumb-reference.mjs?v=21';
+import {setupThumbstick} from './thumbstick.mjs?v=21';
+import {HeldPose,poseFeature} from './held-pose.mjs?v=21';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=21';
+import {DustMap} from './map.mjs?v=21';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=20';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=20';
+import {setupUI} from './ui.mjs?v=21';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=21';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const heldDirections={forward:1,left:2,right:3,backward:4};
@@ -19,7 +19,7 @@ scene.background=new THREE.Color('#abc9d9');scene.fog=new THREE.Fog('#abc9d9',90
 const dustMap=new DustMap(scene);
 dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · auto-step on';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}addEventListener('resize',resize);resize();
-let head=null,lastHeadVideo=-1,lastFrameTime=0,handsSinceHead=0;
+let head=null,lastHeadVideo=-1,lastFrameTime=0,handsSinceHead=0;let walkReason='START CAMERA';
 let worker=null,stream=null,running=false,busy=false,lastVideo=-1,lastResult=0,demo=false,demoRun=null;
 function status(text,active=false){$('status').textContent=text;$('lamp').classList.toggle('on',active);}
 function apply(sample,time){const r=swipe.update(sample,time);const step=bodyDisplacement(r.dx,r.dz,headLook.heading);dustMap.move(camera.position,step.x,step.z);$('gestureStats').textContent=r.active?'MOVE engaged · relax index to release':'Hands free · movement off';status(r.status,r.active);return r;}
@@ -31,11 +31,11 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=20',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=21',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
-    lastResult=performance.now();if(lastResult-data.time>220){held.reset();apply(null,lastResult);trackingUI.clear();status('Tracking is delayed · movement paused');return;}
+    lastResult=performance.now();if(lastResult-data.time>750){held.reset();apply(null,lastResult);trackingUI.clear();walkReason='TRACKING TOO OLD · '+Math.round(lastResult-data.time)+' ms';status(walkReason);return;}
     const handIndex=selectLeftHand(data,inputMode==='poses'?.6:.7);
     const feature=handIndex>=0?poseFeature(data.worldLandmarks[handIndex]):null;
     if(inputMode==='index'){
@@ -55,12 +55,12 @@ async function start(){
           calibration=next?{direction:next,start:performance.now()+3000,samples:[],guided:true}:null;
         }else if(lastResult-calibration.start>8000){$('poseStatus').textContent='Could not record. Show your left hand with four fingers curled, then retry.';calibration=null;}
       }else $('poseStatus').textContent='Get ready: '+calibration.direction+' · '+Math.ceil((calibration.start-lastResult)/1000);
-    }else held.receive(feature,data.time);
+    }else held.receive(feature,lastResult);
     const active=!!held.direction;
     $('gestureStats').textContent=`${active?'THUMB · '+held.direction.toUpperCase():'STOP'} · tracker ${Math.round(data.inferenceMs||0)} ms · age ${Math.round(lastResult-data.time)} ms`;
     trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,active);
     status(calibration?'Recording pose · movement paused':!held.ready?'Set up your four poses':active?'HOLD · '+held.direction.toUpperCase():'STOP · pose not recognised / open hand',active);
-    if(handIndex<0)status('STOP · show your LEFT hand');
+    walkReason=handIndex<0?'LEFT HAND NOT DETECTED':held.reason;if(handIndex<0)status('STOP · show your LEFT hand');
     }
     handsSinceHead++;if(!calibration&&running&&handsSinceHead>=2&&head?.wantsFrame(lastResult)&&$('cam').currentTime!==lastHeadVideo){handsSinceHead=0;lastHeadVideo=$('cam').currentTime;head.capture($('cam'),lastResult);}
   };
@@ -98,14 +98,14 @@ function frame(now){
  if(demo&&demoRun){const elapsed=now-demoRun.start,t=Math.max(0,Math.min(1,(elapsed-180)/180));const d=demoRun.direction;apply({x:.5+(d.includes('right')?.25:d.includes('left')?-.25:0)*t,z:.5+(d.includes('forward')?-.18:d.includes('backward')?.18:0)*t,pinch:.8,extended:true,pointing:true},now);if(elapsed>1050){demoRun=null;apply(null,now);status('Demo complete · choose another movement');}}
  if(inputMode==='touch'&&!document.hidden&&!demo){const v=stick.vector,step=bodyDisplacement(v.x*held.speed*Math.min(.05,dt),v.z*held.speed*Math.min(.05,dt),headLook.heading);dustMap.move(camera.position,step.x,step.z);const moving=Math.hypot(v.x,v.z)>.001;status(moving?'WALKING · release to stop':'Thumbstick ready · drag to walk',moving);$('gestureStats').textContent=moving?'Walking '+Math.round(Math.hypot(v.x,v.z)*100)+'%':'Stopped';}
  if(running){
-  const movement=held.step(now,dt),world=bodyDisplacement(movement.dx,movement.dz,headLook.heading);dustMap.move(camera.position,world.x,world.z);
-  if(inputMode!=='touch'&&now-lastResult>220){held.reset();swipe.update(null,now);trackingUI.clear();status('Waiting for tracking');}
+  const movement=held.step(now,dt),world=bodyDisplacement(movement.dx,movement.dz,headLook.heading),beforeX=camera.position.x,beforeZ=camera.position.z;dustMap.move(camera.position,world.x,world.z);if(held.direction){walkReason=!dustMap.ready?'MAP LOADING':Math.hypot(camera.position.x-beforeX,camera.position.z-beforeZ)<.00001?'BLOCKED BY MAP':'MOVING';}
+  if(inputMode!=='touch'&&now-lastResult>350){held.reset();swipe.update(null,now);trackingUI.clear();walkReason='WAITING FOR TRACKING';status(walkReason);}
   const v=$('cam');if(inputMode==='touch'&&head?.wantsFrame(now)&&v.currentTime!==lastHeadVideo){lastHeadVideo=v.currentTime;head.capture(v,now);}
   if(inputMode!=='touch'&&!busy&&!head?.busy&&v.readyState>=2&&v.currentTime!==lastVideo){lastVideo=v.currentTime;busy=true;const capture=now,owner=worker;createImageBitmap(v,{resizeWidth:384,resizeHeight:Math.round(384*v.videoHeight/v.videoWidth),resizeQuality:'low'}).then(bitmap=>{if(worker!==owner||!running){bitmap.close();return;}owner.postMessage({type:'frame',bitmap,time:capture},[bitmap]);}).catch(e=>{busy=false;status('Frame unavailable');$('error').textContent=e.message;});}
  }
  $('position').innerHTML=`${['N','NE','E','SE','S','SW','W','NW'][Math.round(((-camera.rotation.y*180/Math.PI)%360+360)%360/45)%8]} · ${((-camera.rotation.y*180/Math.PI%360+360)%360).toFixed(0)}°<br>X ${camera.position.x.toFixed(1)} · Z ${camera.position.z.toFixed(1)}`;
  $('turnIndicator').textContent=(running||demo)?headLook.state+(headLook.state==='HOLD TO TURN'?' '+Math.round(headLook.progress*100)+'%':''):'Head control paused';
- $('walkIndicator').textContent=inputMode==='poses'?(calibration?'SHOW '+calibration.direction.toUpperCase()+' · '+(performance.now()<calibration.start?Math.ceil((calibration.start-performance.now())/1000)+'s':calibration.samples.length+'/10'):!running?'START CAMERA':!held.ready?'RECORD YOUR FOUR THUMB POSES':held.direction?'↑↓ THUMB · '+held.direction.toUpperCase():'STOP · OPEN HAND'):inputMode==='index'?'INDEX STROKES':'SCREEN THUMBSTICK';
+ $('walkIndicator').textContent=inputMode==='poses'?(calibration?'SHOW '+calibration.direction.toUpperCase()+' · '+(performance.now()<calibration.start?Math.ceil((calibration.start-performance.now())/1000)+'s':calibration.samples.length+'/10'):!running?'START CAMERA':!held.ready?'RECORD YOUR FOUR THUMB POSES':held.direction?'THUMB '+held.direction.toUpperCase()+' · '+walkReason:'STOP · '+walkReason):inputMode==='index'?'INDEX STROKES':'SCREEN THUMBSTICK';
  $('turnIndicator').style.color=headLook.state.includes('BODY')?'#ffdf75':'#b8ebd1';
  renderer.render(scene,camera);
 }controlsChanged();requestAnimationFrame(frame);
