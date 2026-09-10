@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 32)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 33)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -47,8 +47,9 @@
 import * as THREE from "three";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
+import { makeGun } from "./gun.mjs";
 
-const BUILD = 32;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 33;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -65,6 +66,7 @@ const BIG_HAND = [0.22, 0.15];      // palm length (wrist to middle knuckle) / f
 const DEBUG_OVERLAY = Q.get("debug") === "1";
 const SHOW_LINES = Q.get("lines") === "1";   // green skeleton + dots on the 3D hand (off by default so the skin can be judged)
 const PALMS_ONLY = Q.get("arms") !== "1";   // default: hands from the wrist only
+const GUN = Q.get("gun") !== "0";            // a pistol on a table: close the hand on it to pick it up, curl the index to fire, open the hand to drop it (?gun=0 off, ?grab=1 holds at once)
 const FINGER_FAT = Q.get("fat") ? +Q.get("fat") : 1.3;   // width scale of the rigged hand (owner: "fingers too thin")
 const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "arm";   // the owner's rigged arms model with its own textures (the one model we stick to)   // default: the owner's pre-rigged arms (arm_L/arm_R.glb); ?skin=hand.glb = the scan rig, ?skin=thing = the Thing rig, ?skin=0 = capsules
 const DS = Q.get("ds") != null ? +Q.get("ds") : 480;   // tracker input width after downscale (?ds=0 = the full camera frame). MediaPipe resizes to 192/224 anyway; 320 lost far hands
@@ -830,6 +832,7 @@ function makeHand(color = 0xdead8f) {
       group.visible = true;
     },
     hide() { group.visible = false; },
+    get right() { return chir * CHIR_RIGHT >= 0; },
     addHi(hi) { hiR = makeSkinFrom(hi, hi.R, 0xd9a58a); hiL = makeSkinFrom(hi, hi.L, 0xd9a58a); group.add(hiR.mesh, hiL.mesh); },
   };
   hands.push(hand); return hand;
@@ -892,6 +895,7 @@ async function main() {
   frameW = video.videoWidth || video.naturalWidth || frameW; frameH = video.videoHeight || video.naturalHeight || frameH; applyView(true);
   const tracker = await makeTracker();
   SKIN = await skinPromise; window.SKIN = SKIN; if (SKIN) $("status").textContent = "Preparing the hand…";   // shader compile below can take seconds on some GPUs
+  const gun = GUN && !BENCH ? await makeGun({ scene, worldGroup, worldObjs, floorY: FLOOR_Y, hold: Q.get("grab") === "1" }).catch(e => { console.warn("gun unavailable:", e); return null; }) : null; window.gun = gun;
 
   // one slot per hand, keyed by MediaPipe's handedness label
   const slots = { Right: null, Left: null };
@@ -1023,12 +1027,13 @@ async function main() {
         fpHands.push({ group: s.hand.group, pc });
       } else { s.hand.hide(); s.lastPalm = null; }
     }
+    if (gun) gun.update(dt, [slots.Right, slots.Left].filter(s => shown[s.key]).map(s => ({ key: s.key, group: s.hand.group, pts: shape(shown[s.key]), right: s.hand.right, ext: s.ext })), now);
     renderOverlay(displayed);
     if (now - stat.t > 1000) {
       $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | ${BENCH ? "BENCH no render" : SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | ${NHANDS}h | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"} | build ${BUILD}`;
       trackerFps = stat.n; stat = { ms: 0, lat: 0, n: 0, t: now }; dbg.pitch = pitch; dbg.tiltOn = tiltOn;
     }
-    $("hand").textContent = "HANDS: " + (hud.join("  |  ") || "-");
+    $("hand").textContent = "HANDS: " + (hud.join("  |  ") || "-") + (gun ? "   ·   " + gun.hud() : "");
     $("move").textContent = "MOVE: " + (move ?? "?"); $("move").style.color = move ? "#78ff78" : "#ffc850";
     applyView(false); const tR = performance.now(); if (!BENCH) render3D(VIEWS[view] === "first person" && !Q.get("cam") ? fpHands : null); const tE = performance.now(); dbg.tm.render += tE - tR; dbg.tm.loop += tE - tLoop0; dbg.tm.loops++;
     requestAnimationFrame(loop);
