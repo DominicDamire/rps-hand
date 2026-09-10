@@ -1,17 +1,17 @@
-import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=54';
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=54';
-import {setupThumbstick} from './thumbstick.mjs?v=54';
+import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=55';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=55';
+import {setupThumbstick} from './thumbstick.mjs?v=55';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=54';
-import {DustMap} from './map.mjs?v=54';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=55';
+import {DustMap} from './map.mjs?v=55';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=54';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=54';
+import {setupUI} from './ui.mjs?v=55';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=55';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
-$('saveTracking').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:54,frames:trackingLog},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='thumb-tracking-v54.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+$('saveTracking').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:55,frames:trackingLog},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='thumb-tracking-v55.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const held=new ThumbJoystick();let inputMode='poses',trackedHand=null,resting=false;
 const scheduler=new TrackingScheduler();const swipe=new SwipeController();const headLook=new HeadLook();let lookDemo=0;
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:false});renderer.setPixelRatio(1);
@@ -33,11 +33,11 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=54',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=55',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
-    lastResult=performance.now();if(lastResult-data.time>300){held.receive(null,lastResult);apply(null,lastResult);trackingUI.draw([],$('cam').videoWidth,$('cam').videoHeight,false,{centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,reason:held.reason});walkReason='TRACKING TOO OLD · '+Math.round(lastResult-data.time)+' ms';status(walkReason);return;}
+    lastResult=performance.now();if(lastResult-data.time>450){held.receive(null,lastResult);apply(null,lastResult);trackingUI.draw([],$('cam').videoWidth,$('cam').videoHeight,false,{centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,reason:held.reason});walkReason='TRACKING TOO OLD · '+Math.round(lastResult-data.time)+' ms';status(walkReason);return;}
     let handIndex=inputMode==='index'?selectLeftHand(data):data.landmarks?.length===1?0:-1;
     if(resting){held.receive(null,lastResult);swipe.reset();walkReason='RESTING';return;}
     const label=handIndex>=0?data.handedness?.[handIndex]?.[0]?.categoryName:null;
@@ -67,9 +67,9 @@ $('turnMode').onchange=()=>{headLook.mode=$('turnMode').value;headLook.resetLook
 $('headThreshold').oninput=()=>{headLook.deadzoneDegrees=+$('headThreshold').value;$('thresholdValue').textContent=$('headThreshold').value+'°';};
 $('headGain').oninput=()=>{if(head)head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;};
 $('reset').onclick=()=>{stick.reset();held.reset();headLook.heading=0;headLook.resetLook();lookDemo=0;head?.recenter();camera.position.copy(dustMap.spawn);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
-function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='First show your relaxed closed fist with the thumb tucked against your fingers. Hold still for half a second until CENTRE SAVED. The circle stays fixed above your fist. Move your thumb into the green centre to stop, or toward a direction label to walk. Close your fist to rest. The circle edge is full walking speed; just outside gives up to 160% boost. Centre fist places a new circle. Flick your head left/right for a quick turn; face centre before the next flick.';status('Start camera · thumb joystick ready');}
+function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Show your thumb: the circle appears at its starting position. Move the thumb toward an arrow to walk; green centre or a closed fist stops. After tracking is lost, return to the green centre to resume. Reposition circle starts it at your next visible thumb position. Flick your head left/right to turn.';status('Start camera · thumb joystick ready');}
 $('movementMode').onchange=()=>{inputMode=$('movementMode').value;stick.reset();held.reset();trackedHand=null;swipe.reset();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('stickZone').hidden=inputMode!=='touch';$('hint').textContent=inputMode==='touch'?'Drag thumbstick to walk; release to stop.':inputMode==='poses'?'Thumb up/down in the preview: forward/back. Left/right: sideways. Centre or tucked fist stops.':'Left index out: move your hand to walk. Bend index to release.';};
-$('centerThumb').onclick=()=>{held.reset();status('Show your relaxed fist and hold still to save rest position');};
+$('centerThumb').onclick=()=>{held.reset();status('Show thumb to place circle');};
 $('joystickSize').oninput=()=>{held.setSize(+$('joystickSize').value);$('joystickSizeValue').textContent=Math.round(held.size*100)+'%';};
 $('gain').oninput=()=>held.speed=+$('gain').value;
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
@@ -87,7 +87,7 @@ function frame(now){
  if(inputMode==='touch'&&!document.hidden&&!demo&&!resting){const v=stick.vector,step=bodyDisplacement(v.x*held.speed*Math.min(.05,dt),v.z*held.speed*Math.min(.05,dt),headLook.heading);dustMap.move(camera.position,step.x,step.z);const moving=Math.hypot(v.x,v.z)>.001;status(moving?'WALKING · release to stop':'Thumbstick ready · drag to walk',moving);$('gestureStats').textContent=moving?'Walking '+Math.round(Math.hypot(v.x,v.z)*100)+'%':'Stopped';}
  if(running&&!resting){
   const movement=held.step(now,dt),world=bodyDisplacement(movement.dx,movement.dz,headLook.heading),beforeX=camera.position.x,beforeZ=camera.position.z;dustMap.move(camera.position,world.x,world.z);if(held.direction){walkReason=!dustMap.ready?'MAP LOADING':Math.hypot(camera.position.x-beforeX,camera.position.z-beforeZ)<.00001?'BLOCKED BY MAP':'MOVING';}
-  if(inputMode!=='touch'&&now-lastResult>350){held.receive(null,now);swipe.update(null,now);trackingUI.draw([],$('cam').videoWidth,$('cam').videoHeight,false,{centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,reason:held.reason});walkReason='WAITING FOR TRACKING';status(walkReason);}
+  if(inputMode!=='touch'&&now-lastResult>450){held.receive(null,now);swipe.update(null,now);trackingUI.draw([],$('cam').videoWidth,$('cam').videoHeight,false,{centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,reason:held.reason});walkReason='WAITING FOR TRACKING';status(walkReason);}
   const v=$('cam');
   const job=scheduler.next({busy:busy||!!head?.busy,handReady:inputMode!=='touch'&&v.readyState>=2&&v.currentTime!==lastVideo,headReady:!!head?.wantsFrame(now)&&v.readyState>=2&&v.currentTime!==lastHeadVideo});
   if(job==='head'){lastHeadVideo=v.currentTime;head.capture(v,now);}

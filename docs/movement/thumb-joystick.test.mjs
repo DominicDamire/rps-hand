@@ -15,11 +15,11 @@ test('all held screen directions move with equal maximum speed',()=>{
  assert.ok(Math.abs(Math.hypot(c.x,c.z)-1)<1e-10);assert.deepEqual(c.step(200),c.step(220));}
 });
 test('circle centre and fist both stop immediately',()=>{for(const stop of [s(),s(.6,.7,true)]){const c=ready();c.receive(s(.5),100);c.receive(s(.5),180);c.receive(stop,220);assert.deepEqual(c.step(220),{dx:0,dz:0});}});
-test('lost tracking preserves circle but requires fist before movement resumes',()=>{
+test('lost tracking preserves circle and fist can resume movement',()=>{
  const c=ready();c.receive(s(.5),100);c.receive(s(.5),180);c.receive(null,220);
  assert.deepEqual(c.centre,[0,0]);c.receive(s(.5),260);c.receive(s(.5),340);assert.deepEqual(c.step(340),{dx:0,dz:0});
  c.receive(s(.7,.8,true),380);c.receive(s(-.5),420);c.receive(s(-.5),500);assert.equal(c.direction,'LEFT');
- assert.deepEqual(c.centre,[0,0]);assert.deepEqual(c.step(751),{dx:0,dz:0});assert.deepEqual(c.centre,[0,0]);
+ assert.deepEqual(c.centre,[0,0]);assert.deepEqual(c.step(951),{dx:0,dz:0});assert.deepEqual(c.centre,[0,0]);
 });
 test('only reset allows replacing the captured circle',()=>{const c=ready();c.reset();for(let t=0;t<=400;t+=100)c.receive(s(.5,.7,true,2),t);assert.deepEqual(c.centre,[.5,0]);assert.equal(c.scale,2);});
 test('neutral jitter and one corrupt reversal do not cause drift',()=>{
@@ -68,3 +68,17 @@ test('zoom crop stays anchored and includes the joystick boost ring',()=>{
  assert.ok(a.width<640*.5);assert.ok(Math.abs(a.width/a.height-4/3)<1e-10);
 });
 test('zoom crop remains inside image near its edges',()=>{for(const centre of [[0,0],[1,.75],[.99,.01]]){const c=handViewport(640,480,null,{centre,viewScale:.2});assert.ok(c.x>=0&&c.y>=0&&c.x+c.width<=640&&c.y+c.height<=480);}});
+
+test('a visible thumb starts immediately without any fist calibration',()=>{
+ const c=new ThumbJoystick();c.receive(s(.4,.3),100);assert.deepEqual(c.centre,[.4,.3]);assert.equal(c.needsRest,false);
+ c.receive(s(.4+.275,.3),140);c.receive(s(.4+.275,.3),220);assert.equal(c.direction,'RIGHT');
+});
+test('tracking dropout stops but centre entry resumes without a fist',()=>{
+ const c=ready();c.receive(s(.5),100);c.receive(s(.5),180);c.receive(null,220);
+ c.receive(s(-.5),260);assert.equal(c.direction,null);c.receive(s(),300);
+ c.receive(s(-.5),340);c.receive(s(-.5),420);assert.equal(c.direction,'LEFT');assert.deepEqual(c.centre,[0,0]);
+});
+test('phone inference gaps do not repeatedly lock the joystick',()=>{
+ const c=ready();c.receive(s(.5),300);c.receive(s(.5),600);assert.equal(c.direction,'RIGHT');
+ assert.ok(c.step(900).dx>0);assert.deepEqual(c.step(1051),{dx:0,dz:0});
+});
