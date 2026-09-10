@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 33)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 34)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -49,7 +49,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 import { makeGun } from "./gun.mjs";
 
-const BUILD = 33;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 34;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -390,12 +390,13 @@ if (Q.get("env") !== "0" && !BENCH) { scene.environment = new THREE.PMREMGenerat
 // across the table at the opponent (phone plane = middle of the table, z = 0; you are at z < 0, they are at z > 0).
 // "mirror": the camera sits where the phone camera is and the render is mirrored, so it behaves like a mirror.
 const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 8);
-// First person draws each hand with its own camera: the phone's view REFLECTED to your side of the hand (same field of
-// view as the video pane, looking back at the phone from twice the hand's distance). The hand then covers exactly the
-// screen area it covers in the video, seen from your side instead of the phone's; the room keeps the fixed eye camera.
-const handCam = new THREE.PerspectiveCamera(50, 1, 0.02, 8); window.handCam = handCam;
-const worldObjs = [];   // room objects hidden while the hands are drawn with handCam
-const FP_DEPTH = +Q.get("fpz") || 0.3;   // first person: the room is seen as if your hand were this far from the phone
+// First person: ONE fixed eye camera = the phone's view reflected through a plane FP_DEPTH in front of the phone (the eye
+// sits 2 * FP_DEPTH from the phone, same crop fov as the video pane). A hand at FP_DEPTH covers exactly the screen area
+// it covers in the video; a hand moving toward the phone moves AWAY from the eye and gets smaller, as in real first
+// person (owner: "when I move my hand closer to the camera it should move further away from me"). Build 32 drew each
+// hand with its own reflected camera (video footprint at every depth) - that reversed the depth feel and is gone.
+const worldObjs = [];   // room objects (the gun module hides/uses them for bullet targets)
+const FP_DEPTH = +Q.get("fpz") || 0.3;
 const worldGroup = new THREE.Group(); scene.add(worldGroup);   // everything that must mirror in the selfie view
 let frameW = 640, frameH = 480;   // camera frame size, set once the video is known
 const VIEWS = ["first person", "mirror"]; let view = Q.has("view") ? +Q.get("view") : Q.get("img") || Q.get("video") ? 1 : 0;   // ?view=0 first person, 1 mirror   // live camera: first person; test stills/clips: mirror   // mirror = the room seen from the phone, mirrored like the video
@@ -407,7 +408,6 @@ function applyView(force) {
     // mirror: match the video pane's object-fit:cover crop (a pane taller than the frame shows the full frame height, a wider pane the full width)
     const t = Math.tan(HFOV / 2), cropFov = 2 * Math.atan(w / h < frameW / frameH ? t * frameH / frameW : t / (w / h)) * 180 / Math.PI;
     camera.fov = cropFov; camera.updateProjectionMatrix();
-    handCam.aspect = w / h; handCam.fov = cropFov; handCam.updateProjectionMatrix();
   }
   const dbgCam = Q.get("cam")?.split(",").map(Number);   // ?cam=x,y,z,tx,ty,tz: fixed debug camera (renders checks of the hand mesh)
   if (dbgCam) { camera.position.set(dbgCam[0], dbgCam[1], dbgCam[2]); camera.lookAt(dbgCam[3], dbgCam[4], dbgCam[5]); worldGroup.scale.x = 1; }
@@ -435,20 +435,6 @@ for (const z of [-3.2, 3.2]) {   // a wall behind each player
   wall.position.set(0, FLOOR_Y + 2.5, z); wall.receiveShadow = true; scene.add(wall); worldObjs.push(wall);
 }
 const _pd = V();
-function render3D(fpHands) {   // fpHands: [{group, pc}] hands to draw with the reflected phone camera (first person), else one plain render
-  if (!fpHands) { renderer.render(scene, camera); return; }
-  const vis = fpHands.map(h => h.group.visible); for (const h of fpHands) h.group.visible = false;
-  renderer.render(scene, camera);                                            // the room, from the eyes
-  const bg = scene.background; scene.background = null;                      // a Color background forces a clear per render: none for the hand passes
-  for (const o of worldObjs) o.visible = false; renderer.autoClear = false;
-  _pd.set(0, Math.sin(pitch), -Math.cos(pitch));                             // the phone's optical axis in the levelled world
-  for (let i = 0; i < fpHands.length; i++) {
-    if (!vis[i]) continue; const Zh = Math.max(0.05, fpHands[i].pc.dot(_pd));   // this hand's distance from the phone
-    handCam.position.copy(_pd).multiplyScalar(2 * Zh); handCam.lookAt(0, 0, 0);   // the phone camera mirrored through the hand's depth plane
-    renderer.clearDepth(); fpHands[i].group.visible = true; renderer.render(scene, handCam); fpHands[i].group.visible = false;
-  }
-  for (const o of worldObjs) o.visible = true; renderer.autoClear = true; scene.background = bg; fpHands.forEach((h, i) => h.group.visible = vis[i]);
-}
 
 
 // --- skinned hand mesh driven by the 21 tracked points -----------------------------------------------
@@ -1001,7 +987,7 @@ async function main() {
     pump(); const tLoop0 = performance.now();
     const hud = [], displayed = [];
     move = null;
-    const shown = {}, fpHands = [];   // slot key -> flat GL points displayed this frame; hands drawn with the reflected phone camera
+    const shown = {};   // slot key -> flat GL points displayed this frame
     for (const s of [slots.Right, slots.Left]) {
       if (now - s.lastSeen >= hold) continue;   // tracked, or dead-reckoned through a short dropout
       const lead = Math.min(MAX_LEAD, Math.max(0, (now - s.capT) / 1000 + 0.016));   // age of the data since the frame was captured + one display frame
@@ -1024,10 +1010,9 @@ async function main() {
         const pts = shape(shown[s.key]);
         const tD = performance.now(); s.hand.draw(pts); dbg.tm.draw += performance.now() - tD; displayed.push(shown[s.key]);
         const pc = palmFlat(shown[s.key]); if (s.lastPalm && pc.distanceTo(s.lastPalm) > 0.1) dbg.dispJumps++; s.lastPalm = pc;   // what the player actually sees jump
-        fpHands.push({ group: s.hand.group, pc });
       } else { s.hand.hide(); s.lastPalm = null; }
     }
-    if (gun) gun.update(dt, [slots.Right, slots.Left].filter(s => shown[s.key]).map(s => ({ key: s.key, group: s.hand.group, pts: shape(shown[s.key]), right: s.hand.right, ext: s.ext })), now);
+    if (gun) gun.update(dt, [slots.Right, slots.Left].filter(s => shown[s.key]).map(s => ({ key: s.key, group: s.hand.group, pts: shape(shown[s.key]), right: s.hand.right, ext: s.ext })), now, camera);
     renderOverlay(displayed);
     if (now - stat.t > 1000) {
       $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | ${BENCH ? "BENCH no render" : SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | ${NHANDS}h | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"} | build ${BUILD}`;
@@ -1035,7 +1020,7 @@ async function main() {
     }
     $("hand").textContent = "HANDS: " + (hud.join("  |  ") || "-") + (gun ? "   ·   " + gun.hud() : "");
     $("move").textContent = "MOVE: " + (move ?? "?"); $("move").style.color = move ? "#78ff78" : "#ffc850";
-    applyView(false); const tR = performance.now(); if (!BENCH) render3D(VIEWS[view] === "first person" && !Q.get("cam") ? fpHands : null); const tE = performance.now(); dbg.tm.render += tE - tR; dbg.tm.loop += tE - tLoop0; dbg.tm.loops++;
+    applyView(false); const tR = performance.now(); if (!BENCH) renderer.render(scene, camera); const tE = performance.now(); dbg.tm.render += tE - tR; dbg.tm.loop += tE - tLoop0; dbg.tm.loops++;
     requestAnimationFrame(loop);
   };
   loop();

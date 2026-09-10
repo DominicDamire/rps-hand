@@ -12,7 +12,7 @@ async def run():
         await pg.wait_for_function("!document.getElementById('status')", timeout=60000)
         if js: await pg.evaluate(js)
         await pg.wait_for_timeout(secs * 1000)
-        r = await pg.evaluate("() => { const g = window.gun; if (!g) return null; const s = g.state; return { mode: s.mode, holder: s.holder, shots: s.shots, armed: s.armed, marks: g.marks, pos: g.obj.position.toArray().map(x => +x.toFixed(3)), flash: s.flashT }; }")
+        r = await pg.evaluate("() => { const g = window.gun; if (!g) return null; const s = g.state; return { mode: s.mode, holder: s.holder, shots: s.shots, armed: s.armed, marks: g.marks, cans: g.cans, hits: s.hits, dotOn: s.dotOn, lastHit: s.lastHit, lastRay: s.lastRay, sight: g.sight, pos: g.obj.position.toArray().map(x => +x.toFixed(3)), flash: s.flashT }; }")
         print(await pg.inner_text("#hand")); print(json.dumps(r)); print("errors:", errs)
         if out: await pg.screenshot(path=out)
         await b.close()
