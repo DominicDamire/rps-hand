@@ -22,33 +22,35 @@ const valid=s=>s?.tilt?.length===3&&s.tilt.every(Number.isFinite);
 const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
 // Thumb-angle references only, not full hand poses or image matching.
 export const THUMB_TILTS={"NEUTRAL":[0.7984262,-0.4986223,-0.3374779],"FORWARD":[0.5432355,-0.2159375,-0.8113361],"BACKWARD":[0.6139758,-0.7153458,0.3336377],"LEFT":[0.9311239,-0.1177362,-0.3451759],"RIGHT":[0.1658621,-0.8552083,-0.491028]};
-const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
-const unit=a=>{const n=Math.hypot(...a);return a.map(v=>v/n);};
-const neutral=unit(THUMB_TILTS.NEUTRAL);
-const side=THUMB_TILTS.RIGHT.map((v,i)=>v-THUMB_TILTS.LEFT[i]);
-const right=unit(side.map((v,i)=>v-dot(side,neutral)*neutral[i]));
-let back=unit([neutral[1]*right[2]-neutral[2]*right[1],neutral[2]*right[0]-neutral[0]*right[2],neutral[0]*right[1]-neutral[1]*right[0]]);
-if(dot(back,THUMB_TILTS.BACKWARD)<dot(back,THUMB_TILTS.FORWARD))back=back.map(v=>-v);
-const tau=2*Math.PI,positive=a=>(a%tau+tau)%tau;
-const knots=Object.entries({RIGHT:0,BACKWARD:Math.PI/2,LEFT:Math.PI,FORWARD:3*Math.PI/2}).map(([name,output])=>({angle:positive(Math.atan2(dot(THUMB_TILTS[name],back),dot(THUMB_TILTS[name],right))),output})).sort((a,b)=>a.angle-b.angle);
+const clamp=v=>Math.max(-1,Math.min(1,v));
+const neutral=THUMB_TILTS.NEUTRAL;
+const angle=t=>Math.atan2(t[1],t[0]);
+const wrap=a=>Math.atan2(Math.sin(a),Math.cos(a));
+const forwardSpan=neutral[2]-THUMB_TILTS.FORWARD[2];
+const backwardSpan=THUMB_TILTS.BACKWARD[2]-neutral[2];
+function lateral(t,z){
+ const depthLean=z>=0?wrap(angle(THUMB_TILTS.BACKWARD)-angle(neutral))*z:wrap(angle(THUMB_TILTS.FORWARD)-angle(neutral))*(-z);
+ return wrap(angle(neutral)-angle(t))+depthLean;
+}
+const depth=t=>{const d=t[2]-neutral[2];return d/(d>=0?backwardSpan:forwardSpan);};
+const rightSpan=lateral(THUMB_TILTS.RIGHT,depth(THUMB_TILTS.RIGHT));
+const leftSpan=-lateral(THUMB_TILTS.LEFT,depth(THUMB_TILTS.LEFT));
 export function thumbVector(tilt){
  const n=Math.hypot(...tilt);if(!Number.isFinite(n)||n<.5)return null;
- tilt=tilt.map(v=>v/n);const alignment=dot(tilt,neutral);
- if(alignment<.05)return null;
- const lean=Math.acos(Math.max(-1,Math.min(1,alignment)));
- if(lean<=.18)return {x:0,z:0};
- let angle=positive(Math.atan2(dot(tilt,back),dot(tilt,right)));
- // Continuous angular interpolation; reference directions orient the axes, never quantize them.
- let index=knots.findLastIndex(k=>k.angle<=angle);if(index<0){index=knots.length-1;angle+=tau;}
- const a=knots[index],b=knots[(index+1)%knots.length];
- const span=positive(b.angle-a.angle),fraction=(angle-a.angle)/span;
- const output=a.output+positive(b.output-a.output)*fraction;
- const speed=Math.min(1,(lean-.18)/.4);
- return {x:Math.cos(output)*speed,z:Math.sin(output)*speed};
+ tilt=tilt.map(v=>v/n);
+ // Signed depth is the walking depth axis; lateral noise cannot reverse it.
+ let z=depth(tilt),side=lateral(tilt,z),x=side/(side>=0?rightSpan:leftSpan);
+ // Remove the small depth offset of a sideways tilt without reversing backward depth.
+ const sidewaysDepth=x>=0?depth(THUMB_TILTS.RIGHT)*Math.min(1,x):depth(THUMB_TILTS.LEFT)*Math.min(1,-x);
+ z-=sidewaysDepth;
+ const length=Math.hypot(x,z);
+ if(length<=.16)return {x:0,z:0};
+ const gain=Math.min(1,(length-.16)/.84)/length;x*=gain;z*=gain;
+ return {x,z};
 }
 export class ThumbJoystick {
  constructor(){this.speed=4.5;this.reset();}
- reset(){this.x=0;this.z=0;this.seen=-Infinity;this.candidate=null;this.reason='SHOW THUMB';}
+ reset(){this.x=0;this.z=0;this.seen=-Infinity;this.candidate=null;this.lastTilt=null;this.reason='SHOW THUMB';}
  receive(sample,time){
   if(!valid(sample)){this.reset();return;}
   if(time<=this.seen)return;
@@ -57,6 +59,8 @@ export class ThumbJoystick {
   const v=thumbVector(sample.tilt);if(!v){this.stop('THUMB UNCLEAR');return;}
   if(Math.hypot(v.x,v.z)<.001){this.stop('NEUTRAL');return;}
   const active=Math.hypot(this.x,this.z)>.01,change=Math.hypot(v.x-this.x,v.z-this.z);
+  const normalized=sample.tilt.map(v=>v/Math.hypot(...sample.tilt));
+  if(active&&this.lastTilt&&distance(normalized,this.lastTilt)<.06){this.candidate=null;return;}
   if(active&&change<.1){this.candidate=null;return;}
   // Confirm starts and abrupt reversals, while ordinary turns move continuously.
   if(!active||change>.8){
@@ -65,7 +69,7 @@ export class ThumbJoystick {
   }
   this.candidate=null;
   const alpha=active?1-Math.exp(-Math.min(100,elapsed)/30):1;
-  this.x+=(v.x-this.x)*alpha;this.z+=(v.z-this.z)*alpha;this.reason='MOVING';
+  this.x+=(v.x-this.x)*alpha;this.z+=(v.z-this.z)*alpha;this.lastTilt=normalized;this.reason='MOVING';
  }
  stop(reason){this.x=this.z=0;this.candidate=null;this.reason=reason;}
  get direction(){return Math.hypot(this.x,this.z)>.01?[this.z<-.05?'FORWARD':this.z>.05?'BACKWARD':'',this.x<-.05?'LEFT':this.x>.05?'RIGHT':''].filter(Boolean).join(' '):null;}
