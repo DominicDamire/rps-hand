@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import {MovementController,measureHand} from './controller.mjs?v=3';
-import {setupUI} from './ui.mjs?v=3';
-import {SwipeController,measurePointer} from './swipe.mjs?v=3';
+import {MovementController,measureHand} from './controller.mjs?v=4';
+import {setupUI} from './ui.mjs?v=4';
+import {SwipeController,measurePointer} from './swipe.mjs?v=4';
 const $=id=>document.getElementById(id), controller=new MovementController();
 controller.mode='index';const trackingUI=setupUI();
 const swipe=new SwipeController();let navigation='turn';
@@ -16,10 +16,18 @@ for(let z=-70;z<=30;z+=10)for(const x of [-7,7]){
  const dot=new THREE.Mesh(new THREE.BoxGeometry(.2,.06,.2),new THREE.MeshBasicMaterial({color:0xc6efd1}));dot.position.set(x,2.8,z);scene.add(dot);
 }
 const marker=new THREE.Mesh(new THREE.TorusGeometry(.75,.018,8,80),new THREE.MeshBasicMaterial({color:0xbbe7d0}));marker.position.set(0,1.65,-18);scene.add(marker);
+function box(x,y,z,w,h,d,color){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color,roughness:.85}));m.position.set(x,y,z);scene.add(m);}
+function sign(text,x,y,z,color,size=5){const c=document.createElement('canvas');c.width=512;c.height=128;const ctx=c.getContext('2d');ctx.fillStyle='#11212e';ctx.fillRect(0,0,512,128);ctx.fillStyle=color;ctx.textAlign='center';ctx.font='bold 42px system-ui';ctx.fillText(text,256,78);const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c)}));sprite.position.set(x,y,z);sprite.scale.set(size,size/4,1);scene.add(sprite);}
+box(-3,2,-12,1,4,1,0x59d5ee);box(3,2,-12,1,4,1,0x59d5ee);box(0,4,-12,7,.5,1,0x59d5ee);sign('N · BLUE GATE',0,5.5,-12,'#59d5ee');
+for(let i=0;i<4;i++)box(13, (i+1)*.45, -3+i*2,3,(i+1)*.9,1.7,0xffb64e);sign('E · GOLD STEPS',13,5,0,'#ffb64e');
+box(0,3,22,3,6,3,0xd88eff);sign('S · VIOLET TOWER',0,7,22,'#d88eff');
+for(let i=0;i<3;i++)box(-14,1.5,-3+i*4,2,3,2,0xff7f76);sign('W · RED BLOCKS',-14,5,0,'#ff7f76');
+for(let z=-8;z<=16;z+=4){box(0,.025,z,.12,.05,1,0xf6f3c1);sign(String(7-z)+' m',3,.35,z,'#ffffff',1);}
+sign('START',0,.5,7,'#a9edc7');
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}addEventListener('resize',resize);resize();
 let worker=null,stream=null,running=false,busy=false,lastVideo=-1,lastResult=0,demo=false,demoRun=null;
 function status(text,active=false){$('status').textContent=text;$('lamp').classList.toggle('on',active);}
-function apply(sample,time){const r=navigation==='turn'?swipe.update(sample,time):controller.update(sample,time);if(navigation==='turn'){camera.rotation.y+=r.yaw;$('gestureStats').textContent=`Swipe ${Math.round((r.distance||0)*($('cam').videoWidth||640))} px · ${Math.round((r.speed||0)*($('cam').videoWidth||640))} px/s`;}else{camera.translateX(r.dx);camera.translateZ(r.dz);}status(r.status,r.active);return r;}
+function apply(sample,time){const r=navigation==='turn'?swipe.update(sample,time):controller.update(sample,time);if(navigation==='turn'){camera.rotation.y+=r.yaw;camera.translateZ(r.dz);$('gestureStats').textContent=`Swipe ${Math.round((r.distance||0)*($('cam').videoWidth||640))} px · ${Math.round((r.speed||0)*($('cam').videoWidth||640))} px/s`;}else{camera.translateX(r.dx);camera.translateZ(r.dz);}status(r.status,r.active);return r;}
 function stop(){running=false;busy=false;worker?.terminate();worker=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('cam').srcObject=null;controller.reset();swipe.reset();trackingUI.camera(false);$('start').textContent='Start camera';}
 async function start(){
  if(running){stop();status('Paused · camera off');return;}
@@ -33,7 +41,7 @@ async function start(){
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
     lastResult=performance.now();if(lastResult-data.time>220){apply(null,lastResult);trackingUI.clear();status('Tracking is delayed · movement paused');return;}
-    const sample=data.landmarks?.length===1?(navigation==='turn'?measurePointer(data.landmarks[0],data.worldLandmarks[0]):measureHand(data.landmarks[0],data.worldLandmarks[0],$('cam').videoWidth/$('cam').videoHeight)):null;
+    const sample=data.landmarks?.length===1?(navigation==='turn'?measurePointer(data.landmarks[0],data.worldLandmarks[0],$('cam').videoWidth/$('cam').videoHeight):measureHand(data.landmarks[0],data.worldLandmarks[0],$('cam').videoWidth/$('cam').videoHeight)):null;
     const movement=apply(sample,data.time);trackingUI.draw(data.landmarks,$('cam').videoWidth,$('cam').videoHeight,movement.active);if(data.landmarks?.length>1)status('Use one hand to move');
   };
   lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Show one hand');
@@ -42,21 +50,21 @@ async function start(){
 }
 $('start').onclick=start;
 $('reset').onclick=()=>{camera.position.set(0,1.65,7);camera.rotation.set(0,0,0);controller.reset();swipe.reset();demoRun=null;status('View reset · ready');};
-function controlsChanged(){navigation=$('navigation').value;controller.mode=swipe.mode=$('mode').value;controller.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent=navigation==='turn'?(swipe.mode==='index'?'Extend your index like holding a button. Swipe horizontally to turn. Longer and faster swipes turn farther. Fold your finger to release and reposition.':'Pinch and swipe horizontally to turn. Longer and faster swipes turn farther. Release to stop and reposition.'):'Extend your index or pinch to drag. Slide left/right to strafe. Push toward camera = backward; pull = forward.';$('reverseLabel').hidden=navigation==='turn';document.querySelectorAll('[data-demo="forward"],[data-demo="backward"]').forEach(b=>b.hidden=navigation==='turn');status('Ready · '+(navigation==='turn'?'swipe to turn':'drag to move'));}
+function controlsChanged(){navigation=$('navigation').value;controller.mode=swipe.mode=$('mode').value;controller.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='One gesture = one action. Flick sideways to turn. Move your pointing hand toward camera = step back; pull toward yourself = step forward. Fold index (or release pinch) between actions. Keep palm visible for depth.';status('Ready · deliberate gestures only');}
 $('mode').onchange=controlsChanged;$('navigation').onchange=controlsChanged;
 $('gain').oninput=()=>controller.gain=swipe.gain=+$('gain').value;
-$('reverse').onchange=()=>{controller.reverse=$('reverse').checked;controller.reset();};
+$('reverse').onchange=()=>{controller.reverse=swipe.reverse=$('reverse').checked;controller.reset();swipe.reset();};
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
 document.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{controller.reset();swipe.reset();demoRun={direction:b.dataset.demo,start:performance.now()};});
 document.addEventListener('visibilitychange',()=>{controller.reset();swipe.reset();demoRun=null;if(document.hidden&&running)stop();});
 addEventListener('pagehide',stop);
 function frame(now){
  requestAnimationFrame(frame);
- if(demo&&demoRun){const elapsed=now-demoRun.start,t=Math.max(0,Math.min(1,(elapsed-180)/650));const d=demoRun.direction;apply({x:.5+(d==='right'?.25:d==='left'?-.25:0)*t,z:.5+(d==='forward'?.18:d==='backward'?-.18:0)*t,pinch:.2,extended:true},now);if(elapsed>1050){demoRun=null;controller.reset();status('Demo complete · choose another movement');}}
+ if(demo&&demoRun){const elapsed=now-demoRun.start,t=Math.max(0,Math.min(1,(elapsed-180)/180));const d=demoRun.direction;apply({x:.5+(d==='right'?.25:d==='left'?-.25:0)*t,z:.5+(d==='forward'?.18:d==='backward'?-.18:0)*t,pinch:.2,extended:true},now);if(elapsed>1050){demoRun=null;controller.reset();status('Demo complete · choose another movement');}}
  if(running){
-  if(now-lastResult>220){controller.reset();swipe.reset();trackingUI.clear();status('Waiting for tracking');}
+  if(now-lastResult>220){controller.reset();swipe.update(null,now);trackingUI.clear();status('Waiting for tracking');}
   const v=$('cam');if(!busy&&v.readyState>=2&&v.currentTime!==lastVideo){lastVideo=v.currentTime;busy=true;const capture=now,owner=worker;createImageBitmap(v).then(bitmap=>{if(worker!==owner||!running){bitmap.close();return;}owner.postMessage({type:'frame',bitmap,time:capture},[bitmap]);}).catch(e=>{busy=false;controller.reset();status('Frame unavailable');$('error').textContent=e.message;});}
  }
- $('position').innerHTML=`Turn ${(-camera.rotation.y*180/Math.PI).toFixed(1)}°<br>X ${camera.position.x.toFixed(1)} · Z ${(camera.position.z-7).toFixed(1)}`;
+ $('position').innerHTML=`${['N','NE','E','SE','S','SW','W','NW'][Math.round(((-camera.rotation.y*180/Math.PI)%360+360)%360/45)%8]} · ${((-camera.rotation.y*180/Math.PI%360+360)%360).toFixed(0)}°<br>X ${camera.position.x.toFixed(1)} · Z ${(camera.position.z-7).toFixed(1)}`;
  renderer.render(scene,camera);
 }controlsChanged();requestAnimationFrame(frame);
