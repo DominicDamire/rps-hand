@@ -39,7 +39,7 @@ export class ThumbJoystick {
   }
   const x=-(sample.axes[0]-this.centre[0])/.45,z=(sample.axes[1]-this.centre[1])/.4;
   const dead=v=>Math.sign(v)*Math.max(0,(Math.abs(clamp(v))-.22)/.78);
-  this.x=dead(x);this.z=dead(z);
+  this.x=dead(x)||0;this.z=dead(z)||0;
   // A small secondary signal near a main direction is usually tracking cross-talk.
   // Deliberate diagonals retain both axes outside this narrow cone.
   if(Math.abs(this.x)<Math.abs(this.z)*.2)this.x=0;
@@ -50,3 +50,4 @@ export class ThumbJoystick {
  get direction(){return Math.hypot(this.x,this.z)>.01?[this.z<-.05?'FORWARD':this.z>.05?'BACKWARD':'',this.x<-.05?'LEFT':this.x>.05?'RIGHT':''].filter(Boolean).join(' '):null;}
  step(now,dt){if(now-this.seen>350)this.reset();const distance=this.speed*Math.min(.05,Math.max(0,dt));return {dx:this.x*distance,dz:this.z*distance};}
 }
+
