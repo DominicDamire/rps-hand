@@ -483,10 +483,11 @@ function boneFrame(pts, j, s, out) {
   out.makeBasis(_x.multiplyScalar(s), _y.multiplyScalar(L), _z.multiplyScalar(s)); out.setPosition(a);
   return out;
 }
-let SKIN = null;
-async function loadSkin() {
-  const metaUrl = SKIN_URL.replace(/\.glb$/, ".json");   // each export carries its own bind joints (hand_v4.glb -> hand_v4.json)
-  const [gltf, meta] = await Promise.all([new GLTFLoader().loadAsync(SKIN_URL), fetch(metaUrl).then(r => r.ok ? r.json() : fetch("hand.json").then(q => q.json()))]);
+let SKIN = null, SKIN_HI = null;   // phone mesh, and the high-detail mesh (same bones) shown when the hand is close
+const LOD_NEAR = 0.15;             // palm length / depth (radians): above this the hand is close enough to show the high-detail mesh
+async function loadSkin(url) {
+  const metaUrl = url.replace(/(_hi)?\.glb$/, ".json");   // each export carries its own bind joints (hand_u.glb, hand_u_hi.glb -> hand_u.json)
+  const [gltf, meta] = await Promise.all([new GLTFLoader().loadAsync(url), fetch(metaUrl).then(r => r.ok ? r.json() : fetch("hand.json").then(q => q.json()))]);
   let src; gltf.scene.traverse(o => { if (o.isSkinnedMesh) src = o; });
   const geo = src.geometry, order = src.skeleton.bones.map(b => +b.name.slice(1));   // bone i drives joint order[i]
   const material = src.material?.isMeshStandardMaterial ? src.material : null;        // the scan's material (colour, roughness, baked normal map)
@@ -496,11 +497,13 @@ async function loadSkin() {
   const inverses = bind => { const b = meshPts(bind); return order.map(j => boneFrame(b, j, 1, new THREE.Matrix4()).invert()); };
   return { order, material, R: { geo, bind: joints, inv: inverses(joints) }, L: { geo: geoL, bind: jointsL, inv: inverses(jointsL) }, mirroredIsLeft: meta.hand === "right" };
 }
-const skinPromise = SKIN_URL ? loadSkin().catch(e => { console.warn("hand mesh unavailable, capsule hand instead:", e); return null; }) : Promise.resolve(null);
+const skinPromise = SKIN_URL ? loadSkin(SKIN_URL).catch(e => { console.warn("hand mesh unavailable, capsule hand instead:", e); return null; }) : Promise.resolve(null);
+const hands = [];   // every makeHand(), so the high-detail mesh can be attached when it arrives
 const CHIR_RIGHT = 1;    // sign of (thumb tip - wrist) . ((5-0) x (17-0)) for a right hand: the thumb sits on the palm side, and for a right hand that cross product points out of the palm
-function makeSkin(variant, color) {
-  const bones = SKIN.order.map(() => { const b = new THREE.Bone(); b.matrixAutoUpdate = false; return b; });
-  const mesh = new THREE.SkinnedMesh(variant.geo, SKIN.material ? SKIN.material.clone() : new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
+function makeSkin(variant, color) { return makeSkinFrom(SKIN, variant, color); }
+function makeSkinFrom(SK, variant, color) {
+  const bones = SK.order.map(() => { const b = new THREE.Bone(); b.matrixAutoUpdate = false; return b; });
+  const mesh = new THREE.SkinnedMesh(variant.geo, SK.material ? SK.material.clone() : new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
   mesh.add(...bones); mesh.bind(new THREE.Skeleton(bones, variant.inv.map(m => m.clone())), new THREE.Matrix4());
   mesh.castShadow = true; mesh.frustumCulled = false; mesh.visible = false;
   const L0 = variant.bind[0].distanceTo(variant.bind[9]);
@@ -511,7 +514,7 @@ function makeSkin(variant, color) {
     // thickness: one per-hand size (palm length ratio), settled slowly, so fingers never swell or shrink with distance or pose
     ratio.all = ratio.all == null ? sc : ratio.all + 0.01 * (sc - ratio.all);
     for (const k of Object.keys(CHAINS)) ratio[k] = ratio.all;
-    SKIN.order.forEach((j, i) => { boneFrame(pts, j, FIT_EXACT ? ratio[CHAIN_OF[j]] : sc, bones[i].matrix); bones[i].matrixWorldNeedsUpdate = true; });
+    SK.order.forEach((j, i) => { boneFrame(pts, j, FIT_EXACT ? ratio[CHAIN_OF[j]] : sc, bones[i].matrix); bones[i].matrixWorldNeedsUpdate = true; });
     mesh.visible = true;
   } };
 }
@@ -528,6 +531,7 @@ function makeHand(color = 0xdead8f) {
   const palm = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color, roughness: 0.6, side: THREE.DoubleSide }));
   palm.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(PALM_TRIS.length * 9), 3)); palm.castShadow = true; if (capsules) group.add(palm);
   const skinR = SKIN && makeSkin(SKIN.R, 0xd9a58a), skinL = SKIN && makeSkin(SKIN.L, 0xd9a58a); if (SKIN) group.add(skinR.mesh, skinL.mesh);
+  let hiR = null, hiL = null; const all = () => [skinR, skinL, hiR, hiL].filter(Boolean);
   let chir = 0;   // smoothed handedness sign from the geometry (MediaPipe's label flickers, the thumb's side of the palm does not)
   const skel = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x78ff78, depthTest: false }));
   skel.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CONNECTIONS.length * 6), 3)); skel.renderOrder = 1; group.add(skel);
@@ -543,15 +547,17 @@ function makeHand(color = 0xdead8f) {
     const b = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(FAR.x, FAR.y, FAR.z));
     world.createCollider(RAPIER.ColliderDesc.ball(i < 21 ? Math.max(JOINT_R[i], 0.01) : 0.035), b); return b;
   });
-  return {
+  const hand = {
     group,
     draw(pts) {
       if (SKIN) {
         _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize();
         chir += 0.2 * (Math.sign(_r.subVectors(pts[4], pts[0]).dot(_n)) - chir);
         const right = chir * CHIR_RIGHT >= 0, useMirrored = right !== SKIN.mirroredIsLeft;   // the GLB is a right hand: its mirrored copy is the left hand
-        const on = useMirrored ? skinL : skinR, off = useMirrored ? skinR : skinL;
-        on.update(pts, right); off.mesh.visible = false;
+        const near = hiR && pts[0].distanceTo(pts[9]) / Math.max(0.05, -palmCentre(pts).z) > LOD_NEAR;   // close to the camera: full detail
+        const on = useMirrored ? (near ? hiL : skinL) : (near ? hiR : skinR);
+        for (const k of all()) if (k !== on) k.mesh.visible = false;
+        on.update(pts, right);
       } else {
         for (const bn of bones) placeCylinder(bn.mesh, pts[bn.a], pts[bn.b], bn.r);
         joints.forEach((m, i) => { m.position.copy(pts[i]); m.scale.setScalar(JOINT_R[i]); });
@@ -568,7 +574,9 @@ function makeHand(color = 0xdead8f) {
       bodies[21].setNextKinematicTranslation(palmCentre(pts));
     },
     hide() { group.visible = false; for (const b of bodies) b.setNextKinematicTranslation(FAR); },
+    addHi(hi) { hiR = makeSkinFrom(hi, hi.R, 0xd9a58a); hiL = makeSkinFrom(hi, hi.L, 0xd9a58a); group.add(hiR.mesh, hiL.mesh); },
   };
+  hands.push(hand); return hand;
 }
 
 // --- 2D overlay on the camera (raw landmarks, unfiltered, so you can compare against the 3D hands) ------
@@ -657,6 +665,7 @@ async function main() {
     renderer.compile(scene, camera); for (const s of Object.values(slots)) s.hand.hide();
   }
   $("status").remove();
+  if (SKIN) loadSkin(SKIN_URL.replace(/\.glb$/, "_hi.glb")).then(hi => { SKIN_HI = hi; for (const h of hands) h.addHi(hi); }).catch(() => {});   // high-detail mesh, if this export has one
   const imgCentre = lm => PALM.reduce((c, i) => [c[0] + lm[i].x / PALM.length, c[1] + lm[i].y / PALM.length], [0, 0]);
   const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
   // Which slot does a detection belong to? MediaPipe's Left/Right label flickers, so match by position first:
