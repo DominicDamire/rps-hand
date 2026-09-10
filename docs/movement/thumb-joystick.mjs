@@ -28,29 +28,30 @@ export function thumbVector(point,centre){
 }
 export class ThumbJoystick {
  constructor(){this.speed=4.5;this.reset();}
- reset(){this.centre=null;this.settling=[];this.seen=-Infinity;this.stop('SHOW THUMB');}
+ reset(){this.centre=null;this.settling=[];this.seen=-Infinity;this.stop('SHOW RELAXED FIST');}
  stop(reason){this.x=this.z=0;this.raw={x:0,z:0};this.candidate=null;this.lastTilt=null;this.reason=reason;}
  receive(sample,time){
   if(!valid(sample)){this.reset();this.reason='TRACKING LOST';return;}
   if(time<=this.seen)return;
   const elapsed=time-this.seen;if(elapsed>250){this.centre=null;this.stop('TRACKING RESUMED');this.settling=[];}this.seen=time;
-  if(sample.rest){this.centre=null;this.stop('FIST REST');this.settling=[];return;}
-  const t=sample.point;if(!t){this.stop('THUMB UNCLEAR');return;}
-  if(!this.centre){
-   this.reason='HOLD THUMB COMFORTABLY';
-   if(this.settling.length&&distance(t,this.settling[0].tilt)>.1)this.settling=[];
-   this.settling.push({tilt:t,time});
-   if(this.settling.length>=5&&time-this.settling[0].time>=350){this.centre=[0,1].map(i=>this.settling.map(p=>p.tilt[i]).sort((a,b)=>a-b)[Math.floor(this.settling.length/2)]);this.settling=[];this.stop('NEUTRAL');}
+  const t=sample.point;
+  // Capture only an actual resting fist. A held steering pose must never
+  // silently become the neutral reference.
+  if(sample.rest){
+   this.stop('HOLD FIST STILL');
+   if(this.settling.length&&distance(t,this.settling[0].point)>.1)this.settling=[];
+   this.settling.push({point:[...t],time});
+   if(this.settling.length>=5&&time-this.settling[0].time>=350){
+    this.centre=[0,1].map(i=>this.settling.map(p=>p.point[i]).sort((a,b)=>a-b)[Math.floor(this.settling.length/2)]);
+    this.settling=[];this.stop('FIST REST · CENTRE SAVED');
+   }else if(this.centre)this.reason='FIST REST · CENTRE SAVED';
    return;
   }
+  this.settling=[];
+  if(!this.centre){this.stop('SHOW RELAXED FIST FIRST');return;}
   const active=Math.hypot(this.x,this.z)>.01;
-  // Hysteresis: noise cannot start walking inside the wider release zone.
-  // Only adapt centre while stopped, never while holding a movement command.
-  if(!active&&distance(t,this.centre)<.20){
-   const a=1-Math.exp(-Math.min(100,elapsed)/800);
-   this.centre=this.centre.map((v,i)=>v+(t[i]-v)*a);
-   this.stop('NEUTRAL');return;
-  }
+  // Keep the learned fist reference fixed while the thumb is steering.
+  if(!active&&distance(t,this.centre)<.20){this.stop('NEUTRAL');return;}
   const v=thumbVector(t,this.centre);if(!v){this.stop('THUMB UNCLEAR');return;}this.raw={...v};
   if(Math.hypot(v.x,v.z)<.001){this.stop('NEUTRAL');return;}
   const change=Math.hypot(v.x-this.x,v.z-this.z);
