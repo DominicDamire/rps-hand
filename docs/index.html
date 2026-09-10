@@ -117,6 +117,64 @@ function camToGL(c) {
   return level(a);
 }
 const palmDepth = c => { let d = 0; for (const i of PALM) d += c[3 * i + 2] / PALM.length; return d; };
+// Depth from bone lengths. MediaPipe's per-joint depth is the weak part: on a straight finger it puts 1-4 cm steps
+// between joints (3D bends of 20-50 degrees where the picture shows 0-15), and it makes the last segment longer than the
+// middle one, which no finger has. So: keep every joint exactly where the PICTURE puts it and solve its depth so that each
+// bone has the length the model's own metric hand shape gives it (walk the tree from the wrist; quadratic in z, take the
+// root nearest the tracker's depth to keep the toward/away sign). Fingertips stop curling, lengths stop inflating when
+// the hand is close, so the skin's thickness stops changing with distance. ?len=raw disables it.
+const FIT_LEN = Q.get("len") === "fit";   // off by default: with per-frame lengths the two depth roots are ill-conditioned when a segment faces the camera (measured: 3D bends got worse, not better)
+// Per-finger depth smoothing (default). The four depths of a finger (MCP, PIP, DIP, tip) are replaced by a least-squares
+// LINE over the finger's picture arc length when the picture shows a straight finger (total picture bend < 25 degrees),
+// a PARABOLA when it shows a curl. Picture positions are untouched; only the tracker's per-joint depth zigzag goes.
+// Measured on straight fingers: 3D bends 20-50 degrees before, single digits after. ?zs=0 disables it.
+const Z_SMOOTH = Q.get("zs") !== "0";
+function smoothFingerDepth(c) {
+  for (const m of [5, 9, 13, 17, 1]) {
+    const J = [m, m + 1, m + 2, m + 3], t = [0], z = J.map(j => c[3 * j + 2]);
+    for (let k = 1; k < 4; k++) t.push(t[k - 1] + Math.hypot(c[3 * J[k]] - c[3 * J[k - 1]], c[3 * J[k] + 1] - c[3 * J[k - 1] + 1]));
+    if (t[3] < 1e-6) continue;
+    let bend = 0;   // total bend in the picture
+    for (let k = 1; k < 3; k++) { const a = [c[3 * J[k]] - c[3 * J[k - 1]], c[3 * J[k] + 1] - c[3 * J[k - 1] + 1]], b = [c[3 * J[k + 1]] - c[3 * J[k]], c[3 * J[k + 1] + 1] - c[3 * J[k] + 1]]; bend += Math.abs(Math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1])); }
+    const deg = m === 1 || bend > 25 * Math.PI / 180 ? 2 : 1, x = t.map(v => v / t[3]);
+    // least squares polynomial of degree deg through (x, z)
+    const n = deg + 1, A = Array.from({ length: n }, () => new Float64Array(n)), B = new Float64Array(n);
+    for (let k = 0; k < 4; k++) for (let i = 0; i < n; i++) { B[i] += z[k] * x[k] ** i; for (let q = 0; q < n; q++) A[i][q] += x[k] ** (i + q); }
+    for (let i = 0; i < n; i++) { const pv = A[i][i]; for (let q = i; q < n; q++) A[i][q] /= pv; B[i] /= pv; for (let r = 0; r < n; r++) if (r !== i) { const f = A[r][i]; for (let q = i; q < n; q++) A[r][q] -= f * A[i][q]; B[r] -= f * B[i]; } }
+    for (let k = 0; k < 4; k++) { let v = 0; for (let i = 0; i < n; i++) v += B[i] * x[k] ** i; c[3 * J[k] + 2] = v; }
+  }
+  return c;
+}
+const FINGER_JOINT = new Set([6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19, 20, 3, 4]);   // joints whose bone continues a finger (has a previous segment)
+function boneLengths(world, lens) {   // per-hand bone lengths: slow average of the model's metric lengths (they wobble ~20 % per frame)
+  for (let j = 1; j <= 20; j++) {
+    const p = PARENT[j], L = Math.hypot(world[j].x - world[p].x, world[j].y - world[p].y, world[j].z - world[p].z);
+    lens[j] = lens[j] ? lens[j] + 0.05 * (L - lens[j]) : L;
+  }
+  return lens;
+}
+function fitDepths(c, lens) {
+  const dir = [];   // 3D direction of each bone after fitting (for the continuity choice)
+  for (let j = 1; j <= 20; j++) {
+    const p = PARENT[j], L = lens[j];
+    const zp = c[3 * p + 2], Xp = c[3 * p] * zp, Yp = c[3 * p + 1] * zp, u = c[3 * j], v = c[3 * j + 1], z0 = c[3 * j + 2];
+    const a = u * u + v * v + 1, b = u * Xp + v * Yp + zp, cc = Xp * Xp + Yp * Yp + zp * zp - L * L, disc = b * b - a * cc;
+    let z;
+    if (disc < 0) z = b / a;   // the picture needs a longer bone than this hand has: nearest point on the ray
+    else {
+      const r = Math.sqrt(disc), z1 = (b - r) / a, z2 = (b + r) / a;
+      const d1 = [u * z1 - Xp, v * z1 - Yp, z1 - zp], d2 = [u * z2 - Xp, v * z2 - Yp, z2 - zp], prev = dir[p];
+      if (FINGER_JOINT.has(j) && prev) {   // a finger segment continues the previous one: prefer the root that bends less, unless the tracker's depth clearly says otherwise
+        const bend = d => Math.acos(Math.max(-1, Math.min(1, (d[0] * prev[0] + d[1] * prev[1] + d[2] * prev[2]) / (Math.hypot(...d) * Math.hypot(...prev)))));
+        const b1 = bend(d1), b2 = bend(d2), near = Math.abs(z1 - z0) < Math.abs(z2 - z0) ? z1 : z2;
+        const straight = b1 < b2 ? z1 : z2, other = b1 < b2 ? z2 : z1;
+        z = Math.abs(b1 - b2) > 0.35 && Math.abs(near - straight) > 0 && Math.abs(other - z0) < Math.abs(straight - z0) - 0.03 ? near : straight;
+      } else z = Math.abs(z1 - z0) < Math.abs(z2 - z0) ? z1 : z2;
+    }
+    c[3 * j + 2] = z; dir[j] = [u * z - Xp, v * z - Yp, z - zp];
+  }
+  return c;
+}
 const vec = (a, i) => new THREE.Vector3(a[3*i], a[3*i+1], a[3*i+2]);
 const toVecs = a => Array.from({ length: 21 }, (_, i) => vec(a, i));
 const palmCentre = pts => { const c = V(); for (const i of PALM) c.add(pts[i]); return c.multiplyScalar(1 / PALM.length); };
@@ -588,7 +646,7 @@ async function main() {
 
   // one slot per hand, keyed by MediaPipe's handedness label
   const slots = { Right: null, Left: null };
-  for (const k in slots) slots[k] = { key: k, name: "?", filt: new HandFilter(63), raw: null, pending: null, imgLm: null, lastPalm: null, lastSeen: -1e9, capT: 0, img: [0, 0], ext: [0, 0, 0, 0], fit: 0, depth: 0, otherPalm: null, nearOther: Infinity, hist: [], det: null, vImg: null, pendingC: null, gl: null, hand: makeHand() };
+  for (const k in slots) slots[k] = { key: k, name: "?", filt: new HandFilter(63), raw: null, pending: null, imgLm: null, lastPalm: null, lastSeen: -1e9, capT: 0, img: [0, 0], ext: [0, 0, 0, 0], fit: 0, depth: 0, otherPalm: null, nearOther: Infinity, hist: [], det: null, vImg: null, pendingC: null, gl: null, lens: new Float32Array(21), hand: makeHand() };
   const other = s => s.key === "Right" ? slots.Left : slots.Right;
   if (SKIN) {   // compile the skin shaders now (a 1-3 s stall on some GPUs), not when a hand first appears
     const warm = SKIN.R.bind.map(p => p.clone().multiplyScalar(0.02).add(new THREE.Vector3(0, 0, -0.4)));
@@ -625,11 +683,11 @@ async function main() {
     const pr = toImage(best.a); dbg.lagSum += pr.reduce((t, q, i) => t + Math.hypot(q.x - lm[i].x, q.y - lm[i].y), 0) / 21; dbg.lagN++;
   }
   let lastT = -1, ts = 0, inflight = false, move = null, nHands = 0, lastRecv = 0, hold = HOLD_MS, bigHand = false, bigUntil = 0;
-  const dbg = window.dbg = { frames: 0, two: 0, held: 0, labelFlips: 0, maxJump: 0, bigJumps: 0, spikes: 0, snaps: 0, handovers: 0, dispJumps: 0, reprojN: 0, reprojSum: 0, lagSum: 0, lagN: 0, depthClamps: 0, pinches: 0, nav, pitch: 0, tiltOn: false, moves: { ROCK: 0, PAPER: 0, SCISSORS: 0, none: 0 }, fitSum: 0, padded: 0 };   // test metrics
+  const dbg = window.dbg = { lm: () => ovHands, slots, get frameW() { return frameW; }, get frameH() { return frameH; }, frames: 0, two: 0, held: 0, labelFlips: 0, maxJump: 0, bigJumps: 0, spikes: 0, snaps: 0, handovers: 0, dispJumps: 0, reprojN: 0, reprojSum: 0, lagSum: 0, lagN: 0, depthClamps: 0, pinches: 0, nav, pitch: 0, tiltOn: false, moves: { ROCK: 0, PAPER: 0, SCISSORS: 0, none: 0 }, fitSum: 0, padded: 0 };   // test metrics
   let stat = { ms: 0, lat: 0, n: 0, t: performance.now() }, prev = performance.now();
 
   const pump = async () => {
-    const fresh = imgSrc || (video.currentTime !== lastT && video.readyState >= 2);
+    const fresh = imgSrc || dbg.freeze || (video.currentTime !== lastT && video.readyState >= 2);   // dbg.freeze: tests re-track a paused clip frame
     if (inflight || !fresh) return;
     inflight = true; lastT = video.currentTime;
     const cap = performance.now(); ts = Math.max(ts + 1, Math.floor(cap));
@@ -647,7 +705,7 @@ async function main() {
     const assigned = new Set();
     for (let [d, s] of assign(r.hands, recv)) {
       const h = d.h; let T, xu, yv; [T, s.fit, xu, yv] = locate(h.world, h.landmarks, frameW, frameH);
-      const raw = toCam(h.world, T, xu, yv);
+      const raw = toCam(h.world, T, xu, yv); if (FIT_LEN) fitDepths(raw, boneLengths(h.world, s.lens)); if (Z_SMOOTH) smoothFingerDepth(raw);
       s.det = { lm: h.landmarks, cap }; lagOf(s, h.landmarks, cap);   // what the tracker saw vs what was on screen at that moment (before any gating)
       if (s.raw && recv - s.lastSeen < hold) { const g = camToGL(raw), g0 = camToGL(s.raw); let m = 0; for (let i = 0; i < 21; i++) m = Math.max(m, Math.hypot(g[3*i] - g0[3*i], g[3*i+1] - g0[3*i+1], g[3*i+2] - g0[3*i+2])); dbg.maxJump = Math.max(dbg.maxJump, m); if (m > 0.1) dbg.bigJumps++; }
       // Whole-hand jump gate: a palm move over JUMP since the last result is either a spike (one frame, then back) or a
