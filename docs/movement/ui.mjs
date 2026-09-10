@@ -19,12 +19,12 @@ export function setupUI(){
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;$('previewImage').style.aspectRatio=w+'/'+h;}
   ctx.clearRect(0,0,w,h);if(preview.hidden)return;
   const point=p=>[(1-p.x)*w,p.y*h];
-  const now=performance.now();trail=trail.filter(p=>now-p.t<350);if(active&&hands?.length===1)trail.push({xy:point(hands[0][8]),t:now});else trail=[];
+  const now=performance.now();trail=trail.filter(p=>now-p.t<350);if(active&&hands?.length===1)trail.push({xy:point(hands[0][4]),t:now});else trail=[];
   for(const hand of hands??[]){if(hand.length!==21)continue;
    ctx.lineWidth=Math.max(2,w/240);ctx.lineCap='round';
-   for(const [a,b]of edges){ctx.strokeStyle=a>=5&&b<=8?'#ffdf75':'#67ffbb';ctx.beginPath();ctx.moveTo(...point(hand[a]));ctx.lineTo(...point(hand[b]));ctx.stroke();}
-   for(let i=0;i<21;i++){ctx.fillStyle=i===8?'#ffdf75':'#e5fff3';ctx.beginPath();ctx.arc(...point(hand[i]),i===8?w/65:w/160,0,Math.PI*2);ctx.fill();}
-   const [x,y]=point(hand[8]);ctx.strokeStyle=active?'#ffdf75':'#ffffff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,w/38,0,Math.PI*2);ctx.stroke();
+   for(const [a,b]of edges){ctx.strokeStyle=a>=1&&b<=4?'#ffdf75':'#67ffbb';ctx.beginPath();ctx.moveTo(...point(hand[a]));ctx.lineTo(...point(hand[b]));ctx.stroke();}
+   for(let i=0;i<21;i++){ctx.fillStyle=i===4?'#ffdf75':'#e5fff3';ctx.beginPath();ctx.arc(...point(hand[i]),i===4?w/65:w/160,0,Math.PI*2);ctx.fill();}
+   const [x,y]=point(hand[4]);ctx.strokeStyle=active?'#ffdf75':'#ffffff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,w/38,0,Math.PI*2);ctx.stroke();
   }
   if(trail.length>1){ctx.strokeStyle='#ffab45';ctx.lineWidth=Math.max(3,w/140);ctx.beginPath();trail.forEach((p,i)=>i?ctx.lineTo(...p.xy):ctx.moveTo(...p.xy));ctx.stroke();}
  }};

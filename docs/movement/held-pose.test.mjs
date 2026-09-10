@@ -1,0 +1,9 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {HeldPose,DIRECTIONS,poseFeature} from './held-pose.mjs';
+const vector=n=>Array(60).fill(n);
+const ready=()=>{const c=new HeldPose();c.load(Object.fromEntries(Object.keys(DIRECTIONS).map((k,i)=>[k,vector(i)])));return c;};
+test('each held pose moves continuously in its assigned direction',()=>{Object.entries(DIRECTIONS).forEach(([name,[x,z]],i)=>{const c=ready();c.receive(vector(i),0);c.receive(vector(i),30);for(let t=40;t<200;t+=16){const step=c.step(t,.016);assert.equal(step.dx,x*.048);assert.equal(step.dz,z*.048);}assert.equal(c.direction,name);});});
+test('unknown and open hand stop without inertia; stale camera expires',()=>{const c=ready();c.receive(vector(0),0);c.receive(vector(0),30);c.receive(null,40);assert.deepEqual(c.step(50,.016),{dx:0,dz:0});c.receive(vector(0),60);c.receive(vector(0),90);assert.deepEqual(c.step(311,.016),{dx:0,dz:0});});
+test('ambiguous pose stops and switching requires two matching frames',()=>{const c=ready();c.receive(vector(0),0);c.receive(vector(0),30);c.receive(vector(1),60);assert.equal(c.direction,null);c.receive(vector(1),90);assert.equal(c.direction,'left');c.receive(vector(.5),120);assert.equal(c.direction,null);});
+test('setup rejects similar poses and unstable capture',()=>{const c=new HeldPose();assert.equal(c.learn('forward',Array(10).fill(vector(0))),null);assert.match(c.learn('left',Array(10).fill(vector(.02))),/similar/);assert.match(c.learn('left',[...Array(9).fill(vector(1)),vector(2)]),/moved/);});
+test('walk distance independent of render frame rate',()=>{const run=hz=>{const c=ready();let z=0;for(let i=0;i<hz;i++){c.receive(vector(0),i*1000/hz);if(i===0)c.receive(vector(0),0);z+=c.step(i*1000/hz,1/hz).dz;}return z;};assert.ok(Math.abs(run(30)-run(60))<1e-10);});
+test('invalid landmarks are stopped',()=>{assert.equal(poseFeature([]),null);assert.equal(poseFeature(Array(21).fill({x:0,y:0,z:0})),null);});
