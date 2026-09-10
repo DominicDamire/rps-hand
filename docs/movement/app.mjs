@@ -1,34 +1,22 @@
+import {DustMap} from './map.mjs?v=13';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=12';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=12';
+import {setupUI} from './ui.mjs?v=13';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=13';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();
 const swipe=new SwipeController();
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:false});renderer.setPixelRatio(1);
 const scene=new THREE.Scene();scene.background=new THREE.Color('#25394a');scene.fog=new THREE.FogExp2('#25394a',.018);
 const camera=new THREE.PerspectiveCamera(65,1,.05,200);camera.position.set(0,1.65,7);
-const grid=new THREE.GridHelper(240,120,0xa6d2c3,0x52757e);scene.add(grid);
-scene.add(new THREE.HemisphereLight(0xd5f0ec,0x14252c,2));
-const ground=new THREE.Mesh(new THREE.PlaneGeometry(240,240),new THREE.MeshStandardMaterial({color:0x263e49,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.01;scene.add(ground);
-for(let z=-70;z<=30;z+=10)for(const x of [-7,7]){
- const p=new THREE.Mesh(new THREE.BoxGeometry(.18,3,.18),new THREE.MeshStandardMaterial({color:0x799f94,roughness:.7}));p.position.set(x,1.5,z);scene.add(p);
- const dot=new THREE.Mesh(new THREE.BoxGeometry(.2,.06,.2),new THREE.MeshBasicMaterial({color:0xc6efd1}));dot.position.set(x,2.8,z);scene.add(dot);
-}
-const marker=new THREE.Mesh(new THREE.TorusGeometry(.75,.018,8,80),new THREE.MeshBasicMaterial({color:0xbbe7d0}));marker.position.set(0,1.65,-18);scene.add(marker);
-function box(x,y,z,w,h,d,color){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color,roughness:.85}));m.position.set(x,y,z);scene.add(m);}
-function sign(text,x,y,z,color,size=5){const c=document.createElement('canvas');c.width=512;c.height=128;const ctx=c.getContext('2d');ctx.fillStyle='#11212e';ctx.fillRect(0,0,512,128);ctx.fillStyle=color;ctx.textAlign='center';ctx.font='bold 42px system-ui';ctx.fillText(text,256,78);const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c)}));sprite.position.set(x,y,z);sprite.scale.set(size,size/4,1);scene.add(sprite);}
-box(-3,2,-12,1,4,1,0x59d5ee);box(3,2,-12,1,4,1,0x59d5ee);box(0,4,-12,7,.5,1,0x59d5ee);sign('N · BLUE GATE',0,5.5,-12,'#59d5ee');
-for(let i=0;i<4;i++)box(13, (i+1)*.45, -3+i*2,3,(i+1)*.9,1.7,0xffb64e);sign('E · GOLD STEPS',13,5,0,'#ffb64e');
-box(0,3,22,3,6,3,0xd88eff);sign('S · VIOLET TOWER',0,7,22,'#d88eff');
-for(let i=0;i<3;i++)box(-14,1.5,-3+i*4,2,3,2,0xff7f76);sign('W · RED BLOCKS',-14,5,0,'#ff7f76');
-for(let z=-8;z<=16;z+=4){box(0,.025,z,.12,.05,1,0xf6f3c1);sign(String(7-z)+' m',3,.35,z,'#ffffff',1);}
-sign('START',0,.5,7,'#a9edc7');
+scene.background=new THREE.Color('#abc9d9');scene.fog=new THREE.Fog('#abc9d9',90,180);
+const dustMap=new DustMap(scene);
+dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · ready';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}addEventListener('resize',resize);resize();
 let head=null,lastHeadVideo=-1,lastFrameTime=0;
 let worker=null,stream=null,running=false,busy=false,lastVideo=-1,lastResult=0,demo=false,demoRun=null;
 function status(text,active=false){$('status').textContent=text;$('lamp').classList.toggle('on',active);}
-function apply(sample,time){const r=swipe.update(sample,time);const yaw=camera.rotation.y;camera.position.x+=Math.cos(yaw)*r.dx+Math.sin(yaw)*r.dz;camera.position.z+=-Math.sin(yaw)*r.dx+Math.cos(yaw)*r.dz;$('gestureStats').textContent=r.active?'MOVE engaged · relax index to release':'Hands free · movement off';status(r.status,r.active);return r;}
+function apply(sample,time){const r=swipe.update(sample,time);const yaw=camera.rotation.y;dustMap.move(camera.position,Math.cos(yaw)*r.dx+Math.sin(yaw)*r.dz,-Math.sin(yaw)*r.dx+Math.cos(yaw)*r.dz);$('gestureStats').textContent=r.active?'MOVE engaged · relax index to release':'Hands free · movement off';status(r.status,r.active);return r;}
 function stop(){head?.worker?.terminate();if(head)clearTimeout(head.timer);head=null;$('headStatus').textContent='Head: camera off';running=false;busy=false;worker?.terminate();worker=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('cam').srcObject=null;swipe.reset();trackingUI.camera(false);$('start').textContent='Start camera';}
 async function start(){
  if(running){stop();status('Paused · camera off');return;}
@@ -37,7 +25,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=12',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=13',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -57,7 +45,7 @@ $('start').onclick=start;
 $('centerHead').onclick=()=>{head?.recenter();camera.rotation.set(0,0,0,'YXZ');swipe.reset();};
 $('headEnabled').onchange=()=>{if(head)head.mode=$('headEnabled').checked?'first':'off';camera.rotation.set(0,0,0,'YXZ');head?.recenter();};
 $('headGain').oninput=()=>{if(head)head.pose.sensitivity=+$('headGain').value;};
-$('reset').onclick=()=>{head?.recenter();camera.position.set(0,1.65,7);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
+$('reset').onclick=()=>{head?.recenter();camera.position.copy(dustMap.spawn);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
 function controlsChanged(){swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='LEFT index out (a slight bend is fine): move your hand to move. Turn your head to look; tap Center head while facing forward. Other fingers can stay relaxed. sideways = strafe; push toward camera = forward; pull toward yourself = back. Combine them for diagonals. To reset your reach: bend index FIRST, return your hand, then point again. Returning with index out also moves you.';status('Hands free · point deliberately to move');}
 $('gain').oninput=()=>swipe.gain=+$('gain').value;
 $('reverse').onchange=()=>{swipe.reverse=$('reverse').checked;swipe.reset();};
@@ -74,6 +62,6 @@ function frame(now){
   if(now-lastResult>500){swipe.update(null,now);trackingUI.clear();status('Waiting for tracking');}
   const v=$('cam');if(!busy&&!head?.busy&&v.readyState>=2&&v.currentTime!==lastVideo){lastVideo=v.currentTime;busy=true;const capture=now,owner=worker;createImageBitmap(v,{resizeWidth:384,resizeHeight:Math.round(384*v.videoHeight/v.videoWidth),resizeQuality:'low'}).then(bitmap=>{if(worker!==owner||!running){bitmap.close();return;}owner.postMessage({type:'frame',bitmap,time:capture},[bitmap]);}).catch(e=>{busy=false;status('Frame unavailable');$('error').textContent=e.message;});}
  }
- $('position').innerHTML=`${['N','NE','E','SE','S','SW','W','NW'][Math.round(((-camera.rotation.y*180/Math.PI)%360+360)%360/45)%8]} · ${((-camera.rotation.y*180/Math.PI%360+360)%360).toFixed(0)}°<br>X ${camera.position.x.toFixed(1)} · Z ${(camera.position.z-7).toFixed(1)}`;
+ $('position').innerHTML=`${['N','NE','E','SE','S','SW','W','NW'][Math.round(((-camera.rotation.y*180/Math.PI)%360+360)%360/45)%8]} · ${((-camera.rotation.y*180/Math.PI%360+360)%360).toFixed(0)}°<br>X ${camera.position.x.toFixed(1)} · Z ${camera.position.z.toFixed(1)}`;
  renderer.render(scene,camera);
 }controlsChanged();requestAnimationFrame(frame);
