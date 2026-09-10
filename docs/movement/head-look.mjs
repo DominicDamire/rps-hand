@@ -1,11 +1,37 @@
-// Head yaw controls angular velocity; pitch remains an absolute look angle.
+const RAD=Math.PI/180;
 export class HeadLook {
- constructor(){this.heading=0;this.speed=0;this.gain=1.5;this.deadzoneDegrees=12;}
- update(yaw,dt,valid=true){
-  const dead=this.deadzoneDegrees*Math.PI/180,full=Math.max(30,this.deadzoneDegrees+12)*Math.PI/180;
-  const amount=valid&&Number.isFinite(yaw)?Math.max(0,Math.min(1,(Math.abs(yaw)-dead)/(full-dead))):0;
-  this.speed=amount?Math.sign(yaw)*Math.pow(amount,1.6)*(Math.PI/2)*(this.gain/1.5):0;
-  this.heading+=this.speed*Math.max(0,Math.min(.1,Number.isFinite(dt)?dt:0));
-  return this.heading;
+ constructor(){this.heading=0;this.gain=1.5;this.deadzoneDegrees=12;this.mode='hold';this.resetLook();}
+ resetLook(){this.speed=0;this.look=0;this.pending=0;this.direction=0;this.turning=false;this.previous=null;this.armed=true;this.neutralTime=0;this.progress=0;this.state='LOOK ONLY';}
+ update(yaw,dt,valid=true,sampleTime=null){
+  dt=Math.max(0,Math.min(.1,Number.isFinite(dt)?dt:0));this.speed=0;
+  if(!valid||!Number.isFinite(yaw)){this.previous=null;this.pending=0;this.turning=false;this.progress=0;this.state='TRACKING PAUSED';return this.heading+this.look;}
+  const angle=Math.abs(yaw),direction=Math.sign(yaw),dead=this.deadzoneDegrees*RAD;
+  const target=Math.max(-35*RAD,Math.min(35*RAD,yaw*1.5));
+  this.look+=(target-this.look)*(1-Math.exp(-dt/.025));this.state='LOOK ONLY';this.progress=0;
+  if(this.mode==='quick'){
+   // One outward flick; returning to centre never reverses the body turn.
+   if(angle<5*RAD){this.neutralTime+=dt;if(this.neutralTime>=.15)this.armed=true;}else this.neutralTime=0;
+   const stamp=sampleTime??((this.previous?.time??0)+dt*1000);
+   if(!this.previous||stamp>this.previous.time){
+    const old=this.previous,seconds=old?(stamp-old.time)/1000:0;
+    if(old&&seconds>0&&seconds<=.2&&this.armed&&angle>=8*RAD&&angle>Math.abs(old.yaw)){
+     const delta=yaw-old.yaw;
+     if(Math.abs(delta)>=6*RAD&&Math.abs(delta)/seconds>=100*RAD){this.heading+=direction*30*RAD*(this.gain/1.5);this.armed=false;}
+    }
+    this.previous={yaw,time:stamp};
+   }
+   if(!this.armed)this.state='BODY TURNED · CENTRE TO REARM';
+  }else{
+   const outside=angle>(this.turning?Math.max(5,this.deadzoneDegrees-3)*RAD:dead);
+   if(!outside||direction!==this.direction){this.pending=0;this.turning=false;}
+   this.direction=direction;
+   if(outside){this.pending+=dt;this.progress=Math.min(1,this.pending/.22);
+    if(this.pending>=.22)this.turning=true;
+    if(this.turning){const amount=Math.min(1,Math.max(0,(angle-Math.max(5,this.deadzoneDegrees-3)*RAD)/(20*RAD)));this.speed=direction*amount**1.4*90*RAD*(this.gain/1.5);this.heading+=this.speed*dt;this.state=direction>0?'BODY TURN LEFT':'BODY TURN RIGHT';}
+    else this.state='HOLD TO TURN';
+   }
+  }
+  return this.heading+this.look;
  }
 }
+export function bodyDisplacement(dx,dz,heading){return {x:Math.cos(heading)*dx+Math.sin(heading)*dz,z:-Math.sin(heading)*dx+Math.cos(heading)*dz};}

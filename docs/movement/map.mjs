@@ -8,7 +8,7 @@ export class DustMap {
   const materials=await new MTLLoader().setPath(base).loadAsync('de_dust2.mtl');materials.preload();
   const obj=await new OBJLoader().setMaterials(materials).setPath(base).loadAsync('de_dust2.obj');
   obj.rotation.x=-Math.PI/2;obj.scale.setScalar(.0254);this.scene.add(obj);obj.updateMatrixWorld(true);
-  obj.traverse(m=>{if(m.isMesh){const many=Array.isArray(m.material),mats=many?m.material:[m.material];const basic=mats.map(old=>new THREE.MeshBasicMaterial({map:old.map,color:old.color,side:THREE.DoubleSide}));m.material=many?basic:basic[0];this.meshes.push(m);}});
+  obj.traverse(m=>{if(m.isMesh){m.geometry.computeBoundingBox();const many=Array.isArray(m.material),mats=many?m.material:[m.material];const basic=mats.map(old=>new THREE.MeshBasicMaterial({map:old.map,color:old.color,side:THREE.DoubleSide}));m.material=many?basic:basic[0];this.meshes.push(m);}});
   for(const [x,z] of [[-38,20],[-30,20],[-20,20],[0,0],[-10,-20]]){const y=this.floor(x,z,12);if(y!==null){this.spawn.set(x,y+this.eye,z);this.ready=true;return;}}
   throw Error('No walkable spawn found');
  }
