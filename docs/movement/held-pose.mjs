@@ -14,7 +14,7 @@ export class HeldPose {
  constructor(){this.templates={};this.speed=3;this.reset();}
  reset(){this.direction=null;this.candidate=null;this.count=0;this.seen=-Infinity;}
  get ready(){return Object.keys(DIRECTIONS).every(k=>this.templates[k]?.length===60);}
- load(value){if(value&&Object.keys(DIRECTIONS).every(k=>value[k]?.length===60&&value[k].every(Number.isFinite)))this.templates=value;}
+ load(value){if(value)for(const k of Object.keys(DIRECTIONS)){if(value[k]?.length===60&&value[k].every(Number.isFinite))this.templates[k]=value[k];}}
  learn(direction,samples){
   if(!DIRECTIONS[direction]||samples.length<8)return 'Keep the pose visible a little longer.';
   const mean=samples[0].map((_,i)=>samples.reduce((s,p)=>s+p[i],0)/samples.length);
