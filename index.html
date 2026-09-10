@@ -23,8 +23,8 @@
   button { position: absolute; padding: 12px 22px; font: inherit; font-weight: 700; border: 0; border-radius: 999px; }
   #play { right: 12px; bottom: 12px; background: #78ff78; color: #000; }
   #play:disabled { opacity: .4; }
-  #mode, #reset, #view, #size { background: #2a3145; color: #fff; padding: 10px 16px; font-size: 14px; }
-  #mode { left: 12px; bottom: 12px; } #reset { right: 12px; top: 12px; } #view { left: 12px; top: 12px; } #size { left: 12px; top: 62px; }
+  #mode, #reset, #view { background: #2a3145; color: #fff; padding: 10px 16px; font-size: 14px; }
+  #mode { left: 12px; bottom: 12px; } #reset { right: 12px; top: 12px; } #view { left: 12px; top: 12px; }
 </style>
 </head>
 <body>
@@ -32,14 +32,13 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 9)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 12)</div></div>
     <div class="hud" id="bottom"><div id="score">SCORE you 0 : 0 cpu</div><div id="game">Tap PLAY for a round</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
     <canvas id="gl"></canvas>
     <button id="view">VIEW: mirror</button>
-    <button id="size">SIZE: real</button>
     <button id="reset">RESET OBJECTS</button>
     <button id="mode">MODE: predict</button>
     <button id="play">PLAY</button>
@@ -51,7 +50,7 @@
 import * as THREE from "three";
 import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.20.0/dist/rapier.mjs";
 
-const BUILD = 9;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 12;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -61,12 +60,11 @@ const FLOOR_Y = +Q.get("floor") || -0.28;   // metres below the camera; the tabl
 const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
 // Lower presence/tracking thresholds = the tracker holds on longer through motion blur before giving up.
+const DELEGATES = Q.get("delegate") === "CPU" ? ["CPU"] : ["GPU", "CPU"];   // ?delegate=CPU: headless tests have no real GPU
 const TRACKER_OPTS = { runningMode: "VIDEO", numHands: 2, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.4 };
 
-// --- skeleton + canonical bone lengths (same as rps_hand.py) ------------------------------------
+// --- skeleton (MediaPipe's 21 landmarks) --------------------------------------------------------
 const PARENT = {1:0,2:1,3:2,4:3, 5:0,6:5,7:6,8:7, 9:0,10:9,11:10,12:11, 13:0,14:13,15:14,16:15, 17:0,18:17,19:18,20:19};
-const LENGTH = {1:.040,2:.035,3:.030,4:.025, 5:.092,6:.040,7:.025,8:.022, 9:.088,10:.045,11:.028,12:.022,
-                13:.082,14:.040,15:.026,16:.022, 17:.076,18:.032,19:.020,20:.020};
 const PALM = [0, 5, 9, 13, 17];
 const PALM_EDGES = [[5, 9], [9, 13], [13, 17]];
 const WEB = [2, 5];                                   // thenar web: the skin between the thumb's middle knuckle and the index base
@@ -113,18 +111,6 @@ const toVecs = a => Array.from({ length: 21 }, (_, i) => vec(a, i));
 const palmCentre = pts => { const c = V(); for (const i of PALM) c.add(pts[i]); return c.multiplyScalar(1 / PALM.length); };
 const palmFlat = a => palmCentre(toVecs(a));
 
-// Canonical bone lengths, tracked bone directions, placed so the palm centre sits where the tracked palm is.
-function retarget(a) {
-  const pts = toVecs(a);
-  const out = pts.map(() => V());
-  for (let j = 1; j < 21; j++) {
-    const p = PARENT[j], d = pts[j].clone().sub(pts[p]), n = d.length() || 1e-9;
-    out[j].copy(out[p]).addScaledVector(d, LENGTH[j] / n);
-  }
-  const shift = palmCentre(pts).sub(palmCentre(out));
-  return out.map(v => v.add(shift));
-}
-
 // Extended finger = tip further from the wrist than its middle joint. Thumb ignored (unreliable and irrelevant for RPS).
 function fingersUp(pts) {
   const w = pts[0];
@@ -141,11 +127,16 @@ function moveFromFingers(ext) {
 // --- One Euro filter over the 63 coordinates, with velocity prediction ---------------------------
 // Casiez et al. 2012: low cutoff when still (no jitter), cutoff rises with speed (no lag). Units are metres,
 // so beta is much larger than the pixel-space defaults: at 1 m/s the cutoff is minCutoff + beta.
-const VMAX_REL = 1.5;              // m/s: how fast a joint may move relative to the palm in one frame (occlusion spikes are faster)
-class OneEuro {
-  constructor(n, minCutoff = 0.6, beta = 20, dCutoff = 1.5) { this.x = null; this.dx = new Float32Array(n); this.t = 0; this.minCutoff = minCutoff; this.beta = beta; this.dCutoff = dCutoff; }
-  alpha(cut, dt) { const tau = 1 / (2 * Math.PI * cut); return 1 / (1 + tau / dt); }
-  push(x, t) {                     // t in seconds (capture time of the frame)
+// Error-adaptive smoothing. The filter reacts to how far the raw point is from the drawn point, not to speed
+// (a speed estimate is always late, which is where the lag on fast moves came from). Within the tracker's noise
+// range it smooths hard (no jitter at rest); beyond it, it follows one to one (no lag, no onset delay).
+// Lateral positions come from the image and are precise; depth comes from the world model and is noisier.
+const NOISE = { xy: [0.003, 0.015], z: [0.008, 0.030] };   // metres: [deadband, full-follow]
+const A_MIN = 0.12;                                          // gain inside the deadband
+const VMAX_REL = 2.0;                                        // m/s: max joint speed relative to the palm (occlusion spikes are faster)
+class HandFilter {
+  constructor(n) { this.x = null; this.dx = new Float32Array(n); this.t = 0; this.vp = [0, 0, 0]; this.acc = 0; }
+  push(x, t, trust = 1) {          // t in seconds (capture time of the frame); trust in (0,1] scales how far we follow this sample
     if (!this.x) { this.x = Float32Array.from(x); this.t = t; return; }
     const dt = Math.max(1e-3, t - this.t); this.t = t;
     // per-joint speed limit relative to the palm: a finger cannot teleport in one frame (what occlusion spikes look like)
@@ -157,24 +148,48 @@ class OneEuro {
       const r = [0, 1, 2].map(k => x[3 * j + k] - this.x[3 * j + k] - pd[k]), n = Math.hypot(...r);
       if (n > lim) for (let k = 0; k < 3; k++) x[3 * j + k] = this.x[3 * j + k] + pd[k] + r[k] * lim / n;
     }
-    const ad = this.alpha(this.dCutoff, dt);
-    for (let i = 0; i < x.length; i++) {
-      const dx = (x[i] - this.x[i]) / dt;
-      this.dx[i] += ad * (dx - this.dx[i]);
-      const a = this.alpha(this.minCutoff + this.beta * Math.abs(this.dx[i]), dt);
-      this.x[i] += a * (x[i] - this.x[i]);
+    const ad = 1 / (1 + 1 / (2 * Math.PI * 3 * dt));   // 3 Hz low-pass on the velocity (only used for prediction)
+    const gain = (e, [d0, d1]) => Math.max(A_MIN, Math.min(1, (e - d0) / (d1 - d0))) * trust;
+    const vp = [0, 0, 0];   // palm velocity from this raw step, for the acceleration estimate that damps prediction
+    for (const i of PALM) for (let k = 0; k < 3; k++) vp[k] += (x[3 * i + k] - this.x[3 * i + k]) / dt / PALM.length;
+    this.acc += 0.5 * (Math.hypot(vp[0] - this.vp[0], vp[1] - this.vp[1], vp[2] - this.vp[2]) / dt - this.acc); this.vp = vp;
+    for (let j = 0; j < 21; j++) {
+      const o = 3 * j;
+      const gxy = gain(Math.hypot(x[o] - this.x[o], x[o + 1] - this.x[o + 1]), NOISE.xy), gz = gain(Math.abs(x[o + 2] - this.x[o + 2]), NOISE.z);
+      for (let k = 0; k < 3; k++) {
+        this.dx[o + k] += ad * ((x[o + k] - this.x[o + k]) / dt - this.dx[o + k]);
+        this.x[o + k] += (k === 2 ? gz : gxy) * (x[o + k] - this.x[o + k]);
+      }
     }
   }
-  predict(lead) {                  // extrapolate the hand as a rigid body: mean palm velocity applied to every joint (per-joint
-    const v = [0, 0, 0];             // extrapolation amplifies fingertip noise into wobble); finger articulation stays smoothed
+  predict(lead) {                  // extrapolate the hand as a rigid body: mean palm velocity applied to every joint
+    const v = [0, 0, 0];
     for (const i of PALM) for (let k = 0; k < 3; k++) v[k] += this.dx[3 * i + k] / PALM.length;
-    const g = Math.min(1, Math.max(0, (Math.hypot(...v) - 0.05) / 0.25));   // no prediction at noise-level speeds, full above 0.3 m/s
+    const g = Math.min(1, Math.max(0, (Math.hypot(...v) - 0.05) / 0.25)) / (1 + this.acc / 20);   // none at noise-level speeds, full above 0.3 m/s, halved at 20 m/s² (a reversal)
     const out = new Float32Array(this.x.length);
     for (let i = 0; i < out.length; i++) out[i] = this.x[i] + v[i % 3] * lead * g;
     return out;
   }
 }
-const MAX_LEAD = 0.15;             // never extrapolate more than 150 ms ahead
+const MAX_LEAD = 0.04;             // never extrapolate more than 40 ms ahead (longer leads overshoot on every reversal)
+const JUMP = 0.12;                 // metres: a whole-hand move bigger than this between two results needs a second frame to confirm
+
+// --- phone tilt: level the room to gravity, so "up" is up even when the phone looks down at your hands --------
+let pitch = 0, tiltOn = false;     // camera pitch in radians, + = camera looking up
+function onOrient(e) { if (e.beta == null) return; pitch = (90 - e.beta) * Math.PI / 180; tiltOn = true; }
+addEventListener("deviceorientation", onOrient);   // Android and desktop fire right away; iOS only after the permission below
+let tiltGranted = false;
+addEventListener("pointerdown", () => {           // iOS 13+: permission must be requested from a tap; keep asking on taps until granted
+  if (tiltGranted || typeof DeviceOrientationEvent === "undefined" || !DeviceOrientationEvent.requestPermission) return;
+  DeviceOrientationEvent.requestPermission().then(r => { tiltGranted = r === "granted"; }).catch(() => {});
+});
+// camera frame -> level (gravity-aligned) frame: rotate about x by the pitch
+function level(a) {
+  if (!tiltOn) return a;
+  const c = Math.cos(pitch), sn = Math.sin(pitch), out = Float32Array.from(a);
+  for (let i = 0; i < 21; i++) { const y = a[3 * i + 1], z = a[3 * i + 2]; out[3 * i + 1] = c * y - sn * z; out[3 * i + 2] = sn * y + c * z; }
+  return out;
+}
 const HOLD_MS = 250;               // keep a hand alive this long after tracking drops (dead reckoning), then remove it
 const OCCL_HOLD = 1500;            // ...unless it vanished while touching the other hand: then it rides along with that hand this long
 
@@ -186,7 +201,7 @@ const pack = r => r.landmarks.map((landmarks, i) => ({ landmarks, world: r.world
 onmessage = async e => {
   if (e.data.init) {
     const vision = await FilesetResolver.forVisionTasks("${MP}/wasm", true);  // true = ES-module loader, required inside a module worker
-    for (delegate of ["GPU", "CPU"]) {
+    for (delegate of e.data.delegates) {
       try { lm = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: ${JSON.stringify(MODEL)}, delegate }, ...e.data.opts }); postMessage({ ready: true, delegate }); return; }
       catch (err) { console.warn(delegate + " failed in worker", err); }
     }
@@ -204,7 +219,7 @@ async function makeTracker() {
     const w = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], { type: "text/javascript" })), { type: "module" });
     const ready = await new Promise((res, rej) => {
       w.onmessage = e => res(e.data); w.onerror = e => rej(e.message || "worker error");
-      w.postMessage({ init: true, opts: TRACKER_OPTS });
+      w.postMessage({ init: true, opts: TRACKER_OPTS, delegates: DELEGATES });
       setTimeout(() => rej("worker init timeout"), 60000);
     });
     if (!ready.ready) throw new Error("no delegate in worker");
@@ -222,7 +237,7 @@ async function makeTracker() {
     const { FilesetResolver, HandLandmarker } = await import(`${MP}/vision_bundle.mjs`);
     const vision = await FilesetResolver.forVisionTasks(`${MP}/wasm`);
     const pack = r => r.landmarks.map((landmarks, i) => ({ landmarks, world: r.worldLandmarks[i], name: r.handedness[i]?.[0]?.categoryName ?? "?", score: r.handedness[i]?.[0]?.score ?? 0 }));
-    for (const delegate of ["GPU", "CPU"]) {
+    for (const delegate of DELEGATES) {
       try {
         const lm = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: MODEL, delegate }, ...TRACKER_OPTS });
         return { where: "main/" + delegate, async detect(src, ts) { const t = performance.now(); const r = lm.detectForVideo(src, ts); return { ms: performance.now() - t, hands: pack(r) }; } };
@@ -248,18 +263,16 @@ let frameW = 640, frameH = 480;   // camera frame size, set once the video is kn
 const VIEWS = ["mirror", "first person"]; let view = 0;   // mirror = the room seen from the phone, mirrored like the video
 $("view").onclick = () => { view = (view + 1) % VIEWS.length; $("view").textContent = "VIEW: " + VIEWS[view]; applyView(true); };
 function applyView(force) {
-  const w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio();
-  if (!force && canvas.width === (w * pr | 0) && canvas.height === (h * pr | 0)) return;
-  renderer.setSize(w, h, false); camera.aspect = w / h;
-  if (VIEWS[view] === "first person") {
-    camera.position.set(0, 0.12, -0.85); camera.lookAt(0, -0.12, 0.5); camera.fov = 62; worldGroup.scale.x = 1;
-  } else {
+  const w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio(), fp = VIEWS[view] === "first person";
+  if (force || canvas.width !== (w * pr | 0) || canvas.height !== (h * pr | 0)) {
+    renderer.setSize(w, h, false); camera.aspect = w / h;
     // mirror: match the video pane's object-fit:cover crop (a pane taller than the frame shows the full frame height, a wider pane the full width)
     const t = Math.tan(HFOV / 2);
-    camera.position.set(0, 0, 0); camera.lookAt(0, 0, -1); worldGroup.scale.x = -1;
-    camera.fov = 2 * Math.atan(w / h < frameW / frameH ? t * frameH / frameW : t / (w / h)) * 180 / Math.PI;
+    camera.fov = fp ? 62 : 2 * Math.atan(w / h < frameW / frameH ? t * frameH / frameW : t / (w / h)) * 180 / Math.PI;
+    camera.updateProjectionMatrix();
   }
-  camera.updateProjectionMatrix();
+  if (fp) { camera.position.set(0, 0.12, -0.85); camera.lookAt(0, -0.12, 0.5); worldGroup.scale.x = 1; }
+  else { camera.position.set(0, 0, 0); camera.lookAt(0, Math.sin(pitch), -Math.cos(pitch)); worldGroup.scale.x = -1; }   // looks where the phone looks
 }
 scene.add(new THREE.HemisphereLight(0xfff8ee, 0x3a4560, 1.0));
 const key = new THREE.DirectionalLight(0xffffff, 1.8); key.position.set(0.5, 1.8, -0.3); key.target.position.set(0, FLOOR_Y, 0); scene.add(key, key.target);
@@ -356,8 +369,11 @@ function skeleton(pts, color, width) {   // pts: [{x, y}] in normalised image co
 }
 // GL point (true coords) -> normalised image coords, the inverse of toGL/locate
 function toImage(a) {
-  const k = 2 * Math.tan(HFOV / 2);
-  return Array.from({ length: 21 }, (_, i) => { const z = -a[3*i+2]; return { x: 0.5 + a[3*i] / z / k, y: 0.5 + (-a[3*i+1]) / z / (k * ovH / ovW) }; });
+  const k = 2 * Math.tan(HFOV / 2), c = Math.cos(-pitch), sn = Math.sin(-pitch);   // back into the camera frame first
+  return Array.from({ length: 21 }, (_, i) => {
+    const y = tiltOn ? c * a[3*i+1] - sn * a[3*i+2] : a[3*i+1], z = -(tiltOn ? sn * a[3*i+1] + c * a[3*i+2] : a[3*i+2]);
+    return { x: 0.5 + a[3*i] / z / k, y: 0.5 + (-y) / z / (k * ovH / ovW) };
+  });
 }
 function renderOverlay(displayed) {   // displayed: flat GL arrays of the hands as drawn this frame (cyan)
   if (ov.width !== ovW || ov.height !== ovH) { ov.width = ovW; ov.height = ovH; }
@@ -393,18 +409,19 @@ function updateGame(now, move) {
 
 // --- main ---------------------------------------------------------------------------------------
 const MODES = ["predict", "smooth", "raw"];   // predict = filter + velocity lead, smooth = filter only, raw = latest tracker result
-const SIZES = ["real", "same"]; let size = 0;   // real = your tracked geometry (3D lines match the video lines exactly); same = canonical bone lengths, every hand identical
-$("size").onclick = () => { size = (size + 1) % SIZES.length; $("size").textContent = "SIZE: " + SIZES[size]; };
-const shape = a => SIZES[size] === "real" ? toVecs(a) : retarget(a);
+const shape = toVecs;   // the 3D model is the tracked geometry itself, so its lines match the video lines exactly
 let mode = 0;
 $("mode").onclick = () => { mode = (mode + 1) % MODES.length; $("mode").textContent = "MODE: " + MODES[mode]; };
 
 async function main() {
   let video = $("cam");
   const imgSrc = Q.get("img");  // ?img=victory.jpg = self-check without a camera
+  const vidSrc = Q.get("video");   // ?video=test/handwash.webm = self-check on a looping clip
   if (imgSrc) {
     const img = new Image(); img.src = imgSrc; await img.decode();
     img.id = "still"; video.replaceWith(img); video = img;
+  } else if (vidSrc) {
+    video.src = vidSrc; video.loop = true; video.muted = true; await video.play();
   } else try {
     video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } }, audio: false });
     await new Promise(r => video.onloadedmetadata = r);
@@ -416,7 +433,7 @@ async function main() {
 
   // one slot per hand, keyed by MediaPipe's handedness label
   const slots = { Right: null, Left: null };
-  for (const k in slots) slots[k] = { key: k, name: "?", filt: new OneEuro(63), raw: null, lastSeen: -1e9, capT: 0, img: [0, 0], ext: [0, 0, 0, 0], fit: 0, depth: 0, otherPalm: null, nearOther: Infinity, hand: makeHand() };
+  for (const k in slots) slots[k] = { key: k, name: "?", filt: new HandFilter(63), raw: null, pending: null, imgLm: null, lastPalm: null, lastSeen: -1e9, capT: 0, img: [0, 0], ext: [0, 0, 0, 0], fit: 0, depth: 0, otherPalm: null, nearOther: Infinity, hand: makeHand() };
   const other = s => s.key === "Right" ? slots.Left : slots.Right;
   const imgCentre = lm => PALM.reduce((c, i) => [c[0] + lm[i].x / PALM.length, c[1] + lm[i].y / PALM.length], [0, 0]);
   const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -424,16 +441,21 @@ async function main() {
   // nearest recently-seen slot (within a quarter of the frame), otherwise a free slot, label as tie-breaker.
   function assign(hands, now) {
     let dets = hands.map(h => ({ h, c: imgCentre(h.landmarks), span: Math.hypot(h.landmarks[0].x - h.landmarks[9].x, h.landmarks[0].y - h.landmarks[9].y) }));
-    dets = dets.filter((d, i) => !dets.some((o, j) => j !== i && dist2(d.c, o.c) < 0.6 * Math.max(d.span, o.span) && (o.h.score > d.h.score || (o.h.score === d.h.score && j < i))));   // same hand twice
+    const sim = (a, b) => a.landmarks.reduce((t, q, i) => t + Math.hypot(q.x - b.landmarks[i].x, q.y - b.landmarks[i].y), 0) / 21;   // mean joint distance
+    dets = dets.filter((d, i) => !dets.some((o, j) => j !== i && sim(d.h, o.h) < 0.25 * Math.max(d.span, o.span) && (o.h.score > d.h.score || (o.h.score === d.h.score && j < i))));   // same hand twice (overlapping hands differ joint by joint)
     const out = new Map(), free = Object.values(slots);
     const pairs = [];
     for (const d of dets) for (const s of free) if (now - s.lastSeen < hold) pairs.push([dist2(d.c, s.img) + (s.name !== d.h.name ? 0.08 : 0), d, s]);   // label = tie-breaker when hands are close
     pairs.sort((a, b) => a[0] - b[0]);
     for (const [dd, d, s] of pairs) if (dd < 0.25 && !out.has(d) && free.includes(s)) { out.set(d, s); free.splice(free.indexOf(s), 1); }
-    for (const d of dets) if (!out.has(d) && free.length) { const s = free.find(x => x.key === d.h.name) ?? free[0]; out.set(d, s); free.splice(free.indexOf(s), 1); }
+    for (const d of dets) if (!out.has(d) && free.length) {   // unmatched detection: prefer a stale slot with the same label; never steal a live one cheaply
+      const cost = s => (now - s.lastSeen < hold ? 0.3 + dist2(d.c, s.img) : 0) + (s.name !== d.h.name ? 0.08 : 0);
+      free.sort((x, y) => cost(x) - cost(y)); const s = free.shift(); if (s.name !== d.h.name) dbg.labelFlips++; out.set(d, s);
+    }
     return out;
   }
   let lastT = -1, ts = 0, inflight = false, move = null, nHands = 0, lastRecv = 0, hold = HOLD_MS;
+  const dbg = window.dbg = { frames: 0, two: 0, held: 0, labelFlips: 0, maxJump: 0, bigJumps: 0, spikes: 0, snaps: 0, handovers: 0, dispJumps: 0, reprojN: 0, reprojSum: 0, pitch: 0, tiltOn: false };   // test metrics
   let stat = { ms: 0, lat: 0, n: 0, t: performance.now() }, prev = performance.now();
 
   const pump = async () => {
@@ -445,11 +467,25 @@ async function main() {
     inflight = false;
     const recv = performance.now();
     hold = Math.max(HOLD_MS, 2.5 * (recv - lastRecv)); lastRecv = recv;   // slow devices get a longer hold so hands don't flicker between results
-    stat.ms += r.ms; stat.lat += recv - cap; stat.n++; nHands = r.hands.length;
+    stat.ms += r.ms; stat.lat += recv - cap; stat.n++; nHands = r.hands.length; dbg.frames++; if (nHands === 2) dbg.two++;
     drawOverlay(r.hands.map(h => h.landmarks), video);
-    for (const [d, s] of assign(r.hands, recv)) {
+    const assigned = new Set();
+    for (let [d, s] of assign(r.hands, recv)) {
       const h = d.h; let T, xu, yv; [T, s.fit, xu, yv] = locate(h.world, h.landmarks, frameW, frameH);
-      s.raw = toGL(h.world, T, xu, yv); s.filt.push(s.raw, cap / 1000); s.lastSeen = recv; s.capT = cap; s.img = d.c; s.name = h.name;
+      const raw = level(toGL(h.world, T, xu, yv));
+      if (s.raw && recv - s.lastSeen < hold) { let m = 0; for (let i = 0; i < 21; i++) m = Math.max(m, Math.hypot(raw[3*i] - s.raw[3*i], raw[3*i+1] - s.raw[3*i+1], raw[3*i+2] - s.raw[3*i+2])); dbg.maxJump = Math.max(dbg.maxJump, m); if (m > 0.1) dbg.bigJumps++; }
+      // Whole-hand jump gate: a palm move over JUMP since the last result is either a spike (one frame, then back) or a
+      // real relocation (the next frame agrees). Hold it back one frame; accept only when confirmed, then snap to it.
+      if (s.filt.x && recv - s.lastSeen < hold && palmFlat(raw).distanceTo(palmFlat(s.filt.x)) > JUMP) {
+        if (!(s.pending && palmFlat(raw).distanceTo(palmFlat(s.pending)) < 0.06)) { s.pending = raw; dbg.spikes++; continue; }
+        s.pending = null;
+        const o = other(s);   // landed where the other hand was last seen and that hand got no detection this frame: it is that hand
+        if (o.filt.x && !assigned.has(o) && palmFlat(raw).distanceTo(palmFlat(o.filt.x)) < 0.15) { s = o; dbg.handovers++; }
+        else { s.filt.x = Float32Array.from(raw); s.filt.dx.fill(0); dbg.snaps++; }
+      }
+      s.pending = null; assigned.add(s);
+      const trust = Math.max(0.15, Math.min(1, 1 - (s.fit - 0.03) / 0.03));   // fit above 3% = pose and picture disagree (crossed fingers, occlusion): follow less
+      s.raw = raw; s.filt.push(s.raw, cap / 1000, trust); s.lastSeen = recv; s.capT = cap; s.img = d.c; s.name = h.name; s.imgLm = h.landmarks;
       const pts = shape(s.filt.x); s.ext = fingersUp(pts); s.depth = -palmCentre(pts).z;
       const o = other(s);   // remember where the other hand was, in case this one vanishes behind it
       if (o.filt.x && recv - o.lastSeen < hold) { s.otherPalm = palmFlat(o.filt.x); s.nearOther = palmFlat(s.filt.x).distanceTo(s.otherPalm); } else { s.otherPalm = null; s.nearOther = Infinity; }
@@ -466,6 +502,7 @@ async function main() {
       if (now - s.lastSeen >= hold) continue;   // tracked, or dead-reckoned through a short dropout
       const lead = Math.min(MAX_LEAD, Math.max(0, (now - s.capT) / 1000 + 0.016));   // age of the data since the frame was captured + one display frame
       shown[s.key] = MODES[mode] === "predict" ? s.filt.predict(lead) : MODES[mode] === "smooth" ? s.filt.x : s.raw;
+      if (s.imgLm && ovW) { const pr = toImage(shown[s.key]); dbg.reprojSum += pr.reduce((t, q, i) => t + Math.hypot(q.x - s.imgLm[i].x, q.y - s.imgLm[i].y), 0) / 21; dbg.reprojN++; }
       move ??= moveFromFingers(s.ext); hud.push(`${s.name[0]} ${s.depth.toFixed(2)}m ${s.ext.filter(Boolean).length}up fit ${(s.fit * 100).toFixed(1)}%`);
     }
     // handshake rule: a hand that vanished while touching the other hand keeps its pose and rides along with that hand
@@ -474,15 +511,20 @@ async function main() {
       if (shown[s.key] || !shown[o.key] || !s.otherPalm || now - s.lastSeen >= OCCL_HOLD || s.nearOther > 0.25) continue;
       const delta = palmFlat(shown[o.key]).sub(s.otherPalm);
       shown[s.key] = s.filt.x.map((v, i) => v + delta.getComponent(i % 3));
-      hud.push(`${s.name[0]} held`);
+      hud.push(`${s.name[0]} held`); dbg.held++;
     }
-    for (const s of [slots.Right, slots.Left]) { if (shown[s.key]) { s.hand.draw(shape(shown[s.key])); displayed.push(shown[s.key]); } else s.hand.hide(); }
+    for (const s of [slots.Right, slots.Left]) {
+      if (shown[s.key]) {
+        s.hand.draw(shape(shown[s.key])); displayed.push(shown[s.key]);
+        const pc = palmFlat(shown[s.key]); if (s.lastPalm && pc.distanceTo(s.lastPalm) > 0.1) dbg.dispJumps++; s.lastPalm = pc;   // what the player actually sees jump
+      } else { s.hand.hide(); s.lastPalm = null; }
+    }
     renderOverlay(displayed);
     world.timestep = dt; world.step();
     for (const p of props) { p.mesh.position.copy(p.body.translation()); p.mesh.quaternion.copy(p.body.rotation()); }
     if (now - stat.t > 1000) {
-      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | mode ${MODES[mode]} | build ${BUILD}`;
-      stat = { ms: 0, lat: 0, n: 0, t: now };
+      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"} | build ${BUILD}`;
+      stat = { ms: 0, lat: 0, n: 0, t: now }; dbg.pitch = pitch; dbg.tiltOn = tiltOn;
     }
     $("hand").textContent = "HANDS: " + (hud.join("  |  ") || "-");
     $("move").textContent = "MOVE: " + (move ?? "?"); $("move").style.color = move ? "#78ff78" : "#ffc850";
