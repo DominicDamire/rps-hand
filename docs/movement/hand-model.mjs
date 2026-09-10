@@ -1,5 +1,5 @@
 // Rigged hand for the movement page. Everything up to the wrapper at the end is copied VERBATIM (by
-// make_hand_model.py) from ../index.html lines 83-762, the main page's skinned-arm driver, so both pages
+// make_hand_model.py) from ../index.html (each block found by its first line), the main page's skinned-arm driver, so both pages
 // show the same hand; change it there and regenerate. Lines: PARENT/PALM, V, palmCentre, THUMB..., meshPts,
 // collision (segClosest/solidHand), CHAINS, poseFK, boneFrame, frameDir, palmRefs, cutArm, loadRigSide/loadRig, makeRigSkin.
 import * as THREE from "three";
@@ -13,6 +13,7 @@ const STUB = +Q.get("stub") || 0.08;
 const F_Q = (Q.get("fist") || "").split(",").map(Number);
 
 const PARENT = {1:0,2:1,3:2,4:3, 5:0,6:5,7:6,8:7, 9:0,10:9,11:10,12:11, 13:0,14:13,15:14,16:15, 17:0,18:17,19:18,20:19};
+
 const PALM = [0, 5, 9, 13, 17];
 
 const V = () => new THREE.Vector3();
@@ -20,6 +21,7 @@ const V = () => new THREE.Vector3();
 const palmCentre = pts => { const c = V(); for (const i of PALM) c.add(pts[i]); return c.multiplyScalar(1 / PALM.length); };
 
 const THUMB = new Set([1, 2, 3, 4]);
+
 const _y = V(), _x = V(), _z = V(), _r = V(), _n = V(), _l = V(), _u = V(), _d = V(), _q = V();
 
 function meshPts(pts) {
@@ -34,7 +36,9 @@ function meshPts(pts) {
 }
 
 const FINGER_RAD = 0.0075;           // finger radius in metres at hand scale 1 (axis-to-axis 15 mm = fingers touching)
+
 const PALM_HALF = 0.011;             // half thickness of the palm slab, metres at scale 1
+
 const _pa = V(), _pb = V(), _sd = V(), _r1 = V(), _r2 = V(), _pu = V(), _pv = V(), _ray = V();
 
 function segClosest(a1, a2, b1, b2) {   // closest points between segments a1a2 and b1b2 -> [ta, tb] (Ericson, Real-Time Collision Detection 5.1.9)
@@ -89,7 +93,10 @@ function solidHand(out, s, nOut, st) {   // out: 21 joints after FK (metres); s:
 }   // default: rigged drive (fixed hand volume, only the joints bend); ?fit=exact stretches to the tracked lengths
 
 const CHAINS = { palm: [1, 5, 9, 13, 17], thumb: [2, 3, 4], index: [6, 7, 8], middle: [10, 11, 12], ring: [14, 15, 16], pinky: [18, 19, 20] };
+
 const CHAIN_OF = {}; for (const [k, js] of Object.entries(CHAINS)) for (const j of js) CHAIN_OF[j] = k;
+
+const THUMB_Z = Q.get("tz") !== "0";        // thumb bones take their depth from their length (see poseFK)
 
 const HYPER = { mcp: 25, pip: 8, dip: 8 };   // degrees of backward bend allowed at each finger joint
 
@@ -105,7 +112,22 @@ function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing s
   _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize(); if (!chirRight) _n.negate();   // now points OUT of the palm
   const seg = (j, dir) => out[j].copy(out[PARENT[j]]).addScaledVector(dir, s * bind[j].distanceTo(bind[PARENT[j]]));
   for (const j of [1, 5, 9, 13, 17]) seg(j, _d.subVectors(pts[j], pts[0]).normalize());   // palm: tracked directions, scan lengths
-  for (const j of [2, 3, 4]) seg(j, _d.subVectors(pts[j], pts[PARENT[j]]).normalize());   // thumb: as tracked
+  // Thumb: the picture fixes where each joint is, but the tracker under-reads the thumb's tilt toward or away from the
+  // phone (a thumbs-up leaning forward barely moved). So each thumb bone keeps its picture direction and takes its depth
+  // from its known length: |depth| = sqrt(L^2 - picture^2); the sign from the tracker when it is clear (over 25 % of the
+  // bone), else the sign remembered for that bone. A picture longer than the bone is left as tracked. ?tz=0 disables.
+  for (const j of [2, 3, 4]) {
+    _d.subVectors(pts[j], pts[PARENT[j]]);
+    if (THUMB_Z) {
+      _r.copy(pts[PARENT[j]]).normalize(); const L = s * bind[j].distanceTo(bind[PARENT[j]]), dz = _d.dot(_r);   // ray from the phone (origin) through the joint
+      _b.copy(_d).addScaledVector(_r, -dz); const lp = _b.length();                                                     // the picture part
+      if (lp > 1e-6 && lp < 0.98 * L) {
+        const key = "tz" + j; let sign = Math.abs(dz) > 0.25 * L ? Math.sign(dz) : (st && st[key]) || Math.sign(dz) || 1; if (st) st[key] = sign;
+        _d.copy(_b).addScaledVector(_r, sign * Math.sqrt(L * L - lp * lp));
+      }
+    }
+    seg(j, _d.normalize());
+  }
   for (const m of [5, 9, 13, 17]) {
     // bending plane of this finger: contains the metacarpal direction, perpendicular to the across-palm axis. The sideways
     // axis comes from the metacarpal (always well defined), NOT from knuckle->tip, which is ~zero for a folded finger and
@@ -165,6 +187,7 @@ function boneFrame(pts, j, s, out) {
 }
 
 const _fa = V(), _fy = V();
+
 function frameDir(a, dir, L, s, refPrimary, refSecondary, out) {   // origin a, unit direction dir, length L, width scale s
   _y.copy(dir); const k = Math.min(1, Math.max(0, (Math.abs(refPrimary.dot(_y)) - 0.7) / 0.25));
   _r.copy(refPrimary).multiplyScalar(1 - k).addScaledVector(refSecondary, k);
@@ -298,9 +321,11 @@ function makeRigSkin(variant, color) {
 }
 
 // --- first-person wrapper ---------------------------------------------------------------------------
-// The phone looks at the player; the player's eye looks at the phone from `dist` metres away and `height` metres
-// above it. A tracked joint at phone-frame (x right, y down, z away) sits in the eye's frame at (-x, -y - height,
-// z - dist): a half turn about the vertical axis, so the right hand stays a right hand and appears on the right.
+// The joints are kept in the PHONE's frame (origin at the phone, x right, y up, z toward the phone: the main page's
+// GL frame, which the driver assumes when it casts rays from the phone through the joints). The hand group IS that
+// frame seen from the eye: the eye looks at the phone from `dist` metres away and `height` metres above it, so the
+// group sits at (0, -height, -dist) in the eye's frame, turned half a turn about the vertical axis. A proper rotation,
+// so the right hand stays a right hand and appears on the right.
 // Joint depths come from the world model + one translation (locate, as the main page); the picture fixes x/y exactly.
 export const view = { phoneFov: 60, dist: 0.5, height: 0.15, tilt: 0, smooth: 0.5 };   // sliders write here
 function locate(world, image, W, H) {
@@ -317,10 +342,10 @@ function locate(world, image, W, H) {
 }
 let rigPromise = null;   // one download of arm_L/arm_R for every hand on the page (the player's and the other player's)
 export function makeHandModel(parent, lights = true) {   // sync: the rig loads in the background, update() shows it once it is there
-  const group = new THREE.Group(); parent.add(group);
-  if (lights) {   // the map is unlit; the skin needs light (once per page: the lights are global)
-    group.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.2));
-    const lamp = new THREE.DirectionalLight(0xffffff, 1.4); lamp.position.set(-0.3, 0.6, 0.2); lamp.target.position.set(0, 0, -1); group.add(lamp, lamp.target);   // from over the shoulder toward the view (the target rides with the eye; the default target is the world origin, which lit the hand from wherever the player stood)
+  const group = new THREE.Group(); group.rotation.y = Math.PI; parent.add(group);   // the phone's frame, seen from the eye (position set per update)
+  if (lights) {   // the map is unlit; the skin needs light (once per page: the lights are global); on the eye, not the turned group
+    parent.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.2));
+    const lamp = new THREE.DirectionalLight(0xffffff, 1.4); lamp.position.set(-0.3, 0.6, 0.2); lamp.target.position.set(0, 0, -1); parent.add(lamp, lamp.target);   // from over the shoulder toward the view (the target rides with the eye; the default target is the world origin, which lit the hand from wherever the player stood)
   }
   let skinR = null, skinL = null, chir = 0;   // both sides, chosen by the thumb's side of the palm as the main page does (the label flickers, the geometry does not)
   rigPromise ??= loadRig("../arm");
@@ -335,21 +360,22 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
     off.mesh.visible = false; on.update(pts, right);
   }
   const model = { group, ready, points: pts, get visible() { return shown; }, get right() { return chir * CHIR_RIGHT >= 0; },
-    update(image, world, W, H) {   // from the tracker: picture + world landmarks -> eye frame
+    update(image, world, W, H) {   // from the tracker: picture + world landmarks -> the phone's GL frame
       const [Tz, xu, yv] = locate(world, image, W, H); if (!Number.isFinite(Tz) || Tz <= 0.05) return;
       q.setFromAxisAngle(ax, view.tilt * Math.PI / 180);
       const a = shown ? view.smooth : 1;   // one-pole smoothing; the main page's error-adaptive filter if this jitters
       for (let i = 0; i < 21; i++) {
         const z = Math.max(0.05, world[i].z + Tz);
-        _w.set(xu[i] * z, yv[i] * z, z).applyQuaternion(q);              // phone frame, tilt levelled
-        _w.set(-_w.x, -_w.y - view.height, _w.z - view.dist);              // eye frame
+        _w.set(xu[i] * z, -yv[i] * z, -z).applyQuaternion(q);   // x right, y up, z toward the phone; tilt levelled
         pts[i].lerp(_w, a);
       }
+      group.position.set(0, -view.height, -view.dist);
       window.dbg = Object.assign(window.dbg || {}, { model: pts }); drive();
     },
-    setPoints(flat) {   // from the network: 63 numbers already in the other player's eye frame
+    setPoints(flat, o) {   // from the network: 63 numbers in the other player's phone frame + their [height, dist]
       if (flat?.length !== 63) { model.hide(); return; }
       for (let i = 0; i < 21; i++) pts[i].set(flat[3 * i], flat[3 * i + 1], flat[3 * i + 2]);
+      if (o?.length === 2) group.position.set(0, -o[0], -o[1]);
       drive();
     },
     hide() { shown = false; if (skinR) skinR.mesh.visible = skinL.mesh.visible = false; } };

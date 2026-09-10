@@ -27,7 +27,7 @@ remote.hand=makeHandModel(remote.eye,false);
 let net=null,lastSent=0;
 function onRemote(pkt){if(!Array.isArray(pkt.p)||!Array.isArray(pkt.r))return;remote.target.p.fromArray(pkt.p);remote.target.pitch=pkt.r[0];remote.target.yaw=pkt.r[1];
  if(!remote.group.visible){remote.group.position.copy(remote.target.p);remote.group.rotation.y=remote.target.yaw;remote.eye.rotation.x=remote.target.pitch;remote.group.visible=true;}
- if(pkt.h)remote.hand.setPoints(pkt.h);else remote.hand.hide();remote.seen=performance.now();}
+ if(pkt.h)remote.hand.setPoints(pkt.h,pkt.o);else remote.hand.hide();remote.seen=performance.now();}
 function renderRooms(list){const box=$('rooms');box.textContent=list.length?'':'open lobbies: none (create one or QUICK MATCH)';
  for(const r of list){const row=document.createElement('div');row.innerHTML=`<span>Lobby ${r.k} · host ${r.host}</span>`;const b=document.createElement('button');b.className='primary';b.textContent='JOIN';b.onclick=()=>net.joinRoom(r.k);row.appendChild(b);box.appendChild(row);}}
 function ensureNet(){if(net)return net;net=createNet({status:t=>$('net').textContent=t,hands:onRemote,rooms:renderRooms,
@@ -136,7 +136,7 @@ function frame(now){
  const dot=$('joystickDot');dot.style.transform=`translate(${held.x*30}px,${held.z*30}px)`;$('joystickState').textContent=resting?'REST':held.direction||held.reason;
  }
  if(remote.group.visible){const k=Math.min(1,dt*12);remote.group.position.lerp(remote.target.p,k);remote.group.rotation.y+=(remote.target.yaw-remote.group.rotation.y)*k;remote.eye.rotation.x+=(remote.target.pitch-remote.eye.rotation.x)*k;if(now-remote.seen>3000){remote.group.visible=false;remote.hand.hide();}}
- if(net?.opp?.open&&now-lastSent>=50){lastSent=now;const h=handModel.visible?handModel.points.flatMap(p=>[+p.x.toFixed(3),+p.y.toFixed(3),+p.z.toFixed(3)]):null;net.sendHands({t:'h',p:[+camera.position.x.toFixed(2),+camera.position.y.toFixed(2),+camera.position.z.toFixed(2)],r:[+camera.rotation.x.toFixed(3),+camera.rotation.y.toFixed(3)],h,ts:Math.round(now)});}
+ if(net?.opp?.open&&now-lastSent>=50){lastSent=now;const h=handModel.visible?handModel.points.flatMap(p=>[+p.x.toFixed(3),+p.y.toFixed(3),+p.z.toFixed(3)]):null;net.sendHands({t:'h',p:[+camera.position.x.toFixed(2),+camera.position.y.toFixed(2),+camera.position.z.toFixed(2)],r:[+camera.rotation.x.toFixed(3),+camera.rotation.y.toFixed(3)],h,o:[handView.height,handView.dist],ts:Math.round(now)});}
  renderer.render(scene,camera);
 }controlsChanged();requestAnimationFrame(frame);
 if(new URLSearchParams(location.search).has('cam')){$('start').textContent='Connect phone camera';start();}   // phone-as-camera mode: no local permission prompt, connect right away
