@@ -1,12 +1,12 @@
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=36';
-import {setupThumbstick} from './thumbstick.mjs?v=36';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=37';
+import {setupThumbstick} from './thumbstick.mjs?v=37';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=36';
-import {DustMap} from './map.mjs?v=36';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=37';
+import {DustMap} from './map.mjs?v=37';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=36';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=36';
+import {setupUI} from './ui.mjs?v=37';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=37';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const held=new ThumbJoystick();let inputMode='poses',trackedHand=null,resting=false;
@@ -30,7 +30,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=36',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=37',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -64,8 +64,8 @@ $('turnMode').onchange=()=>{headLook.mode=$('turnMode').value;headLook.resetLook
 $('headThreshold').oninput=()=>{headLook.deadzoneDegrees=+$('headThreshold').value;$('thresholdValue').textContent=$('headThreshold').value+'°';};
 $('headGain').oninput=()=>{if(head)head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;};
 $('reset').onclick=()=>{stick.reset();held.reset();headLook.heading=0;headLook.resetLook();lookDemo=0;head?.recenter();camera.position.copy(dustMap.spawn);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
-function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Move your thumb to move. Hold it still to stop. Close your fist to rest or return your hand for another stroke. No centring or calibration.';status('Start camera · thumb joystick ready');}
-$('movementMode').onchange=()=>{inputMode=$('movementMode').value;stick.reset();held.reset();trackedHand=null;swipe.reset();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('stickZone').hidden=inputMode!=='touch';$('hint').textContent=inputMode==='touch'?'Drag thumbstick to walk; release to stop.':inputMode==='poses'?'Move your thumb to walk. Wrap it against your fist to stop; lift it to move again.':'Left index out: move your hand to walk. Bend index to release.';};
+function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Hold your thumb upright to stop. Tilt and hold to keep walking; small wobbles keep the same direction and speed. Close your fist to rest. No calibration.';status('Start camera · thumb joystick ready');}
+$('movementMode').onchange=()=>{inputMode=$('movementMode').value;stick.reset();held.reset();trackedHand=null;swipe.reset();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('stickZone').hidden=inputMode!=='touch';$('hint').textContent=inputMode==='touch'?'Drag thumbstick to walk; release to stop.':inputMode==='poses'?'Tilt and hold your thumb to walk. Upright or closed fist stops.':'Left index out: move your hand to walk. Bend index to release.';};
 $('gain').oninput=()=>held.speed=+$('gain').value;
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
 document.querySelectorAll('[data-look]').forEach(b=>b.onclick=()=>{lookDemo=+b.dataset.look;if(!lookDemo)headLook.speed=0;});
