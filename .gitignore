@@ -1,1 +1,13 @@
-test/
+# build outputs of the desktop app
+dist/
+build/
+*.spec
+*.log
+# regenerable screenshots and self-check outputs at the repo root
+/*.png
+/*.png.txt
+/rps_hand_error.log
+__pycache__/
+# the two big Commons clips (re-download with fetch_test_media.py)
+docs/test/handclap.webm
+docs/test/handwash.webm

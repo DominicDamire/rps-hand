@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 12)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 13)</div></div>
     <div class="hud" id="bottom"><div id="score">SCORE you 0 : 0 cpu</div><div id="game">Tap PLAY for a round</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
@@ -50,7 +50,7 @@
 import * as THREE from "three";
 import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.20.0/dist/rapier.mjs";
 
-const BUILD = 12;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 13;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -61,6 +61,8 @@ const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
 // Lower presence/tracking thresholds = the tracker holds on longer through motion blur before giving up.
 const DELEGATES = Q.get("delegate") === "CPU" ? ["CPU"] : ["GPU", "CPU"];   // ?delegate=CPU: headless tests have no real GPU
+const PAD = Q.get("pad") != null ? +Q.get("pad") : 0.3;   // border added around the frame when the hand is big, fraction of the longer side (?pad=0 to disable)
+const BIG_HAND = [0.22, 0.15];      // palm length (wrist to middle knuckle) / frame short side: pad above the first, unpad below the second (hysteresis)
 const TRACKER_OPTS = { runningMode: "VIDEO", numHands: 2, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.4 };
 
 // --- skeleton (MediaPipe's 21 landmarks) --------------------------------------------------------
@@ -172,7 +174,7 @@ class HandFilter {
   }
 }
 const MAX_LEAD = 0.04;             // never extrapolate more than 40 ms ahead (longer leads overshoot on every reversal)
-const JUMP = 0.12;                 // metres: a whole-hand move bigger than this between two results needs a second frame to confirm
+const JUMP_SPEED = 3.6;            // m/s: a whole-hand move faster than this between two results needs a second frame to confirm (12 cm at 30 fps)
 
 // --- phone tilt: level the room to gravity, so "up" is up even when the phone looks down at your hands --------
 let pitch = 0, tiltOn = false;     // camera pitch in radians, + = camera looking up
@@ -198,6 +200,7 @@ const WORKER_SRC = `
 import { FilesetResolver, HandLandmarker } from "${MP}/vision_bundle.mjs";
 let lm, delegate;
 const pack = r => r.landmarks.map((landmarks, i) => ({ landmarks, world: r.worldLandmarks[i], name: r.handedness[i]?.[0]?.categoryName ?? "?", score: r.handedness[i]?.[0]?.score ?? 0 }));
+let oc, octx;
 onmessage = async e => {
   if (e.data.init) {
     const vision = await FilesetResolver.forVisionTasks("${MP}/wasm", true);  // true = ES-module loader, required inside a module worker
@@ -207,10 +210,14 @@ onmessage = async e => {
     }
     postMessage({ ready: false }); return;
   }
-  const t = performance.now();
-  const r = lm.detectForVideo(e.data.frame, e.data.ts);
-  e.data.frame.close();
-  postMessage({ id: e.data.id, ms: performance.now() - t, hands: pack(r) });
+  const t = performance.now(), f = e.data.frame, W = f.width, H = f.height, b = Math.round(Math.max(W, H) * e.data.pad);
+  if (!oc || oc.width !== W + 2 * b || oc.height !== H + 2 * b) { oc = new OffscreenCanvas(W + 2 * b, H + 2 * b); octx = oc.getContext("2d"); }
+  octx.fillStyle = "#777"; octx.fillRect(0, 0, oc.width, oc.height); octx.drawImage(f, b, b); f.close();
+  const bmp = oc.transferToImageBitmap();
+  const r = lm.detectForVideo(bmp, e.data.ts); bmp.close();
+  const hands = pack(r);
+  for (const h of hands) h.landmarks = h.landmarks.map(l => ({ x: (l.x * (W + 2 * b) - b) / W, y: (l.y * (H + 2 * b) - b) / H, z: l.z }));   // back to the unpadded frame
+  postMessage({ id: e.data.id, ms: performance.now() - t, hands });
 };`;
 
 async function makeTracker() {
@@ -227,9 +234,9 @@ async function makeTracker() {
     w.onmessage = e => { waiting.get(e.data.id)?.(e.data); waiting.delete(e.data.id); };
     return {
       where: "worker/" + ready.delegate,
-      async detect(src, ts) {
+      async detect(src, ts, pad) {
         const frame = await createImageBitmap(src);
-        return new Promise(res => { const my = ++id; waiting.set(my, res); w.postMessage({ id: my, frame, ts }, [frame]); });
+        return new Promise(res => { const my = ++id; waiting.set(my, res); w.postMessage({ id: my, frame, ts, pad }, [frame]); });
       },
     };
   } catch (e) {
@@ -240,7 +247,15 @@ async function makeTracker() {
     for (const delegate of DELEGATES) {
       try {
         const lm = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: MODEL, delegate }, ...TRACKER_OPTS });
-        return { where: "main/" + delegate, async detect(src, ts) { const t = performance.now(); const r = lm.detectForVideo(src, ts); return { ms: performance.now() - t, hands: pack(r) }; } };
+        const pc = document.createElement("canvas"), pctx = pc.getContext("2d");
+        return { where: "main/" + delegate, async detect(src, ts, pad) {
+          const t = performance.now(), W = src.videoWidth || src.naturalWidth, H = src.videoHeight || src.naturalHeight, b = Math.round(Math.max(W, H) * pad);
+          if (pc.width !== W + 2 * b || pc.height !== H + 2 * b) { pc.width = W + 2 * b; pc.height = H + 2 * b; }
+          pctx.fillStyle = "#777"; pctx.fillRect(0, 0, pc.width, pc.height); pctx.drawImage(src, b, b);
+          const r = lm.detectForVideo(pc, ts), hands = pack(r);
+          for (const h of hands) h.landmarks = h.landmarks.map(l => ({ x: (l.x * pc.width - b) / W, y: (l.y * pc.height - b) / H, z: l.z }));
+          return { ms: performance.now() - t, hands };
+        } };
       } catch (err) { console.warn(delegate + " failed", err); }
     }
     throw new Error("Hand tracker failed to load. Check the connection and reload.");
@@ -454,8 +469,8 @@ async function main() {
     }
     return out;
   }
-  let lastT = -1, ts = 0, inflight = false, move = null, nHands = 0, lastRecv = 0, hold = HOLD_MS;
-  const dbg = window.dbg = { frames: 0, two: 0, held: 0, labelFlips: 0, maxJump: 0, bigJumps: 0, spikes: 0, snaps: 0, handovers: 0, dispJumps: 0, reprojN: 0, reprojSum: 0, pitch: 0, tiltOn: false };   // test metrics
+  let lastT = -1, ts = 0, inflight = false, move = null, nHands = 0, lastRecv = 0, hold = HOLD_MS, bigHand = false, bigUntil = 0;
+  const dbg = window.dbg = { frames: 0, two: 0, held: 0, labelFlips: 0, maxJump: 0, bigJumps: 0, spikes: 0, snaps: 0, handovers: 0, dispJumps: 0, reprojN: 0, reprojSum: 0, pitch: 0, tiltOn: false, moves: { ROCK: 0, PAPER: 0, SCISSORS: 0, none: 0 }, fitSum: 0, padded: 0 };   // test metrics
   let stat = { ms: 0, lat: 0, n: 0, t: performance.now() }, prev = performance.now();
 
   const pump = async () => {
@@ -463,11 +478,16 @@ async function main() {
     if (inflight || !fresh) return;
     inflight = true; lastT = video.currentTime;
     const cap = performance.now(); ts = Math.max(ts + 1, Math.floor(cap));
-    const r = await tracker.detect(video, ts);
+    const pad = bigHand || (nHands === 0 && dbg.frames % 3 === 2) ? PAD : 0;   // adaptive input padding
+    const r = await tracker.detect(video, ts, pad);
     inflight = false;
     const recv = performance.now();
     hold = Math.max(HOLD_MS, 2.5 * (recv - lastRecv)); lastRecv = recv;   // slow devices get a longer hold so hands don't flicker between results
     stat.ms += r.ms; stat.lat += recv - cap; stat.n++; nHands = r.hands.length; dbg.frames++; if (nHands === 2) dbg.two++;
+    const span = Math.max(0, ...r.hands.map(h => Math.hypot((h.landmarks[0].x - h.landmarks[9].x) * frameW, (h.landmarks[0].y - h.landmarks[9].y) * frameH) / Math.min(frameW, frameH)));
+    if (span > BIG_HAND[0]) { bigHand = true; bigUntil = recv + 1000; } else if (span < BIG_HAND[1] && recv > bigUntil) bigHand = false;   // padded and unpadded inference differ slightly: don't flip every frame
+    if (pad) dbg.padded++;
+    dbg.moves[move ?? "none"]++;
     drawOverlay(r.hands.map(h => h.landmarks), video);
     const assigned = new Set();
     for (let [d, s] of assign(r.hands, recv)) {
@@ -476,8 +496,9 @@ async function main() {
       if (s.raw && recv - s.lastSeen < hold) { let m = 0; for (let i = 0; i < 21; i++) m = Math.max(m, Math.hypot(raw[3*i] - s.raw[3*i], raw[3*i+1] - s.raw[3*i+1], raw[3*i+2] - s.raw[3*i+2])); dbg.maxJump = Math.max(dbg.maxJump, m); if (m > 0.1) dbg.bigJumps++; }
       // Whole-hand jump gate: a palm move over JUMP since the last result is either a spike (one frame, then back) or a
       // real relocation (the next frame agrees). Hold it back one frame; accept only when confirmed, then snap to it.
-      if (s.filt.x && recv - s.lastSeen < hold && palmFlat(raw).distanceTo(palmFlat(s.filt.x)) > JUMP) {
-        if (!(s.pending && palmFlat(raw).distanceTo(palmFlat(s.pending)) < 0.06)) { s.pending = raw; dbg.spikes++; continue; }
+      const pRaw = palmFlat(raw), pOld = s.filt.x && palmFlat(s.filt.x);
+      if (pOld && recv - s.lastSeen < hold && pRaw.distanceTo(pOld) > JUMP_SPEED * Math.max(0.016, (cap - s.capT) / 1000)) {
+        if (!(s.pending && pRaw.distanceTo(palmFlat(s.pending)) < pRaw.distanceTo(pOld))) { s.pending = raw; dbg.spikes++; continue; }
         s.pending = null;
         const o = other(s);   // landed where the other hand was last seen and that hand got no detection this frame: it is that hand
         if (o.filt.x && !assigned.has(o) && palmFlat(raw).distanceTo(palmFlat(o.filt.x)) < 0.15) { s = o; dbg.handovers++; }
@@ -485,7 +506,7 @@ async function main() {
       }
       s.pending = null; assigned.add(s);
       const trust = Math.max(0.15, Math.min(1, 1 - (s.fit - 0.03) / 0.03));   // fit above 3% = pose and picture disagree (crossed fingers, occlusion): follow less
-      s.raw = raw; s.filt.push(s.raw, cap / 1000, trust); s.lastSeen = recv; s.capT = cap; s.img = d.c; s.name = h.name; s.imgLm = h.landmarks;
+      s.raw = raw; s.filt.push(s.raw, cap / 1000, trust); s.lastSeen = recv; s.capT = cap; s.img = d.c; s.name = h.name; s.imgLm = h.landmarks; dbg.fitSum += s.fit;
       const pts = shape(s.filt.x); s.ext = fingersUp(pts); s.depth = -palmCentre(pts).z;
       const o = other(s);   // remember where the other hand was, in case this one vanishes behind it
       if (o.filt.x && recv - o.lastSeen < hold) { s.otherPalm = palmFlat(o.filt.x); s.nearOther = palmFlat(s.filt.x).distanceTo(s.otherPalm); } else { s.otherPalm = null; s.nearOther = Infinity; }
