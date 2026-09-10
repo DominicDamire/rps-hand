@@ -45,3 +45,9 @@ test('calmer defaults ignore small flicks and limit body rotation speed',()=>{
  for(let i=4;i<100;i++)c.update(rad(30),.05,true,i*50);assert.ok(c.speed<=rad(100));
  const h=c.heading;c.update(0,.05,true,5000);assert.equal(c.heading,h);
 });
+
+test('look sensitivity scales both axes without changing body threshold',()=>{
+ for(const gain of [1,2,2.5,3]){const c=new HeadLook();c.lookGain=gain;
+ for(let i=0;i<30;i++){c.update(rad(4),.05,true,i*50);c.updatePitch(rad(4),.05);}
+ assert.ok(Math.abs(c.look-rad(4*gain))<1e-8);assert.ok(Math.abs(c.pitch-rad(4*gain))<1e-8);assert.equal(c.heading,0);assert.equal(c.deadzoneDegrees,14);}
+});
