@@ -129,6 +129,36 @@ const FIT_LEN = Q.get("len") === "fit";   // off by default: with per-frame leng
 // a PARABOLA when it shows a curl. Picture positions are untouched; only the tracker's per-joint depth zigzag goes.
 // Measured on straight fingers: 3D bends 20-50 degrees before, single digits after. ?zs=0 disables it.
 const Z_SMOOTH = Q.get("zs") !== "0";
+// Folded fingers cannot pass through the palm. After smoothing, every finger joint is kept at least PALM_MIN in front of
+// the palm plane (through wrist and knuckles, palm side given by the thumb tip's side) by moving it along its view ray,
+// so its place in the picture does not change. ?pc=0 disables it.
+const PALM_CLAMP = Q.get("pc") !== "0", PALM_MIN = 0.006;
+function palmClamp(c) {
+  const P = i => [c[3 * i] * c[3 * i + 2], c[3 * i + 1] * c[3 * i + 2], c[3 * i + 2]];
+  const p0 = P(0), p5 = P(5), p17 = P(17), p4 = P(4);
+  const u = [p5[0] - p0[0], p5[1] - p0[1], p5[2] - p0[2]], v = [p17[0] - p0[0], p17[1] - p0[1], p17[2] - p0[2]];
+  let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]; const l = Math.hypot(...n); if (l < 1e-9) return c; n = n.map(x => x / l);
+  if ((p4[0] - p0[0]) * n[0] + (p4[1] - p0[1]) * n[1] + (p4[2] - p0[2]) * n[2] < 0) n = n.map(x => -x);   // n points to the palm side (where the thumb sits)
+  const d0 = p0[0] * n[0] + p0[1] * n[1] + p0[2] * n[2];
+  for (const j of [6, 7, 8, 10, 11, 12, 14, 15, 16, 18, 19, 20]) {
+    const xu = c[3 * j], yv = c[3 * j + 1], z = c[3 * j + 2], rn = xu * n[0] + yv * n[1] + n[2];   // ray (xu z, yv z, z) . n = z * rn
+    if (Math.abs(rn) < 1e-6) continue;
+    const d = z * rn - d0;
+    if (d < PALM_MIN) { const zc = (d0 + PALM_MIN) / rn; if (zc > 0.05 && zc < 5) { c[3 * j + 2] = zc; dbg.palmClamps++; } }
+  }
+  // fingers are solid too: joints of DIFFERENT fingers are spheres of radius FINGER_R that may not overlap; the nearer one
+  // comes closer, the farther one goes further, each along its own view ray (picture unchanged). Three relaxation passes.
+  const F = [[6, 7, 8], [10, 11, 12], [14, 15, 16], [18, 19, 20], [2, 3, 4]];
+  for (let pass = 0; pass < 3; pass++) for (let a = 0; a < F.length; a++) for (let b = a + 1; b < F.length; b++) for (const i of F[a]) for (const j of F[b]) {
+    const pi = P(i), pj = P(j), dx = pi[0] - pj[0], dy = pi[1] - pj[1], dz = pi[2] - pj[2], dist = Math.hypot(dx, dy, dz);
+    if (dist >= 2 * FINGER_R || dist < 1e-6) continue;
+    const need = (2 * FINGER_R - dist) * 0.5, near = pi[2] < pj[2] ? i : j, far = near === i ? j : i;   // camera-space z: smaller = nearer
+    const rl = k => Math.hypot(c[3 * k], c[3 * k + 1], 1);   // ray length per unit z
+    c[3 * near + 2] = Math.max(0.05, c[3 * near + 2] - need / rl(near)); c[3 * far + 2] += need / rl(far); dbg.fingerClamps++;
+  }
+  return c;
+}
+const FINGER_R = 0.0075;
 function smoothFingerDepth(c) {
   for (const m of [5, 9, 13, 17, 1]) {
     const J = [m, m + 1, m + 2, m + 3], t = [0], z = J.map(j => c[3 * j + 2]);
@@ -511,9 +541,12 @@ function makeSkinFrom(SK, variant, color) {
   const ratio = {};   // per chain: smoothed tracked length / scan length = the thickness scale of that chain
   return { mesh, update(tracked, chirRight) {
     const pts = FIT_EXACT ? meshPts(tracked) : poseFK(tracked, variant.bind, chirRight), sc = pts[0].distanceTo(pts[9]) / L0;
-    // thickness: one per-hand size (palm length ratio), settled slowly, so fingers never swell or shrink with distance or pose
-    ratio.all = ratio.all == null ? sc : ratio.all + 0.01 * (sc - ratio.all);
-    for (const k of Object.keys(CHAINS)) ratio[k] = ratio.all;
+    // thickness: each chain's tracked-to-scan length ratio (so a short finger is also a thin finger), settled slowly (0.01/frame)
+    // so it does not swell or shrink with distance or pose
+    for (const [k, js] of Object.entries(CHAINS)) {
+      const r = js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k];
+      ratio[k] = ratio[k] == null ? r : ratio[k] + 0.01 * (r - ratio[k]);
+    }
     SK.order.forEach((j, i) => { boneFrame(pts, j, FIT_EXACT ? ratio[CHAIN_OF[j]] : sc, bones[i].matrix); bones[i].matrixWorldNeedsUpdate = true; });
     mesh.visible = true;
   } };
@@ -695,7 +728,7 @@ async function main() {
     const pr = toImage(best.a); dbg.lagSum += pr.reduce((t, q, i) => t + Math.hypot(q.x - lm[i].x, q.y - lm[i].y), 0) / 21; dbg.lagN++;
   }
   let lastT = -1, ts = 0, inflight = false, move = null, nHands = 0, lastRecv = 0, hold = HOLD_MS, bigHand = false, bigUntil = 0;
-  const dbg = window.dbg = { lm: () => ovHands, slots, get frameW() { return frameW; }, get frameH() { return frameH; }, frames: 0, two: 0, held: 0, labelFlips: 0, maxJump: 0, bigJumps: 0, spikes: 0, snaps: 0, handovers: 0, dispJumps: 0, reprojN: 0, reprojSum: 0, lagSum: 0, lagN: 0, depthClamps: 0, pinches: 0, nav, pitch: 0, tiltOn: false, moves: { ROCK: 0, PAPER: 0, SCISSORS: 0, none: 0 }, fitSum: 0, padded: 0 };   // test metrics
+  const dbg = window.dbg = { lm: () => ovHands, slots, get frameW() { return frameW; }, get frameH() { return frameH; }, frames: 0, two: 0, held: 0, labelFlips: 0, maxJump: 0, bigJumps: 0, spikes: 0, snaps: 0, handovers: 0, dispJumps: 0, reprojN: 0, reprojSum: 0, lagSum: 0, lagN: 0, depthClamps: 0, palmClamps: 0, fingerClamps: 0, pinches: 0, nav, pitch: 0, tiltOn: false, moves: { ROCK: 0, PAPER: 0, SCISSORS: 0, none: 0 }, fitSum: 0, padded: 0 };   // test metrics
   let stat = { ms: 0, lat: 0, n: 0, t: performance.now() }, prev = performance.now();
 
   const pump = async () => {
@@ -717,7 +750,7 @@ async function main() {
     const assigned = new Set();
     for (let [d, s] of assign(r.hands, recv)) {
       const h = d.h; let T, xu, yv; [T, s.fit, xu, yv] = locate(h.world, h.landmarks, frameW, frameH);
-      const raw = toCam(h.world, T, xu, yv); if (FIT_LEN) fitDepths(raw, boneLengths(h.world, s.lens)); if (Z_SMOOTH) smoothFingerDepth(raw);
+      const raw = toCam(h.world, T, xu, yv); if (FIT_LEN) fitDepths(raw, boneLengths(h.world, s.lens)); if (Z_SMOOTH) smoothFingerDepth(raw); if (PALM_CLAMP) palmClamp(raw);
       s.det = { lm: h.landmarks, cap }; lagOf(s, h.landmarks, cap);   // what the tracker saw vs what was on screen at that moment (before any gating)
       if (s.raw && recv - s.lastSeen < hold) { const g = camToGL(raw), g0 = camToGL(s.raw); let m = 0; for (let i = 0; i < 21; i++) m = Math.max(m, Math.hypot(g[3*i] - g0[3*i], g[3*i+1] - g0[3*i+1], g[3*i+2] - g0[3*i+2])); dbg.maxJump = Math.max(dbg.maxJump, m); if (m > 0.1) dbg.bigJumps++; }
       // Whole-hand jump gate: a palm move over JUMP since the last result is either a spike (one frame, then back) or a
