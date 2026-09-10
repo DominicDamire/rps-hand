@@ -1,4 +1,4 @@
-import {measureHand} from './controller.mjs?v=10';
+import {measureHand} from './controller.mjs?v=11';
 export function indexExtension(p){
  if(p?.length!==21||!p.every(v=>[v.x,v.y,v.z].every(Number.isFinite)))return 0;
  const d=(a,b)=>Math.hypot(p[a].x-p[b].x,p[a].y-p[b].y,p[a].z-p[b].z);
@@ -37,4 +37,15 @@ export class SwipeController{
   dx*=k;dz*=k;
   return {...zero,dx,dz,active:true,status:length>0?'Moving · relax index to release':'Ready · holding still'};
  }
+}
+
+// Input pixels are unmirrored; MediaPipe handedness assumes mirrored selfie pixels.
+// Therefore raw Right identifies the user's physical left hand.
+export function selectLeftHand(result){
+ const matches=[];
+ for(let i=0;i<(result.landmarks?.length||0);i++){
+  const h=result.handedness?.[i]?.[0];
+  if(h?.categoryName==='Right'&&h.score>=.7)matches.push(i);
+ }
+ return matches.length===1?matches[0]:-1;
 }

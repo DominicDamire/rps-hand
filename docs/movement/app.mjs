@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=10';
-import {SwipeController,measurePointer} from './swipe.mjs?v=10';
+import {setupUI} from './ui.mjs?v=11';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=11';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();
 const swipe=new SwipeController();
@@ -35,13 +35,16 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=10',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=11',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
     lastResult=performance.now();if(lastResult-data.time>500){apply(null,lastResult);trackingUI.clear();status('Tracking is delayed · movement paused');return;}
-    const sample=data.landmarks?.length===1?measurePointer(data.landmarks[0],data.worldLandmarks[0],$('cam').videoWidth/$('cam').videoHeight):null;
-    const movement=apply(sample,data.time);$('gestureStats').textContent=`${movement.active?'MOVE ON':'MOVE OFF'} · index ${Math.round((sample?.extension||0)*100)}% · tracker ${Math.round(data.inferenceMs||0)} ms · age ${Math.round(lastResult-data.time)} ms`;trackingUI.draw(data.landmarks,$('cam').videoWidth,$('cam').videoHeight,movement.active);if(data.landmarks?.length>1)status('Use one hand to move');
+    const handIndex=selectLeftHand(data);
+    const sample=handIndex>=0?measurePointer(data.landmarks[handIndex],data.worldLandmarks[handIndex],$('cam').videoWidth/$('cam').videoHeight):null;
+    const movement=apply(sample,data.time);$('gestureStats').textContent=`${movement.active?'LEFT · MOVE ON':'MOVE OFF'} · index ${Math.round((sample?.extension||0)*100)}% · tracker ${Math.round(data.inferenceMs||0)} ms · age ${Math.round(lastResult-data.time)} ms`;
+    trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,movement.active);
+    if(handIndex<0)status('Show your LEFT hand · right hand does not move you');
   };
   lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Show one hand');
  }catch(e){stop();status('Camera not started');$('error').textContent=e.name==='NotAllowedError'?'Camera access was declined. Allow camera access in your browser, then retry.':e.message;}
@@ -49,7 +52,7 @@ async function start(){
 }
 $('start').onclick=start;
 $('reset').onclick=()=>{camera.position.set(0,1.65,7);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
-function controlsChanged(){swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Index out (a slight bend is fine): move your hand to move. Other fingers can stay relaxed. sideways = strafe; push toward camera = forward; pull toward yourself = back. Combine them for diagonals. To reset your reach: bend index FIRST, return your hand, then point again. Returning with index out also moves you.';status('Hands free · point deliberately to move');}
+function controlsChanged(){swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='LEFT index out (a slight bend is fine): move your hand to move. Other fingers can stay relaxed. sideways = strafe; push toward camera = forward; pull toward yourself = back. Combine them for diagonals. To reset your reach: bend index FIRST, return your hand, then point again. Returning with index out also moves you.';status('Hands free · point deliberately to move');}
 $('gain').oninput=()=>swipe.gain=+$('gain').value;
 $('reverse').onchange=()=>{swipe.reverse=$('reverse').checked;swipe.reset();};
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
