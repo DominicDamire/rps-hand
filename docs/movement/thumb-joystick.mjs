@@ -23,17 +23,19 @@ const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
 const dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0);
 const unit=a=>{const n=Math.hypot(...a);return n>1e-8?a.map(v=>v/n):null;};
 export function thumbVector(tilt,centre){
- const t=unit(tilt);if(!t||!centre)return null;
- // Live neutral defines the plane; screen horizontal is right/left, depth is forward/back.
- let right=unit([-1+centre[0]*centre[0],centre[0]*centre[1],centre[0]*centre[2]]);
- if(!right)right=[0,-1,0];
- let back=unit([centre[1]*right[2]-centre[2]*right[1],centre[2]*right[0]-centre[0]*right[2],centre[0]*right[1]-centre[1]*right[0]]);
- if(back[2]<0)back=back.map(v=>-v);
- const alignment=dot(t,centre);if(alignment<.1)return null;
- const angle=Math.acos(Math.max(-1,Math.min(1,alignment)));
- if(angle<.12)return {x:0,z:0};
- const x=dot(t,right),z=dot(t,back),r=Math.hypot(x,z);if(r<1e-7)return {x:0,z:0};
- const magnitude=Math.min(1,(angle-.12)/.45);return {x:x/r*magnitude,z:z/r*magnitude};
+ const t=unit(tilt),c=centre&&unit(centre);if(!t||!c)return null;
+ const wrap=a=>Math.atan2(Math.sin(a),Math.cos(a));
+ // Two independent live angles: image-plane tilt and depth elevation.
+ // A depth tilt cannot rotate the sideways basis as it did in the tangent-plane mapping.
+ let x=-wrap(Math.atan2(t[1],t[0])-Math.atan2(c[1],c[0]));
+ let z=Math.asin(Math.max(-1,Math.min(1,t[2])))-Math.asin(Math.max(-1,Math.min(1,c[2])));
+ const lean=Math.hypot(x,z);if(lean<.12)return {x:0,z:0};
+ // Stabilize cardinal movements while preserving continuous angles between them.
+ const ax=Math.abs(x),az=Math.abs(z),assist=.6;
+ if(ax>=az)z=Math.sign(z)*Math.max(0,az-assist*ax)/(1-assist);
+ else x=Math.sign(x)*Math.max(0,ax-assist*az)/(1-assist);
+ const r=Math.hypot(x,z);if(r<1e-8)return {x:0,z:0};
+ const magnitude=Math.min(1,(lean-.12)/.45);return {x:x/r*magnitude,z:z/r*magnitude};
 }
 export class ThumbJoystick {
  constructor(){this.speed=4.5;this.reset();}

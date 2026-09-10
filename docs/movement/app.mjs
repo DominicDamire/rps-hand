@@ -1,14 +1,16 @@
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=41';
-import {setupThumbstick} from './thumbstick.mjs?v=41';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=42';
+import {setupThumbstick} from './thumbstick.mjs?v=42';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=41';
-import {DustMap} from './map.mjs?v=41';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=42';
+import {DustMap} from './map.mjs?v=42';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=41';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=41';
+import {setupUI} from './ui.mjs?v=42';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=42';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
+const trackingLog=[];
+$('saveTracking').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:42,frames:trackingLog},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='thumb-tracking-v42.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
 const held=new ThumbJoystick();let inputMode='poses',trackedHand=null,resting=false;
 const swipe=new SwipeController();const headLook=new HeadLook();let lookDemo=0;
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:false});renderer.setPixelRatio(1);
@@ -30,11 +32,11 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=41',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=42',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
-    lastResult=performance.now();if(lastResult-data.time>750){held.reset();apply(null,lastResult);trackingUI.clear();walkReason='TRACKING TOO OLD · '+Math.round(lastResult-data.time)+' ms';status(walkReason);return;}
+    lastResult=performance.now();if(lastResult-data.time>300){held.reset();apply(null,lastResult);trackingUI.clear();walkReason='TRACKING TOO OLD · '+Math.round(lastResult-data.time)+' ms';status(walkReason);return;}
     let handIndex=inputMode==='index'?selectLeftHand(data):data.landmarks?.length===1?0:-1;
     if(resting){held.reset();swipe.reset();walkReason='RESTING';return;}
     const label=handIndex>=0?data.handedness?.[handIndex]?.[0]?.categoryName:null;
@@ -45,6 +47,7 @@ async function start(){
     }else if(inputMode==='poses'){
       const sample=handIndex>=0?measureThumb(data.landmarks[handIndex],data.worldLandmarks[handIndex],$('cam').videoWidth/$('cam').videoHeight):null;
       held.receive(sample,lastResult);
+      trackingLog.push({time:lastResult,captureTime:data.time,tilt:sample?.tilt??null,rest:sample?.rest??false,centre:held.centre,raw:held.raw,x:held.x,z:held.z,reason:held.reason});while(trackingLog.length>450||trackingLog.length&&lastResult-trackingLog[0].time>15000)trackingLog.shift();
       const active=!!held.direction;walkReason=handIndex<0?'SHOW ONE HAND':held.reason;
       $('gestureStats').textContent=`THUMB X ${held.x.toFixed(2)} · Y ${(-held.z).toFixed(2)} · raw X ${held.raw.x.toFixed(2)} Y ${(-held.raw.z).toFixed(2)} · depth ${sample?.tilt?.[2]?.toFixed(2)??"?"} · tracker ${Math.round(data.inferenceMs||0)} ms`;
       trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,active);
@@ -64,7 +67,7 @@ $('turnMode').onchange=()=>{headLook.mode=$('turnMode').value;headLook.resetLook
 $('headThreshold').oninput=()=>{headLook.deadzoneDegrees=+$('headThreshold').value;$('thresholdValue').textContent=$('headThreshold').value+'°';};
 $('headGain').oninput=()=>{if(head)head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;};
 $('reset').onclick=()=>{stick.reset();held.reset();headLook.heading=0;headLook.resetLook();lookDemo=0;head?.recenter();camera.position.copy(dustMap.spawn);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
-function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='On camera start, hold your thumb upright briefly. This becomes your live centre. Return there to stop. Tilt in any direction and hold to keep walking. More tilt means more speed. Small wobbles are ignored. Close your fist to rest. No calibration.';status('Start camera · thumb joystick ready');}
+function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='On camera start, hold your thumb upright briefly. This becomes your live centre. Return there to stop. Tilt in any direction and hold to keep walking. More tilt means more speed. Small wobbles are ignored; straight directions are steadied while diagonals remain available. Close your fist to rest. No calibration.';status('Start camera · thumb joystick ready');}
 $('movementMode').onchange=()=>{inputMode=$('movementMode').value;stick.reset();held.reset();trackedHand=null;swipe.reset();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('stickZone').hidden=inputMode!=='touch';$('hint').textContent=inputMode==='touch'?'Drag thumbstick to walk; release to stop.':inputMode==='poses'?'Tilt and hold your thumb to walk. Upright or closed fist stops.':'Left index out: move your hand to walk. Bend index to release.';};
 $('gain').oninput=()=>held.speed=+$('gain').value;
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
