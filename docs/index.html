@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 36)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 37)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -49,7 +49,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 import { makeGun } from "./gun.mjs";
 
-const BUILD = 36;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 37;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -319,7 +319,7 @@ const OCCL_HOLD = Q.get("hold") === "1" ? 1500 : 0;   // handshake "held" ghost 
 // --- pose tracker: PoseLandmarker in its own Web Worker (shoulders, elbows, wrists) --------------------------
 const POSE_WORKER_SRC = `
 import { FilesetResolver, PoseLandmarker } from "${MP}/vision_bundle.mjs";
-let lm; const J = [11, 12, 13, 14, 15, 16];   // left shoulder, right shoulder, left elbow, right elbow, left wrist, right wrist
+let lm; const J = [0, 2, 5, 11, 12, 13, 14, 15, 16];   // nose, left eye, right eye, left shoulder, right shoulder, left elbow, right elbow, left wrist, right wrist
 onmessage = async e => {
   if (e.data.init) {
     const vision = await FilesetResolver.forVisionTasks("${MP}/wasm", true);
@@ -431,6 +431,24 @@ const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 8);
 // hand with its own reflected camera (video footprint at every depth) - that reversed the depth feel and is gone.
 const worldObjs = [];   // room objects (the gun module hides/uses them for bullet targets)
 const FP_DEPTH = +Q.get("fpz") || 0.3;
+// Head tracking (owner: "the FPS camera is the head, it should be tracked too"): the pose worker's eyes give the head's
+// picture position and, from the eye spacing (IPD 63 mm), its distance from the phone. First person then projects from
+// the tracked head through a fixed window at the phone plane (the crop-fov rectangle seen from the reference eye at
+// 2 * FP_DEPTH), an off-axis frustum: move your head and the room and your hand shift like a real window, bring the
+// gun's sight between your eye and the target and the red dot lines up. No head in view = the reference eye. ?head=0 off.
+const HEAD = Q.get("head") !== "0", IPD = 0.063;
+let headPos = null, headT = 0;   // levelled world position of the eyes' midpoint, time of the last estimate
+const _hl = new THREE.Vector3(), _hr = new THREE.Vector3(), _hm = new THREE.Vector3();
+function headFromPose(pose) {   // pose: { img: [{x, y, v}...9], world } from the pose worker
+  const l = pose.img[1], r = pose.img[2]; if (!(l.v > 0.4 && r.v > 0.4)) return;
+  const k = 2 * Math.tan(HFOV / 2), a = frameH / frameW;
+  _hl.set((l.x - 0.5) * k, -(l.y - 0.5) * k * a, -1); _hr.set((r.x - 0.5) * k, -(r.y - 0.5) * k * a, -1);   // rays at unit depth
+  const sep = Math.hypot(_hl.x - _hr.x, _hl.y - _hr.y); if (sep < 1e-4) return;
+  const Z = Math.min(1.5, Math.max(0.15, IPD / sep));                                                      // distance from the phone
+  _hm.addVectors(_hl, _hr).multiplyScalar(0.5 * Z);
+  if (tiltOn) { const c = Math.cos(pitch), sn = Math.sin(pitch), y = _hm.y, z = _hm.z; _hm.y = c * y - sn * z; _hm.z = sn * y + c * z; }
+  headPos = headPos ? headPos.lerp(_hm, 0.3) : _hm.clone(); headT = performance.now();
+}
 const worldGroup = new THREE.Group(); scene.add(worldGroup);   // everything that must mirror in the selfie view
 let frameW = 640, frameH = 480;   // camera frame size, set once the video is known
 const VIEWS = ["first person", "mirror"]; let view = Q.has("view") ? +Q.get("view") : Q.get("img") || Q.get("video") ? 1 : 0;   // ?view=0 first person, 1 mirror   // live camera: first person; test stills/clips: mirror   // mirror = the room seen from the phone, mirrored like the video
@@ -445,8 +463,15 @@ function applyView(force) {
   }
   const dbgCam = Q.get("cam")?.split(",").map(Number);   // ?cam=x,y,z,tx,ty,tz: fixed debug camera (renders checks of the hand mesh)
   if (dbgCam) { camera.position.set(dbgCam[0], dbgCam[1], dbgCam[2]); camera.lookAt(dbgCam[3], dbgCam[4], dbgCam[5]); worldGroup.scale.x = 1; }
-  else if (fp) {   // the room from your side: the phone's view reflected at a fixed FP_DEPTH (a hand at that depth and the room agree exactly on screen)
-    _pd.set(0, Math.sin(pitch), -Math.cos(pitch)); camera.position.copy(_pd).multiplyScalar(2 * FP_DEPTH); camera.lookAt(0, 0, 0); worldGroup.scale.x = 1;
+  else if (fp) {   // from your head (tracked, else the reference eye at 2 * FP_DEPTH) through the window at the phone plane
+    _pd.set(0, Math.sin(pitch), -Math.cos(pitch)); _pu2.set(0, Math.cos(pitch), Math.sin(pitch));   // phone axis toward you, phone up (levelled)
+    const tracked = HEAD && headPos && performance.now() - headT < 1500 && headPos.dot(_pd) > 0.12;
+    if (tracked) camera.position.copy(headPos); else camera.position.copy(_pd).multiplyScalar(2 * FP_DEPTH);
+    camera.up.copy(_pu2); camera.lookAt(_lk.copy(camera.position).sub(_pd)); worldGroup.scale.x = 1;
+    const hz = camera.position.dot(_pd), hx = camera.position.x, hy = camera.position.dot(_pu2);           // head in the window's frame
+    const hh = 2 * FP_DEPTH * Math.tan(camera.fov * Math.PI / 360), hw = hh * camera.aspect, n = camera.near;   // window half size at the phone plane
+    camera.projectionMatrix.makePerspective((-hw - hx) * n / hz, (hw - hx) * n / hz, (hh - hy) * n / hz, (-hh - hy) * n / hz, n, camera.far);
+    camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
   }
   else {   // looks where the phone looks, from where navigation has taken the player (the hands move with the player, so the video overlay stays exact)
     camera.position.set(0, 0, 0); camera.lookAt(0, Math.sin(pitch), -Math.cos(pitch)); worldGroup.scale.x = -1;
@@ -468,7 +493,7 @@ for (const z of [-3.2, 3.2]) {   // a wall behind each player
   const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 5), new THREE.MeshStandardMaterial({ color: 0x252c3c, roughness: 1, side: THREE.DoubleSide }));
   wall.position.set(0, FLOOR_Y + 2.5, z); wall.receiveShadow = true; scene.add(wall); worldObjs.push(wall);
 }
-const _pd = V();
+const _pd = V(), _pu2 = V(), _lk = V();
 
 
 // --- skinned hand mesh driven by the 21 tracked points -----------------------------------------------
@@ -565,9 +590,11 @@ const CHAIN_OF = {}; for (const [k, js] of Object.entries(CHAINS)) for (const j 
 const HYPER = { mcp: 25, pip: 8, dip: 8 };   // degrees of backward bend allowed at each finger joint
 const THUMB_Z = Q.get("tz") !== "0";        // thumb bones take their depth from their length (see poseFK)
 const F_Q = (Q.get("fist") || "").split(",").map(Number);
-const FIST = F_Q.length === 3 ? { mcp: F_Q[0], pip: F_Q[1], dip: F_Q[2] } : { mcp: 85, pip: 100, dip: 60 };  // a closed fist's joint angles; blended in as the tracked tip approaches the knuckle (the tracker under-reads hidden joints)
+const FIST = F_Q.length === 3 ? { mcp: F_Q[0], pip: F_Q[1], dip: F_Q[2] } : { mcp: 85, pip: 100, dip: 60 };
+const GRIP_A = (+Q.get("ga") || 12) * Math.PI / 180;   // barrel direction from the palm axis toward the palm normal (same as gun.mjs)
+const GRIPF = { mcp: 72, pip: 92, dip: 40 };   // the hand on the pistol grip: middle, ring and pinky wrap it at these angles, the thumb lies along the frame, the index is free (trigger)  // a closed fist's joint angles; blended in as the tracked tip approaches the knuckle (the tracker under-reads hidden joints)
 const _b = V(), _c = V(), _e = V(), _pw = V();
-function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing state for the joint angles
+function poseFK(pts, bind, chirRight, scale, st, grip) {   // st: per-hand smoothing state for the joint angles; grip: hand locked on the gun
   const s = scale ?? pts[0].distanceTo(pts[9]) / bind[0].distanceTo(bind[9]), out = pts.map(p => p.clone());
   _l.subVectors(pts[17], pts[5]).normalize();
   const Lp = _pw.subVectors(pts[9], pts[0]).length(); _pw.normalize();                                     // along the palm
@@ -581,6 +608,10 @@ function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing s
   // bone), else the sign remembered for that bone. A picture longer than the bone is left as tracked. ?tz=0 disables.
   for (const j of [2, 3, 4]) {
     _d.subVectors(pts[j], pts[PARENT[j]]);
+    if (grip) {   // thumb along the side of the frame: the barrel direction (palm axis rotated 50 deg toward the palm normal), the first bone a little outward
+      _d.copy(_pw).multiplyScalar(Math.cos(GRIP_A)).addScaledVector(_n, Math.sin(GRIP_A)); if (j === 2) _d.addScaledVector(_l, -0.3);
+      seg(j, _d.normalize()); continue;
+    }
     if (THUMB_Z) {
       _r.copy(pts[PARENT[j]]).normalize(); const L = s * bind[j].distanceTo(bind[PARENT[j]]), dz = _d.dot(_r);   // ray from the phone (origin) through the joint
       _b.copy(_d).addScaledVector(_r, -dz); const lp = _b.length();                                                     // the picture part
@@ -612,15 +643,16 @@ function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing s
     const c01 = x => Math.min(1, Math.max(0, x));
     const fold = c01((0.95 * Lp - uT) / (0.15 * Lp)) * c01((uT - 0.05 * Lp) / (0.1 * Lp)) * c01((0.6 * Lp - hT) / (0.15 * Lp)) * (vT > vLo && vT < vHi ? 1 : 0);
     closeness = Math.max(closeness, fold);
-    for (const [j, lim, fist] of [[m + 1, HYPER.mcp, FIST.mcp], [m + 2, HYPER.pip, FIST.pip], [m + 3, HYPER.dip, FIST.dip]]) {
+    const lock = grip && m !== 5, FA = lock ? GRIPF : FIST;
+    for (const [j, lim, fist] of [[m + 1, HYPER.mcp, FA.mcp], [m + 2, HYPER.pip, FA.pip], [m + 3, HYPER.dip, FA.dip]]) {
       _d.subVectors(pts[j], pts[j - 1]).normalize();
       // the knuckle is a two-axis joint: it bends AND spreads (that is how fingers cross); the middle and end joints are hinges
-      let side = j === m + 1 ? Math.max(-0.64, Math.min(0.64, _d.dot(_q))) : 0;   // sideways component at the knuckle, within +-40 degrees
+      let side = j === m + 1 && !lock ? Math.max(-0.64, Math.min(0.64, _d.dot(_q))) : 0;   // sideways component at the knuckle, within +-40 degrees
       if (st && side) { const k = "s" + j, prevS = st[k]; if (prevS != null) { const a = Math.min(1, Math.max(0.12, Math.abs(side - prevS) / 0.2)); side = prevS + a * (side - prevS); } st[k] = side; }
       _d.addScaledVector(_q, -_d.dot(_q)); if (_d.lengthSq() < 1e-10) _d.copy(prev); _d.normalize();   // the bend part, in the finger's plane
       _b.crossVectors(_q, prev).normalize();                                          // curl direction at this joint (rotating prev about the flexion axis)
       let flex = Math.atan2(_d.dot(_b), _d.dot(prev)) * 180 / Math.PI;             // > 0 = curl toward the palm, < 0 = hyperextension
-      flex = Math.max(flex, closeness * fist);                                        // never less curled than the fist prior says for this closeness
+      flex = lock ? fist : Math.max(flex, closeness * fist);                          // never less curled than the fist prior says for this closeness; locked on the grip
       if (flex < -lim) flex = -lim;
       if (st) { const k = "f" + j, prevF = st[k]; if (prevF != null) { const a = Math.min(1, Math.max(0.12, Math.abs(flex - prevF) / 12)); flex = prevF + a * (flex - prevF); } st[k] = flex; }   // hold still on a held pose (12 deg per frame = full speed)
       const a = flex * Math.PI / 180; _d.copy(prev).multiplyScalar(Math.cos(a)).addScaledVector(_b, Math.sin(a));
@@ -769,11 +801,11 @@ function makeRigSkin(variant, color) {
   const L0 = bind[0].distanceTo(bind[9]); const bindLen = {}; for (const [k, js] of Object.entries(CHAINS)) bindLen[k] = js.reduce((t, j) => t + bind[j].distanceTo(bind[PARENT[j]]), 0);
   const ratio = {}; const M = new THREE.Matrix4(), dirW = V(), o = V();
   const fwd = V(), armDir = V();
-  return { mesh, update(tracked, chirRight, elbow, shoulder) {
+  return { mesh, update(tracked, chirRight, elbow, shoulder, grip) {
     // rigged (default): the mesh keeps its own proportions at one size (the hand's palm ratio, settled slowly); only the joints bend
     ratio.n = (ratio.n || 0) + 1; const scNow = tracked[0].distanceTo(tracked[9]) / L0;
     ratio.size = ratio.size == null ? scNow : ratio.size + Math.max(0.01, 1 / ratio.n) * (scNow - ratio.size);
-    const pts = FIT_EXACT ? meshPts(tracked) : poseFK(tracked, bind, chirRight, ratio.size, ratio), sc = FIT_EXACT ? scNow : ratio.size;
+    const pts = FIT_EXACT ? meshPts(tracked) : poseFK(tracked, bind, chirRight, ratio.size, ratio, grip), sc = FIT_EXACT ? scNow : ratio.size;
     for (const [k, js] of Object.entries(CHAINS)) {
       if (!FIT_EXACT) { ratio[k] = sc * FINGER_FAT; continue; }
       const r = js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k];   // exact: thickness = the chain's PEAK measured length
@@ -854,7 +886,7 @@ function makeHand(color = 0xdead8f) {
   // colliders: one ball per joint + one for the palm, kinematic (driven by tracking, push everything else)
   const hand = {
     group,
-    draw(pts, label, elbow, shoulder) {
+    draw(pts, label, elbow, shoulder, grip) {
       if (SKIN) {
         _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize();
         // Handedness vote (metres, + = right): the thumb's side of the palm plane, the side any folded finger curls to
@@ -869,7 +901,7 @@ function makeHand(color = 0xdead8f) {
         const near = hiR && trackerFps >= LOD_MIN_FPS && pts[0].distanceTo(pts[9]) / Math.max(0.05, -palmCentre(pts).z) > LOD_NEAR;   // close to the camera: full detail
         const on = useMirrored ? (near ? hiL : skinL) : (near ? hiR : skinR);
         for (const k of all()) if (k !== on) k.mesh.visible = false;
-        on.update(pts, right, elbow, shoulder);
+        on.update(pts, right, elbow, shoulder, grip);
       } else {
         for (const bn of bones) placeCylinder(bn.mesh, pts[bn.a], pts[bn.b], bn.r);
         joints.forEach((m, i) => { m.position.copy(pts[i]); m.scale.setScalar(JOINT_R[i]); });
@@ -1002,7 +1034,7 @@ async function main() {
     const pad = (BIGPAD && bigHand) || (nHands === 0 && dbg.frames % 3 === 2) ? PAD : 0;   // adaptive input padding (?bigpad=1 also pads while the tracked hand fills the frame, as build 13 did)
     if (poseTracker && !poseInflight && dbg.frames % POSE_EVERY === 0) {
       poseInflight = true;
-      poseTracker.detect(video, ts).then(pr => { poseInflight = false; dbg.tm.pose += pr.ms; dbg.tm.poseN++; if (pr.pose) poseLast = { t: performance.now(), ...pr.pose }; }, () => { poseInflight = false; });
+      poseTracker.detect(video, ts).then(pr => { poseInflight = false; dbg.tm.pose += pr.ms; dbg.tm.poseN++; if (pr.pose) { poseLast = { t: performance.now(), ...pr.pose }; if (HEAD) headFromPose(pr.pose); } }, () => { poseInflight = false; });
     }
     const r = await tracker.detect(video, ts, pad);
     inflight = false;
@@ -1071,8 +1103,8 @@ async function main() {
   }
   function armFromPose(s, wrist) {
     if (!poseLast || performance.now() - poseLast.t > 600 || !s.imgLm) { s.elbow = s.shoulder = null; return; }
-    const w0 = s.imgLm[0]; let best = null, bd = 0.15;   // nearest pose wrist (indices in the 6-joint set: 4 left wrist, 5 right wrist)
-    for (const [wi, ei, si] of [[4, 2, 0], [5, 3, 1]]) { const p = poseLast.img[wi], d = Math.hypot(p.x - w0.x, (p.y - w0.y) * frameH / frameW); if (p.v > 0.3 && d < bd) { bd = d; best = [wi, ei, si]; } }
+    const w0 = s.imgLm[0]; let best = null, bd = 0.15;   // nearest pose wrist (indices in the 9-joint set: 7 left wrist, 8 right wrist)
+    for (const [wi, ei, si] of [[7, 5, 3], [8, 6, 4]]) { const p = poseLast.img[wi], d = Math.hypot(p.x - w0.x, (p.y - w0.y) * frameH / frameW); if (p.v > 0.3 && d < bd) { bd = d; best = [wi, ei, si]; } }
     if (!best) { s.elbow = s.shoulder = null; return; }
     const [wi, ei, si] = best, pe = poseLast.img[ei], ps = poseLast.img[si], wv = poseLast.world[wi], ev = poseLast.world[ei], sv = poseLast.world[si];
     const Lp = Math.hypot(s.gl[27] - s.gl[0], s.gl[28] - s.gl[1], s.gl[29] - s.gl[2]) || 0.095;   // wrist -> middle knuckle
@@ -1109,14 +1141,14 @@ async function main() {
     for (const s of [slots.Right, slots.Left]) {
       if (shown[s.key]) {
         const pts = shape(shown[s.key]);
-        const tD = performance.now(); s.hand.draw(pts, s.name, s.elbow, s.shoulder); dbg.tm.draw += performance.now() - tD; displayed.push(shown[s.key]);
+        const tD = performance.now(); s.hand.draw(pts, s.name, s.elbow, s.shoulder, !!gun && gun.state.mode === "held" && gun.state.holder === s.key); dbg.tm.draw += performance.now() - tD; displayed.push(shown[s.key]);
         const pc = palmFlat(shown[s.key]); if (s.lastPalm && pc.distanceTo(s.lastPalm) > 0.1) dbg.dispJumps++; s.lastPalm = pc;   // what the player actually sees jump
       } else { s.hand.hide(); s.lastPalm = null; }
     }
     if (gun) gun.update(dt, [slots.Right, slots.Left].filter(s => shown[s.key]).map(s => ({ key: s.key, group: s.hand.group, pts: shape(shown[s.key]), right: s.hand.right, ext: s.ext })), now, camera);
     renderOverlay(displayed);
     if (now - stat.t > 1000) {
-      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}${poseTracker ? ` | pose/${poseTracker.where} ${(dbg.tm.pose / (dbg.tm.poseN || 1)).toFixed(0)} ms${poseLast && performance.now() - poseLast.t < 600 ? "" : " (none)"}` : ""}\n${tracker.where} | ${BENCH ? "BENCH no render" : SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | ${NHANDS}h | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"} | build ${BUILD}`;
+      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}${poseTracker ? ` | pose/${poseTracker.where} ${(dbg.tm.pose / (dbg.tm.poseN || 1)).toFixed(0)} ms${poseLast && performance.now() - poseLast.t < 600 ? "" : " (none)"}${headPos && performance.now() - headT < 1500 ? ` | head ${headPos.length().toFixed(2)}m` : " | head -"}` : ""}\n${tracker.where} | ${BENCH ? "BENCH no render" : SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | ${NHANDS}h | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"} | build ${BUILD}`;
       trackerFps = stat.n; stat = { ms: 0, lat: 0, n: 0, t: now }; dbg.pitch = pitch; dbg.tiltOn = tiltOn;
     }
     $("hand").textContent = "HANDS: " + (hud.join("  |  ") || "-") + (gun ? "   ·   " + gun.hud() : "");

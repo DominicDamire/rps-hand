@@ -104,7 +104,7 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   const palmCentre = pts => { _c.set(0, 0, 0); for (const i of [0, 5, 9, 13, 17]) _c.add(pts[i]); return _c.multiplyScalar(0.2); };
   const bendDeg = (a, b, c) => { _a.subVectors(b, a).normalize(); _b.subVectors(c, b).normalize(); return Math.acos(Math.max(-1, Math.min(1, _a.dot(_b)))) * 180 / Math.PI; };
   const closed = h => !h.ext[1] && !h.ext[2] && !h.ext[3], open = h => h.ext[1] && h.ext[2] && h.ext[3];
-  const GRIP_ANGLE = 50 * Math.PI / 180;   // barrel direction: from the palm axis toward the palm normal by this much (a fist's grip)
+  const GRIP_ANGLE = (+new URLSearchParams(location.search).get("ga") || 12) * Math.PI / 180;   // barrel = the palm axis tilted this much toward the palm normal (the finger-gun hand: palm facing sideways, arm straight; 50 deg pointed the gun 70 deg left of the hand)
   const GRIP_OFF = 0.032;                  // grip centre this far in front of the palm plane
 
   function gripFrame(h) {   // world frame of the held gun from the hand's points: barrel F, grip-up U, side R, grip centre C
