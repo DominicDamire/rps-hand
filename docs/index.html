@@ -268,7 +268,8 @@ function level(a) {
 // --- pointing navigation (first-person view): point with the index finger and drag the world -------------------------
 // Index finger out (the other three folded) and pull the hand toward yourself: you move forward. Push it toward the
 // camera: you move back. Drag it across the picture: you turn. Only in the first-person view; the mirror view must
-// stay glued to the video. (Was a pinch; the owner found a pinch too hard for the tracker to see.)
+// In the mirror view the player, camera and hands move together, so the hands stay exactly on the video while the room
+// moves around them. (Was a pinch; the owner found a pinch too hard for the tracker to see.)
 const NAV_MOVE = 4;                // metres travelled per metre of hand pull
 const NAV_TURN = 4;                // radians turned per metre of sideways drag
 const nav = { x: 0, z: 0, yaw: 0 }; const YAXIS = new THREE.Vector3(0, 1, 0);
@@ -369,7 +370,9 @@ function applyView(force) {
   const dbgCam = Q.get("cam")?.split(",").map(Number);   // ?cam=x,y,z,tx,ty,tz: fixed debug camera (renders checks of the hand mesh)
   if (dbgCam) { camera.position.set(dbgCam[0], dbgCam[1], dbgCam[2]); camera.lookAt(dbgCam[3], dbgCam[4], dbgCam[5]); worldGroup.scale.x = 1; }
   else if (fp) { const fx = Math.sin(nav.yaw), fz = Math.cos(nav.yaw); camera.position.set(nav.x - 0.85 * fx, 0.12, nav.z - 0.85 * fz); camera.lookAt(nav.x + 0.5 * fx, -0.12, nav.z + 0.5 * fz); worldGroup.scale.x = 1; }
-  else { camera.position.set(0, 0, 0); camera.lookAt(0, Math.sin(pitch), -Math.cos(pitch)); worldGroup.scale.x = -1; }   // looks where the phone looks
+  else {   // looks where the phone looks, from where navigation has taken the player (the hands move with the player, so the video overlay stays exact)
+    const cp = Math.cos(pitch); camera.position.set(nav.x, 0, nav.z); camera.lookAt(nav.x - cp * Math.sin(nav.yaw), Math.sin(pitch), nav.z - cp * Math.cos(nav.yaw)); worldGroup.scale.x = -1;
+  }
 }
 scene.add(new THREE.HemisphereLight(0xfff8ee, 0x3a4560, 1.0));
 const key = new THREE.DirectionalLight(0xffffff, 1.8); key.position.set(0.5, 1.8, -0.3); key.target.position.set(0, FLOOR_Y, 0); scene.add(key, key.target);
@@ -760,7 +763,7 @@ async function main() {
     }
     const fp = VIEWS[view] === "first person"; let navBy = null;
     for (const s of [slots.Right, slots.Left]) {   // pinch navigation: one pinching hand steers
-      if (!shown[s.key] || !fp) { s.pinch = false; continue; }
+      if (!shown[s.key]) { s.pinch = false; continue; }
       const p = shape(shown[s.key]), pointing = s.ext[0] && !s.ext[1] && !s.ext[2] && !s.ext[3];   // index out, the rest folded
       if (!s.pinch && pointing) { s.pinch = true; s.pinchStart = { palm: palmCentre(p), x: nav.x, z: nav.z, yaw: nav.yaw }; dbg.pinches++; }
       else if (s.pinch && !pointing) s.pinch = false;
@@ -774,6 +777,7 @@ async function main() {
       if (shown[s.key]) {
         const pts = shape(shown[s.key]);
         if (fp) for (const q of pts) { q.applyAxisAngle(YAXIS, nav.yaw); q.x += nav.x; q.z += nav.z; }   // the hands travel with you
+        else for (const q of pts) { q.applyAxisAngle(YAXIS, -nav.yaw); q.x -= nav.x; q.z += nav.z; }     // mirrored render: the same move, mirrored in x
         s.hand.draw(pts); displayed.push(shown[s.key]);
         const pc = palmFlat(shown[s.key]); if (s.lastPalm && pc.distanceTo(s.lastPalm) > 0.1) dbg.dispJumps++; s.lastPalm = pc;   // what the player actually sees jump
       } else { s.hand.hide(); s.lastPalm = null; }
@@ -782,7 +786,7 @@ async function main() {
     world.timestep = dt; world.step();
     for (const p of props) { p.mesh.position.copy(p.body.translation()); p.mesh.quaternion.copy(p.body.rotation()); }
     if (now - stat.t > 1000) {
-      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | ${SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"}${VIEWS[view] === "first person" ? ` | nav ${Math.hypot(nav.x, nav.z).toFixed(1)}m ${(nav.yaw * 180 / Math.PI).toFixed(0)}° (point+drag)` : ""} | build ${BUILD}`;
+      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | ${SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"} | nav ${Math.hypot(nav.x, nav.z).toFixed(1)}m ${(nav.yaw * 180 / Math.PI).toFixed(0)}° (point+drag) | build ${BUILD}`;
       stat = { ms: 0, lat: 0, n: 0, t: now }; dbg.pitch = pitch; dbg.tiltOn = tiltOn;
     }
     $("hand").textContent = "HANDS: " + (hud.join("  |  ") || "-");
