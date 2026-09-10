@@ -37,8 +37,8 @@ export class MovementController{
     if(!this.active){
       if(this.pending===null)this.pending=time;
       this.filtered={...point};this.anchor={...point};
-      if(time-this.pending<40)return {...zero,status:'Grabbing…'};
-      this.active=true;return {...zero,active:true,status:'Grabbed · move your hand'};
+      if(time-this.pending<40)return {...zero,status:this.mode==='index'?'Index detected…':'Grabbing…'};
+      this.active=true;return {...zero,active:true,status:this.mode==='index'?'Index ready · move your finger':'Grabbed · move your hand'};
     }
     const alpha=1-Math.exp(-dt/18);
     this.filtered.x+=alpha*(point.x-this.filtered.x);this.filtered.z+=alpha*(point.z-this.filtered.z);
@@ -47,6 +47,6 @@ export class MovementController{
     // Camera distance falls on a push: positive scene z means backward.
     const dz=-consume('z',.009)*this.gain*(this.reverse?-1:1);
     const limit=12*dt/1000, length=Math.hypot(dx,dz), k=length>limit?limit/length:1;
-    return {dx:dx*k,dz:dz*k,active:true,status:Math.hypot(dx,dz)<.0001?'Grabbed · hold still to stop':'Moving'};
+    return {dx:dx*k,dz:dz*k,active:true,status:Math.hypot(dx,dz)<.0001?(this.mode==='index'?'Index ready · hold still to stop':'Grabbed · hold still to stop'):'Moving'};
   }
 }
