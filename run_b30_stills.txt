@@ -1,0 +1,19 @@
+[img victory       ] OK                     move=SCISSORS  HANDS: R 0.29m
+[img peace         ] OK                     move=SCISSORS  HANDS: L 0.20m
+[img dirty_peace   ] WRONG (want SCISSORS)  move=?         HANDS: -
+[img robbie_v      ] WRONG (want SCISSORS)  move=?         HANDS: -
+[img fist_pump     ] WRONG (want ROCK)      move=?         HANDS: -
+[img raised_fist   ] OK                     move=ROCK      HANDS: L 0.18m
+[img woman_hands   ] OK                     move=PAPER     HANDS: L 0.40m | R 0.52m
+[img crossed_hands ] OK                     move=PAPER     HANDS: L 0.31m
+[img scissors_png  ] WRONG (want SCISSORS)  move=PAPER     HANDS: R 0.18m
+[img count5        ]                        move=PAPER     HANDS: R 0.61m
+[img crossed1      ]                        move=SCISSORS  HANDS: R 0.15m
+[img crossed2      ]                        move=PAPER     HANDS: R 0.22m
+[img handshake1    ]                        move=PAPER     HANDS: R 0.32m
+[img handshake2    ]                        move=PAPER     HANDS: L 0.51m
+STILLS: 5/9 labelled moves correct
+[tilt 30 up      ] reproj 0.03%  ||  tracker: 13 ms | 58 fps | latency 15 ms | hands 1 / worker/GPU | mesh rigged | 2h | mode predict | tilt 30° | build 30
+[face woman_hands] FAIL head reproj -1.00% depth 0.00 m yaw 0° | head: off | body: off  ||  tracker: 16 ms | 39 fps | latency 23 ms | hands 2 / worker/GPU | mesh rigged | 2h | mode predict | tilt off | build 30
+[face seated_desk] FAIL head reproj -1.00% depth 0.00 m yaw 0° | head: off | body: off  ||  tracker: 20 ms | 32 fps | latency 29 ms | hands 2 / worker/GPU | mesh rigged | 2h | mode predict | tilt off | build 30
+ERRORS: none
