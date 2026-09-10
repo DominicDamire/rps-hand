@@ -26,7 +26,7 @@ export function thumbVector(point,centre){
  return {x:x/r*magnitude,z:z/r*magnitude};
 }
 export class ThumbJoystick {
- constructor(){this.size=.55;this.speed=4.5;this.reset();}
+ constructor(){this.size=.8;this.speed=4.5;this.reset();}
  reset(){this.centre=null;this.scale=null;this.needsRest=true;this.settling=[];this.seen=-Infinity;this.stop('SHOW THUMB');}
  stop(reason){this.x=this.z=0;this.raw={x:0,z:0};this.candidate=null;this.lastTilt=null;this.reason=reason;}
  receive(sample,time){

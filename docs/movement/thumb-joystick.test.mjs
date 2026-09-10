@@ -50,7 +50,7 @@ test('size changes preserve anchor, require rest and adjust thumb travel',()=>{
 });
 
 test('compact default reaches forward and reverse boost within a small thumb span',()=>{
- const c=new ThumbJoystick();assert.equal(c.size,.55);for(let t=0;t<=400;t+=100)c.receive(s(0,.35,true),t);
+ const c=new ThumbJoystick();assert.equal(c.size,.8);c.setSize(.55);for(let t=0;t<=400;t+=100)c.receive(s(0,.35,true),t);
  c.receive(s(0,-.44),440);c.receive(s(0,-.44),520);assert.ok(c.z<=-1.59);
  c.receive(s(0,.44),560);c.receive(s(0,.44),640);c.receive(s(0,.44),680);assert.ok(c.z>1.5);
  c.receive(s(),720);assert.deepEqual(c.step(720),{dx:0,dz:0});
@@ -71,7 +71,7 @@ test('zoom crop remains inside image near its edges',()=>{for(const centre of [[
 
 test('a visible thumb starts immediately without any fist calibration',()=>{
  const c=new ThumbJoystick();c.receive(s(.4,.3),100);assert.deepEqual(c.centre,[.4,.3]);assert.equal(c.needsRest,false);
- c.receive(s(.4+.275,.3),140);c.receive(s(.4+.275,.3),220);assert.equal(c.direction,'RIGHT');
+ c.receive(s(.4+.4,.3),140);c.receive(s(.4+.4,.3),220);assert.equal(c.direction,'RIGHT');
 });
 test('tracking dropout stops but centre entry resumes without a fist',()=>{
  const c=ready();c.receive(s(.5),100);c.receive(s(.5),180);c.receive(null,220);
@@ -87,4 +87,9 @@ test('two consistent 30fps samples engage without an extra 70ms wait',()=>{
  const c=ready();c.receive(s(.5),100);assert.equal(c.direction,null);c.receive(s(.5),133);assert.equal(c.direction,'RIGHT');
  c.receive(s(-.5),166);assert.equal(c.direction,'RIGHT');c.receive(s(-.5),199);assert.equal(c.direction,'LEFT');
  c.receive(s(),215);assert.equal(c.direction,null);
+});
+
+test('default joystick gives the thumb more room while preserving full speed',()=>{
+ const c=new ThumbJoystick();c.receive(s(),0);assert.equal(c.effectiveScale,.8);
+ c.receive(s(.4),40);c.receive(s(.4),80);assert.ok(Math.abs(c.x-1)<1e-10);
 });
