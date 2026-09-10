@@ -1,60 +1,42 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {ThumbJoystick,thumbVector,measureThumb} from './thumb-joystick.mjs';
-const s=(x=0,z=0,rest=false)=>({point:[x,z],rest});const ready=()=>{const c=new ThumbJoystick();for(const t of [-400,-300,-200,-100,0])c.receive(s(0,0,true),t);return c;};
-test('tracking loss discards the old centre before reacquisition',()=>{const c=ready();assert.ok(c.centre);c.receive(null,200);assert.equal(c.centre,null);c.receive(s(.5),240);assert.deepEqual(c.step(250),{dx:0,dz:0});});
-test('live left right forward and backward offsets all drive movement',()=>{for(const [x,z,name] of [[-.5,0,'LEFT'],[.5,0,'RIGHT'],[0,-.5,'FORWARD'],[0,.5,'BACKWARD']]){const c=ready();c.receive(s(x,z),200);c.receive(s(x,z),280);assert.equal(c.direction,name);assert.deepEqual(c.step(290,.02),c.step(300,.02));}});
-test('fist neutral and stale tracking stop held movement',()=>{for(const stop of [s(),s(0,0,true),null]){const c=ready();c.receive(s(0,.5),200);c.receive(s(0,.5),280);c.receive(stop,300);assert.deepEqual(c.step(301,.02),{dx:0,dz:0});}});
-test('free circle has continuous direction through all quadrants',()=>{let last;for(let i=0;i<=1440;i++){const a=i*Math.PI/720,v=thumbVector(s(.5*Math.cos(a),.5*Math.sin(a)).point,[0,0]);if(last)assert.ok(Math.hypot(v.x-last.x,v.z-last.z)<.02);last=v;}});
-test('small wobble holds direction while a sustained reversal changes it',()=>{const c=ready();c.receive(s(.5),200);c.receive(s(.5),280);const x=c.x;c.receive(s(.51),310);assert.equal(c.x,x);c.receive(s(-.5),350);assert.ok(c.x>0);c.receive(s(-.5),430);assert.ok(c.x<0);});
-
-test('all compass angles remain reachable without direction snapping',()=>{const bins=new Set();for(let i=0;i<10000;i++){const a=i*Math.PI*2/10000,v=thumbVector(s(.5*Math.cos(a),.5*Math.sin(a)).point,[0,0]);bins.add(Math.round(((Math.atan2(v.z,v.x)+Math.PI*2)%(Math.PI*2))*180/Math.PI/5)%72);}assert.equal(bins.size,72);});
-test('single corrupt direction sample cannot reverse movement',()=>{const c=ready();c.receive(s(.5),200);c.receive(s(.5),280);c.receive(s(-.5),310);assert.ok(c.x>0);c.receive(s(.5),340);assert.ok(c.x>0);});
-test('persistent neutral never accumulates movement',()=>{const c=ready();for(let t=200;t<5000;t+=40){c.receive(s(Math.sin(t)*.015,Math.cos(t)*.015),t);assert.deepEqual(c.step(t,.016),{dx:0,dz:0});}});
-
-test('screen measurement ignores depth and compensates hand translation and camera size',()=>{
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {ThumbJoystick,thumbVector,measureThumb} from './thumb-joystick.mjs';
+import {drawThumbJoystick} from './ui.mjs';
+const s=(x=0,y=0,rest=false,scale=1)=>({point:[x,y],rest,scale});
+const ready=()=>{const c=new ThumbJoystick();for(const t of [-400,-300,-200,-100,0])c.receive(s(0,.35,true),t);return c;};
+test('fist captures a fixed circle above its resting thumb',()=>{const c=ready();assert.deepEqual(c.centre,[0,0]);assert.equal(c.scale,1);assert.equal(c.direction,null);});
+test('hand position and size changes cannot drag or resize the circle',()=>{
+ const c=ready();for(let t=40;t<1000;t+=40)c.receive(s(.7,.8,true,2),t);
+ assert.deepEqual(c.centre,[0,0]);assert.equal(c.scale,1);assert.deepEqual(c.step(1000),{dx:0,dz:0});
+});
+test('all held screen directions move with equal maximum speed',()=>{
+ for(const [x,z,name] of [[-.5,0,'LEFT'],[.5,0,'RIGHT'],[0,-.5,'FORWARD'],[0,.5,'BACKWARD'],[.5,-.5,'FORWARD RIGHT']]){
+ const c=ready();c.receive(s(x,z),100);c.receive(s(x,z),180);assert.equal(c.direction,name);
+ assert.ok(Math.abs(Math.hypot(c.x,c.z)-1)<1e-10);assert.deepEqual(c.step(200),c.step(220));}
+});
+test('circle centre and fist both stop immediately',()=>{for(const stop of [s(),s(.6,.7,true)]){const c=ready();c.receive(s(.5),100);c.receive(s(.5),180);c.receive(stop,220);assert.deepEqual(c.step(220),{dx:0,dz:0});}});
+test('lost tracking preserves circle but requires fist before movement resumes',()=>{
+ const c=ready();c.receive(s(.5),100);c.receive(s(.5),180);c.receive(null,220);
+ assert.deepEqual(c.centre,[0,0]);c.receive(s(.5),260);c.receive(s(.5),340);assert.deepEqual(c.step(340),{dx:0,dz:0});
+ c.receive(s(.7,.8,true),380);c.receive(s(-.5),420);c.receive(s(-.5),500);assert.equal(c.direction,'LEFT');
+ assert.deepEqual(c.centre,[0,0]);assert.deepEqual(c.step(751),{dx:0,dz:0});assert.deepEqual(c.centre,[0,0]);
+});
+test('only reset allows replacing the captured circle',()=>{const c=ready();c.reset();for(let t=0;t<=400;t+=100)c.receive(s(.5,.7,true,2),t);assert.deepEqual(c.centre,[.5,0]);assert.equal(c.scale,2);});
+test('neutral jitter and one corrupt reversal do not cause drift',()=>{
+ const c=ready();for(let t=40;t<1000;t+=40){c.receive(s(.16+Math.sin(t)*.01),t);assert.deepEqual(c.step(t),{dx:0,dz:0});}
+ c.receive(s(.5),1000);c.receive(s(.5),1080);c.receive(s(-.5),1120);assert.ok(c.x>0);c.receive(s(.5),1160);assert.ok(c.x>0);
+});
+test('continuous circular input covers every heading',()=>{let last;const bins=new Set();for(let i=0;i<=1440;i++){const a=i*Math.PI/720,v=thumbVector([.5*Math.cos(a),.5*Math.sin(a)],[0,0]);bins.add(Math.round((a*180/Math.PI)%360/5)%72);if(last)assert.ok(Math.hypot(v.x-last.x,v.z-last.z)<.01);last=v;}assert.equal(bins.size,72);});
+test('measurement follows absolute mirrored tip, not moving thumb base or depth',()=>{
  const world=Array.from({length:21},(_,i)=>({x:Math.sin(i)*.04,y:Math.cos(i)*.04,z:.01}));
- const image=world.map(p=>({x:.5+p.x*3,y:.5+p.y*3}));
- const a=measureThumb(image,world,1);assert.ok(a);
- const translated=image.map(p=>({x:p.x*.6+.1,y:p.y*.6+.2}));
- const b=measureThumb(translated,world,1);assert.ok(b);
- a.point.forEach((v,i)=>assert.ok(Math.abs(v-b.point[i])<1e-10));
- const depth=world.map((p,i)=>({...p,z:i===4?.08:p.z}));
- assert.deepEqual(measureThumb(image,depth,1).point,a.point);
- const up=image.map(p=>({...p}));up[4].y-=.03;
- const left=image.map(p=>({...p}));left[4].x+=.03;
- assert.ok(thumbVector(measureThumb(up,world,1).point,a.point).z<0);
- assert.ok(thumbVector(measureThumb(left,world,1).point,a.point).x<0);
+ const image=world.map(p=>({x:.5+p.x*3,y:.5+p.y*3}));const a=measureThumb(image,world,1);assert.ok(a);
+ const moved=image.map(p=>({...p}));moved[2].x+=.1;assert.deepEqual(measureThumb(moved,world,1).point,a.point);
+ moved[4].x+=.1;assert.ok(measureThumb(moved,world,1).point[0]<a.point[0]);
 });
-test('stale held input stops even without another tracker result',()=>{
- const c=ready();c.receive(s(.5),200);c.receive(s(.5),280);
- assert.ok(c.step(300,.02).dx>0);assert.deepEqual(c.step(531,.02),{dx:0,dz:0});
-});
-
-test('fist release establishes a fresh centre without rightward drift',()=>{
- const c=ready();c.receive(s(.5),200);c.receive(s(.5),280);
- c.receive(s(0,0,true),300);assert.deepEqual(c.centre,[0,0]);
- for(let t=340;t<=740;t+=100){c.receive(s(.6,0,true),t);assert.deepEqual(c.step(t),{dx:0,dz:0});}
- assert.deepEqual(c.centre,[.6,0]);
- c.receive(s(.6),780);assert.equal(c.direction,null);
- c.receive(s(.1),820);c.receive(s(.1),900);assert.equal(c.direction,'LEFT');
-});
-test('small rightward offset remains neutral instead of latching movement',()=>{
- const c=ready();for(let t=40;t<4000;t+=40){c.receive(s(.16+Math.sin(t)*.01),t);assert.deepEqual(c.step(t),{dx:0,dz:0});}
-});
-test('moving output can decrease through the wobble filter and reach zero',()=>{
- const c=ready();c.receive(s(.5),100);c.receive(s(.5),180);
- const start=c.x;c.receive(s(.48),220);assert.ok(c.x<start);
- for(let t=260;t<=980;t+=40)c.receive(s(Math.max(.12,.48-(t-220)*.0005)),t);
- assert.deepEqual(c.step(980),{dx:0,dz:0});
-});
-
-test('a steering pose cannot be captured as the initial resting fist',()=>{
- const c=new ThumbJoystick();for(let t=0;t<1000;t+=50){c.receive(s(.6),t);assert.equal(c.centre,null);assert.deepEqual(c.step(t),{dx:0,dz:0});}
- for(let t=1000;t<=1400;t+=100)c.receive(s(.2,.3,true),t);
- assert.deepEqual(c.centre,[.2,.3]);
- c.receive(s(.7,.3),1440);c.receive(s(.7,.3),1520);assert.equal(c.direction,'RIGHT');
- c.receive(s(.2,.3),1560);assert.deepEqual(c.step(1560),{dx:0,dz:0});
-});
-test('unsteady or interrupted fist capture cannot arm movement',()=>{
- const c=new ThumbJoystick();for(let t=0;t<1000;t+=100)c.receive(s(t%200?1:0,0,true),t);
- assert.equal(c.centre,null);c.receive(s(0,0,true),1000);c.receive(s(),1100);c.receive(s(0,0,true),1200);assert.equal(c.centre,null);
+test('rendered circle stays put while thumb marker moves',()=>{
+ const arcs=[];const ctx=new Proxy({arc:(...a)=>arcs.push(a)}, {get:(o,k)=>o[k]??(()=>{}),set:(o,k,v)=>(o[k]=v,true)});
+ const hand=Array.from({length:21},()=>({x:.5,y:.5}));const joystick={centre:[.5,.4],scale:.2,active:false};
+ drawThumbJoystick(ctx,hand,640,480,joystick);const first=arcs.map(a=>a.slice());arcs.length=0;
+ hand[2]={x:.9,y:.9};hand[4]={x:.7,y:.6};drawThumbJoystick(ctx,hand,640,480,joystick);
+ assert.deepEqual(arcs.slice(0,3),first.slice(0,3));assert.notDeepEqual(arcs[3],first[3]);
 });

@@ -26,24 +26,24 @@ export function setupUI(){
    for(let i=0;i<21;i++){ctx.fillStyle=i===4?'#ffdf75':'#e5fff3';ctx.beginPath();ctx.arc(...point(hand[i]),i===4?w/65:w/160,0,Math.PI*2);ctx.fill();}
    const [x,y]=point(hand[4]);ctx.strokeStyle=active?'#ffdf75':'#ffffff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,w/38,0,Math.PI*2);ctx.stroke();
   }
-  if(joystick&&hands?.length===1)drawThumbJoystick(ctx,hands[0],w,h,joystick);
+  if(joystick)drawThumbJoystick(ctx,hands?.[0],w,h,joystick);
   if(trail.length>1){ctx.strokeStyle='#ffab45';ctx.lineWidth=Math.max(3,w/140);ctx.beginPath();trail.forEach((p,i)=>i?ctx.lineTo(...p.xy):ctx.moveTo(...p.xy));ctx.stroke();}
  }};
 }
 
-// Use exactly the same thumb-base coordinates and scale as movement detection.
+// Captured screen anchor and scale stay fixed while the live thumb moves.
 export function drawThumbJoystick(ctx,hand,w,h,joystick){
  const {centre,scale,active,reason}=joystick;
- if(!hand?.[4])return;
+
  ctx.save();ctx.font=`bold ${Math.max(12,w/42)}px sans-serif`;
  ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
  const label=(text,x,y)=>{ctx.lineWidth=5;ctx.strokeStyle='#07131fee';ctx.strokeText(text,x,y);ctx.fillStyle='#ffffff';ctx.fillText(text,x,y);};
  if(!centre||!Number.isFinite(scale)){
   label('HOLD RESTING FIST TO SET CENTRE',w/2,h-24);ctx.restore();return;
  }
- const unit=scale*w,cx=(1-hand[2].x)*w+centre[0]*unit,cy=hand[2].y*h+centre[1]*unit;
+ const unit=scale*w,cx=centre[0]*w,cy=centre[1]*w;
  const r=.5*unit,dead=(active?.14:.20)*unit;
- const tx=(1-hand[4].x)*w,ty=hand[4].y*h;
+ const tx=hand?.[4]?(1-hand[4].x)*w:cx,ty=hand?.[4]?hand[4].y*h:cy;
  ctx.lineWidth=Math.max(2,w/300);
  ctx.fillStyle='#06172744';ctx.strokeStyle='#ffffffdd';
  ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();ctx.stroke();
