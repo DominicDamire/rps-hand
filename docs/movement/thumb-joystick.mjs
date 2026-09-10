@@ -4,7 +4,7 @@ export function measureThumb(image,world,aspect=4/3){
  const d=(a,b)=>Math.hypot(world[a].x-world[b].x,world[a].y-world[b].y,world[a].z-world[b].z);
  const reach=m=>d(m,m+3)/(d(m,m+1)+d(m+1,m+2)+d(m+2,m+3)||1);
  if([5,9,13,17].filter(m=>reach(m)>.82).length>=2)return null;
- // Restore v23: thumb base (2) to tip (4), not the neighbouring index knuckle.
+ // Track thumb base (2) to tip (4).
  const span=(Math.hypot(image[0].x-image[9].x,(image[0].y-image[9].y)/aspect)+Math.hypot(image[5].x-image[17].x,(image[5].y-image[17].y)/aspect))/2;
  if(span<.015)return null;
  const palm=(d(0,9)+d(5,17))/2;if(palm<.005)return null;
@@ -17,9 +17,9 @@ export function measureThumb(image,world,aspect=4/3){
 }
 const valid=s=>s?.axes?.length===4&&s.axes.every(Number.isFinite);
 const dot=(a,b)=>a.reduce((sum,v,i)=>sum+v*b[i],0);
-export function fitThumbCalibration(samples){
- if(samples.length!==5||!samples.every(valid))throw Error('Capture all five thumb positions.');
- const origin=samples[0].axes.slice(),rows=samples.slice(1).map(s=>s.axes.map((v,i)=>v-origin[i]));
+export function fitThumbDirections(samples){
+ if(samples.length!==5||!samples.every(valid))throw Error('Capture centre and four directions.');
+ const origin=samples[0].axes.slice(),rows=samples.slice(1,5).map(s=>s.axes.map((v,i)=>v-origin[i]));
  const targets=[[-1,0],[1,0],[0,-1],[0,1]];
  if(rows.some(r=>Math.hypot(...r)<.09))throw Error('Thumb travel was too small. Keep your fist still and move your thumb farther.');
  // Regularized least squares fits continuous travel, including cross-axis coupling.
@@ -33,6 +33,14 @@ export function fitThumbCalibration(samples){
  if(weights.some(w=>!w.every(Number.isFinite)||Math.hypot(...w)>18)||rows.some((r,i)=>Math.hypot(...weights.map((w,j)=>dot(w,r)-targets[i][j]))>.25))throw Error('The camera could not distinguish those directions. Try again with your thumb clearly visible.');
  return {origin,weights};
 }
+export function fitThumbCalibration(samples){
+ if(samples.length!==6||!samples.every(valid))throw Error('Capture centre, four directions and your resting fist.');
+ const {origin,weights}=fitThumbDirections(samples.slice(0,5));
+ const rest=samples[5].axes.slice();
+ const separation=Math.min(...samples.slice(0,5).map(s=>Math.hypot(...s.axes.map((v,i)=>v-rest[i]))));
+ if(separation<.16)throw Error('Resting fist looks too similar to a walking position. Wrap your thumb around your fingers for Rest; keep it above them for backward.');
+ return {origin,weights,rest,restRadius:Math.min(.24,separation*.4)};
+}
 export class ThumbJoystick {
  constructor(){this.speed=4.5;this.calibration=null;this.reset();}
  reset(){this.x=0;this.z=0;this.seen=-Infinity;this.reason=this.calibration?'SHOW THUMB':'SET UP THUMB';this.armed=false;}
@@ -41,11 +49,16 @@ export class ThumbJoystick {
   if(!valid(sample)){this.reset();return;}
   this.seen=time;
   if(!this.calibration){this.reason='SET UP THUMB';return;}
+  if(this.calibration.rest&&Math.hypot(...sample.axes.map((v,i)=>v-this.calibration.rest[i]))<this.calibration.restRadius){this.reset();this.seen=time;this.reason='FIST REST';return;}
   const delta=sample.axes.map((v,i)=>v-this.calibration.origin[i]);
   const [x,z]=this.calibration.weights.map(w=>dot(w,delta));
   if(!this.armed){this.x=this.z=0;this.reason='RETURN THUMB TO CENTRE';if(Math.hypot(x,z)<.3)this.armed=true;else return;}
   const dead=v=>Math.sign(v)*Math.max(0,(Math.abs(clamp(v))-.22)/.78);
   this.x=dead(x);this.z=dead(z);
+  // A small secondary signal near a main direction is usually tracking cross-talk.
+  // Deliberate diagonals retain both axes outside this narrow cone.
+  if(Math.abs(this.x)<Math.abs(this.z)*.2)this.x=0;
+  if(Math.abs(this.z)<Math.abs(this.x)*.2)this.z=0;
   const length=Math.hypot(this.x,this.z);if(length>1){this.x/=length;this.z/=length;}
   this.reason=length>.01?'MOVING':'THUMB CENTRED';
  }

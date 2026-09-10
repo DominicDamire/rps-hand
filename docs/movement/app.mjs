@@ -1,17 +1,17 @@
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=29';
-import {setupThumbstick} from './thumbstick.mjs?v=29';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=30';
+import {setupThumbstick} from './thumbstick.mjs?v=30';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=29';
-import {DustMap} from './map.mjs?v=29';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=30';
+import {DustMap} from './map.mjs?v=30';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=29';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=29';
+import {setupUI} from './ui.mjs?v=30';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=30';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const held=new ThumbJoystick();let inputMode='poses',trackedHand=null,resting=false;
 let thumbSetup=null;
-const setupNames=['centre (comfortable, partly bent)','left','right','forward (straight)','backward (curled)'];
+const setupNames=['centre (comfortable, partly bent)','left','right','forward (straight)','backward (thumb bent above fingers)','rest (closed fist, thumb wrapped around fingers)'];
 function setupPrompt(){
  const name=setupNames[thumbSetup.samples.length];
  $('thumbSetupText').textContent='Hold your fist still. Put your thumb at '+name+'. Then tap Capture and hold it there.';
@@ -32,7 +32,7 @@ function collectThumbSetup(sample,now){
  const axes=[0,1,2,3].map(i=>frames.map(f=>f.axes[i]).sort((a,b)=>a-b)[Math.floor(frames.length/2)]);
  if(frames.some(f=>Math.hypot(...f.axes.map((v,i)=>v-axes[i]))>.18)){$('thumbSetupText').textContent='Thumb moved during capture. Hold it still and retry.';return;}
  thumbSetup.samples.push({axes});
- if(thumbSetup.samples.length<5){setupPrompt();return;}
+ if(thumbSetup.samples.length<6){setupPrompt();return;}
  try{held.configure(thumbSetup.samples);thumbSetup=null;$('thumbSetup').hidden=true;walkReason='RETURN THUMB TO CENTRE';}
  catch(e){thumbSetup.samples=[];setupPrompt();$('thumbSetupText').textContent=e.message+' Start again at centre.';}
 }
@@ -56,7 +56,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=29',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=30',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -91,8 +91,8 @@ $('turnMode').onchange=()=>{headLook.mode=$('turnMode').value;headLook.resetLook
 $('headThreshold').oninput=()=>{headLook.deadzoneDegrees=+$('headThreshold').value;$('thresholdValue').textContent=$('headThreshold').value+'°';};
 $('headGain').oninput=()=>{if(head)head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;};
 $('reset').onclick=()=>{stick.reset();held.reset();headLook.heading=0;headLook.resetLook();lookDemo=0;head?.recenter();camera.position.copy(dustMap.spawn);camera.rotation.set(0,0,0);swipe.reset();demoRun=null;status('View reset · ready');};
-function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Set up five thumb positions once per page load. Keep your fist still and move only your thumb. After setup, return to centre to start. Open hand or Rest stops; return to centre to resume.';status('Start camera · thumb joystick ready');}
-$('movementMode').onchange=()=>{inputMode=$('movementMode').value;stick.reset();held.reset();trackedHand=null;swipe.reset();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('stickZone').hidden=inputMode!=='touch';$('hint').textContent=inputMode==='touch'?'Drag thumbstick to walk; release to stop.':inputMode==='poses'?'Set up thumb controls, then return to centre. Thumb travel controls all directions. Open hand or Rest stops.':'Left index out: move your hand to walk. Bend index to release.';};
+function controlsChanged(){held.reset();swipe.reset();demoRun=null;trackingUI.clear();$('hint').textContent='Set up your thumb directions and resting fist once per page load. Keep your fist still and move only your thumb. After setup, return to centre to start. Close your fist with your thumb wrapped around your fingers to rest. Return your thumb to centre to resume. The Rest button also pauses.';status('Start camera · thumb joystick ready');}
+$('movementMode').onchange=()=>{inputMode=$('movementMode').value;stick.reset();held.reset();trackedHand=null;swipe.reset();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('stickZone').hidden=inputMode!=='touch';$('hint').textContent=inputMode==='touch'?'Drag thumbstick to walk; release to stop.':inputMode==='poses'?'Set up thumb controls, then return to centre. Thumb travel controls all directions. Close your fist to rest; return your thumb to centre to resume.':'Left index out: move your hand to walk. Bend index to release.';};
 $('gain').oninput=()=>held.speed=+$('gain').value;
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
 document.querySelectorAll('[data-look]').forEach(b=>b.onclick=()=>{lookDemo=+b.dataset.look;if(!lookDemo)headLook.speed=0;});
