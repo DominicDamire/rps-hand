@@ -13,17 +13,18 @@
   .pane { position: relative; overflow: hidden; }
   video, #ov, #still { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); background: #000; }
   #ov { position: absolute; inset: 0; background: none; pointer-events: none; }
-  #gl { width: 100%; height: 100%; display: block; background: #1c212e; }
+  #gl { width: 100%; height: 100%; display: block; background: #1a1f2b; }
   .hud { position: absolute; left: 12px; right: 12px; pointer-events: none; text-shadow: 0 0 6px #000, 0 0 2px #000; font-weight: 700; }
   #top { top: 10px; } #bottom { bottom: 12px; }
-  #hand { color: #c8dcff; font-size: 15px; } #move { color: #78ff78; font-size: 26px; }
+  #hand { color: #c8dcff; font-size: 14px; } #move { color: #78ff78; font-size: 26px; }
   #stats { font-size: 13px; color: #9aa4b8; white-space: pre-line; }
   #game { color: #ffe678; font-size: 22px; } #score { font-size: 15px; }
   #status { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; background: #0f1116; font-size: 18px; white-space: pre-line; }
   button { position: absolute; padding: 12px 22px; font: inherit; font-weight: 700; border: 0; border-radius: 999px; }
   #play { right: 12px; bottom: 12px; background: #78ff78; color: #000; }
   #play:disabled { opacity: .4; }
-  #mode { left: 12px; bottom: 12px; background: #2a3145; color: #fff; padding: 10px 16px; font-size: 14px; }
+  #mode, #reset { background: #2a3145; color: #fff; padding: 10px 16px; font-size: 14px; }
+  #mode { left: 12px; bottom: 12px; } #reset { right: 12px; top: 12px; }
 </style>
 </head>
 <body>
@@ -31,12 +32,13 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HAND: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading</div></div>
     <div class="hud" id="bottom"><div id="score">SCORE you 0 : 0 cpu</div><div id="game">Tap PLAY for a round</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
     <canvas id="gl"></canvas>
+    <button id="reset">RESET OBJECTS</button>
     <button id="mode">MODE: predict</button>
     <button id="play">PLAY</button>
   </div>
@@ -45,16 +47,18 @@
 <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js" } }</script>
 <script type="module">
 import * as THREE from "three";
+import RAPIER from "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.20.0/dist/rapier.mjs";
 
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
 // it; only the absolute depth scale does, so a wrong guess still gives one-for-one relative motion.
 const HFOV = (+Q.get("fov") || 60) * Math.PI / 180;
+const FLOOR_Y = +Q.get("floor") || -0.28;   // metres below the camera; the table the objects rest on (?floor=-0.2 to raise it)
 const MP = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1";
 const MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task";
 // Lower presence/tracking thresholds = the tracker holds on longer through motion blur before giving up.
-const TRACKER_OPTS = { runningMode: "VIDEO", numHands: 1, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.3, minTrackingConfidence: 0.3 };
+const TRACKER_OPTS = { runningMode: "VIDEO", numHands: 2, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.3, minTrackingConfidence: 0.3 };
 
 // --- skeleton + canonical bone lengths (same as rps_hand.py) ------------------------------------
 const PARENT = {1:0,2:1,3:2,4:3, 5:0,6:5,7:6,8:7, 9:0,10:9,11:10,12:11, 13:0,14:13,15:14,16:15, 17:0,18:17,19:18,20:19};
@@ -63,6 +67,8 @@ const LENGTH = {1:.040,2:.035,3:.030,4:.025, 5:.092,6:.040,7:.025,8:.022, 9:.088
 const PALM = [0, 5, 9, 13, 17];
 const PALM_EDGES = [[5, 9], [9, 13], [13, 17]];
 const CONNECTIONS = Object.entries(PARENT).map(([j, p]) => [+p, +j]).concat(PALM_EDGES);
+const BONES = Object.entries(PARENT).map(([j, p]) => ({ a: +p, b: +j, r: +j <= 4 ? 0.011 : +p === 0 ? 0.014 : 0.009 })).concat(PALM_EDGES.map(([a, b]) => ({ a, b, r: 0.014 })));
+const JOINT_R = Array.from({ length: 21 }, (_, i) => BONES.find(b => b.b === i)?.r ?? 0.02);
 const BEATS = { ROCK: "SCISSORS", PAPER: "ROCK", SCISSORS: "PAPER" };
 const V = () => new THREE.Vector3();
 
@@ -91,11 +97,12 @@ function locate(world, image, W, H) {
 // Camera-frame points (x right, y down, z away) + translation -> flat GL array (y up, z toward viewer), x mirrored to match the mirrored video.
 function toGL(lm, T) { const a = new Float32Array(63); lm.forEach((l, i) => { a[3*i] = -(l.x + T[0]); a[3*i+1] = -(l.y + T[1]); a[3*i+2] = -(l.z + T[2]); }); return a; }
 const vec = (a, i) => new THREE.Vector3(a[3*i], a[3*i+1], a[3*i+2]);
+const toVecs = a => Array.from({ length: 21 }, (_, i) => vec(a, i));
 const palmCentre = pts => { const c = V(); for (const i of PALM) c.add(pts[i]); return c.multiplyScalar(1 / PALM.length); };
 
 // Canonical bone lengths, tracked bone directions, placed so the palm centre sits where the tracked palm is.
 function retarget(a) {
-  const pts = Array.from({ length: 21 }, (_, i) => vec(a, i));
+  const pts = toVecs(a);
   const out = pts.map(() => V());
   for (let j = 1; j < 21; j++) {
     const p = PARENT[j], d = pts[j].clone().sub(pts[p]), n = d.length() || 1e-9;
@@ -118,7 +125,7 @@ function moveFromFingers(ext) {
   return null;
 }
 
-// --- One Euro filter over the 63 world coordinates, with velocity prediction ----------------------
+// --- One Euro filter over the 63 coordinates, with velocity prediction ---------------------------
 // Casiez et al. 2012: low cutoff when still (no jitter), cutoff rises with speed (no lag). Units are metres,
 // so beta is much larger than the pixel-space defaults: at 1 m/s the cutoff is minCutoff + beta.
 class OneEuro {
@@ -142,12 +149,13 @@ class OneEuro {
   }
 }
 const MAX_LEAD = 0.15;             // never extrapolate more than 150 ms ahead
-const HOLD_MS = 250;               // keep the hand alive this long after tracking drops (dead reckoning), then grey it out
+const HOLD_MS = 250;               // keep a hand alive this long after tracking drops (dead reckoning), then grey it out
 
 // --- tracker: HandLandmarker in a Web Worker so rendering never waits on inference -----------------
 const WORKER_SRC = `
 import { FilesetResolver, HandLandmarker } from "${MP}/vision_bundle.mjs";
 let lm, delegate;
+const pack = r => r.landmarks.map((landmarks, i) => ({ landmarks, world: r.worldLandmarks[i], name: r.handedness[i]?.[0]?.categoryName ?? "?" }));
 onmessage = async e => {
   if (e.data.init) {
     const vision = await FilesetResolver.forVisionTasks("${MP}/wasm", true);  // true = ES-module loader, required inside a module worker
@@ -160,7 +168,7 @@ onmessage = async e => {
   const t = performance.now();
   const r = lm.detectForVideo(e.data.frame, e.data.ts);
   e.data.frame.close();
-  postMessage({ id: e.data.id, ms: performance.now() - t, landmarks: r.landmarks[0] ?? null, world: r.worldLandmarks[0] ?? null, hand: r.handedness[0]?.[0]?.categoryName ?? null });
+  postMessage({ id: e.data.id, ms: performance.now() - t, hands: pack(r) });
 };`;
 
 async function makeTracker() {
@@ -186,68 +194,109 @@ async function makeTracker() {
     console.warn("worker unavailable, tracking on main thread:", e);
     const { FilesetResolver, HandLandmarker } = await import(`${MP}/vision_bundle.mjs`);
     const vision = await FilesetResolver.forVisionTasks(`${MP}/wasm`);
+    const pack = r => r.landmarks.map((landmarks, i) => ({ landmarks, world: r.worldLandmarks[i], name: r.handedness[i]?.[0]?.categoryName ?? "?" }));
     for (const delegate of ["GPU", "CPU"]) {
       try {
         const lm = await HandLandmarker.createFromOptions(vision, { baseOptions: { modelAssetPath: MODEL, delegate }, ...TRACKER_OPTS });
-        return { where: "main/" + delegate, async detect(src, ts) {
-          const t = performance.now(); const r = lm.detectForVideo(src, ts);
-          return { ms: performance.now() - t, landmarks: r.landmarks[0] ?? null, world: r.worldLandmarks[0] ?? null, hand: r.handedness[0]?.[0]?.categoryName ?? null };
-        } };
+        return { where: "main/" + delegate, async detect(src, ts) { const t = performance.now(); const r = lm.detectForVideo(src, ts); return { ms: performance.now() - t, hands: pack(r) }; } };
       } catch (err) { console.warn(delegate + " failed", err); }
     }
     throw new Error("Hand tracker failed to load. Check the connection and reload.");
   }
 }
 
-// --- 3D replica ---------------------------------------------------------------------------------
+// --- scene: a room seen from where the phone camera is ------------------------------------------
 const canvas = $("gl");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-const scene = new THREE.Scene(); scene.background = new THREE.Color(0x1c212e);
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1f2b); scene.fog = new THREE.Fog(0x1a1f2b, 1.2, 3.5);
 // The virtual camera sits where the phone camera is (origin, looking down -z) with the same field of view, so the
 // replica appears at the same place and size on its pane as your hand does on the video pane.
-const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 5); camera.position.set(0, 0, 0); camera.lookAt(0, 0, -1);
+const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 6); camera.position.set(0, 0, 0); camera.lookAt(0, 0, -1);
 let frameW = 640, frameH = 480;   // camera frame size, set once the video is known
-const grid = new THREE.GridHelper(3, 30, 0x3a4560, 0x2a3145); grid.position.set(0, -0.35, -0.8); scene.add(grid);   // depth cue
-scene.add(new THREE.HemisphereLight(0xfff8ee, 0x4a5570, 1.2));
-const key = new THREE.DirectionalLight(0xffffff, 1.6); key.position.set(0.4, 0.8, 1); scene.add(key);
-const SKIN = new THREE.MeshStandardMaterial({ color: 0xdead8f, roughness: 0.6 });
-const GHOST = new THREE.MeshStandardMaterial({ color: 0x73788a, roughness: 0.8 });
-const hand = new THREE.Group(); hand.visible = false; scene.add(hand);
-const cyl = new THREE.CylinderGeometry(1, 1, 1, 14, 1), sph = new THREE.SphereGeometry(1, 14, 10);
-const bones = [];
-for (const [j, p] of Object.entries(PARENT)) bones.push({ a: +p, b: +j, r: +j <= 4 ? 0.011 : +p === 0 ? 0.014 : 0.009 });
-for (const [a, b] of PALM_EDGES) bones.push({ a, b, r: 0.014 });
-for (const bn of bones) { bn.mesh = new THREE.Mesh(cyl, SKIN); hand.add(bn.mesh); }
-const joints = Array.from({ length: 21 }, () => { const m = new THREE.Mesh(sph, SKIN); hand.add(m); return m; });
-const jointR = joints.map((_, i) => bones.find(b => b.b === i)?.r ?? 0.02);
-const forearm = new THREE.Mesh(cyl, SKIN); hand.add(forearm);
-const palm = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0xdead8f, roughness: 0.6, side: THREE.DoubleSide }));
-palm.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(27), 3)); hand.add(palm);
-const skel = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x78ff78, depthTest: false }));
-skel.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CONNECTIONS.length * 6), 3)); skel.renderOrder = 1; hand.add(skel);
-const dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xffffff, size: 0.008, depthTest: false }));
-dots.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(63), 3)); dots.renderOrder = 2; hand.add(dots);
-const UP = new THREE.Vector3(0, 1, 0);
+scene.add(new THREE.HemisphereLight(0xfff8ee, 0x3a4560, 1.0));
+const key = new THREE.DirectionalLight(0xffffff, 1.8); key.position.set(0.5, 1.6, 0.4); key.target.position.set(0, FLOOR_Y, -0.7); scene.add(key, key.target);
+key.castShadow = true; key.shadow.mapSize.set(1024, 1024); key.shadow.bias = -0.0005;
+Object.assign(key.shadow.camera, { left: -1.2, right: 1.2, top: 1.2, bottom: -1.2, near: 0.1, far: 5 });
+const checker = (() => {   // procedural floor texture, no external file needed
+  const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { g.fillStyle = (x + y) & 1 ? "#303a4e" : "#262e3f"; g.fillRect(x * 32, y * 32, 32, 32); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(12, 12); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), new THREE.MeshStandardMaterial({ map: checker, roughness: 0.95 }));
+floor.rotation.x = -Math.PI / 2; floor.position.set(0, FLOOR_Y, -1.5); floor.receiveShadow = true; scene.add(floor);
+const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 5), new THREE.MeshStandardMaterial({ color: 0x252c3c, roughness: 1 }));
+wall.position.set(0, FLOOR_Y + 2.5, -3.2); wall.receiveShadow = true; scene.add(wall);
 
-function placeCylinder(mesh, a, b, r) {
-  const d = b.clone().sub(a), L = d.length();
-  mesh.position.copy(a).addScaledVector(d, 0.5); mesh.scale.set(r, L, r); mesh.quaternion.setFromUnitVectors(UP, d.normalize());
-}
-function drawHand(pts, visible) {
-  const mat = visible ? SKIN : GHOST;
-  for (const bn of bones) { placeCylinder(bn.mesh, pts[bn.a], pts[bn.b], bn.r); bn.mesh.material = mat; }
-  joints.forEach((m, i) => { m.position.copy(pts[i]); m.scale.setScalar(jointR[i]); m.material = mat; });
-  const fore = pts[0].clone().sub(pts[9]).normalize();
-  placeCylinder(forearm, pts[0], pts[0].clone().addScaledVector(fore, 0.16), 0.024); forearm.material = mat;
-  const pos = palm.geometry.attributes.position; let k = 0;
-  for (const [i1, i2] of PALM_EDGES) for (const i of [0, i1, i2]) pos.setXYZ(k++, pts[i].x, pts[i].y, pts[i].z);
-  pos.needsUpdate = true; palm.geometry.computeVertexNormals(); palm.material.color.copy(mat.color);
-  const sp = skel.geometry.attributes.position; let q = 0;
-  for (const [a, b] of CONNECTIONS) for (const i of [a, b]) sp.setXYZ(q++, pts[i].x, pts[i].y, pts[i].z);
-  sp.needsUpdate = true;
-  const dp = dots.geometry.attributes.position; pts.forEach((p, i) => dp.setXYZ(i, p.x, p.y, p.z)); dp.needsUpdate = true;
-  hand.visible = true;
+// --- physics (Rapier): hands are kinematic colliders that push dynamic props around ----------------
+await RAPIER.init();
+const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
+world.createCollider(RAPIER.ColliderDesc.cuboid(3, 0.05, 3).setTranslation(0, FLOOR_Y - 0.05, -1.5).setFriction(0.8));
+const PROPS = [
+  { ball: 0.045, color: 0xff6b6b, x: -0.18, z: -0.55 }, { ball: 0.040, color: 0xffd166, x: 0.05, z: -0.72 }, { ball: 0.050, color: 0x4dabf7, x: 0.24, z: -0.50 },
+  { box: 0.070, color: 0x69db7c, x: -0.04, z: -0.50 }, { box: 0.060, color: 0xb197fc, x: 0.16, z: -0.74 }, { box: 0.090, color: 0xffa94d, x: -0.27, z: -0.78 },
+];
+const props = PROPS.map(p => {
+  const half = (p.ball ?? p.box) / (p.ball ? 1 : 2);
+  const mesh = new THREE.Mesh(p.ball ? new THREE.SphereGeometry(p.ball, 24, 16) : new THREE.BoxGeometry(p.box, p.box, p.box), new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.5 }));
+  mesh.castShadow = mesh.receiveShadow = true; scene.add(mesh);
+  const home = { x: p.x, y: FLOOR_Y + half + 0.02, z: p.z };
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(home.x, home.y, home.z).setAngularDamping(0.5));
+  world.createCollider((p.ball ? RAPIER.ColliderDesc.ball(p.ball) : RAPIER.ColliderDesc.cuboid(half, half, half)).setRestitution(0.4).setFriction(0.7), body);
+  return { mesh, body, home };
+});
+function resetProps() { for (const p of props) { p.body.setTranslation(p.home, true); p.body.setRotation({ x: 0, y: 0, z: 0, w: 1 }, true); p.body.setLinvel({ x: 0, y: 0, z: 0 }, true); p.body.setAngvel({ x: 0, y: 0, z: 0 }, true); } }
+$("reset").onclick = resetProps;
+const FAR = { x: 0, y: 10, z: 0 };   // parking spot for the colliders of a hand that is not in view
+
+// --- 3D replica of one hand + its physics colliders ------------------------------------------------
+function makeHand() {
+  const group = new THREE.Group(); group.visible = false; scene.add(group);
+  const cyl = new THREE.CylinderGeometry(1, 1, 1, 14, 1), sph = new THREE.SphereGeometry(1, 14, 10);
+  const skin = new THREE.MeshStandardMaterial({ color: 0xdead8f, roughness: 0.6 }), ghost = new THREE.MeshStandardMaterial({ color: 0x73788a, roughness: 0.8 });
+  const mk = g => { const m = new THREE.Mesh(g, skin); m.castShadow = true; group.add(m); return m; };
+  const bones = BONES.map(b => ({ ...b, mesh: mk(cyl) }));
+  const joints = JOINT_R.map(() => mk(sph));
+  const forearm = mk(cyl);
+  const palm = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshStandardMaterial({ color: 0xdead8f, roughness: 0.6, side: THREE.DoubleSide }));
+  palm.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(27), 3)); palm.castShadow = true; group.add(palm);
+  const skel = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x78ff78, depthTest: false }));
+  skel.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(CONNECTIONS.length * 6), 3)); skel.renderOrder = 1; group.add(skel);
+  const dots = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xffffff, size: 0.008, depthTest: false }));
+  dots.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(63), 3)); dots.renderOrder = 2; group.add(dots);
+  const UP = new THREE.Vector3(0, 1, 0);
+  const placeCylinder = (mesh, a, b, r) => {
+    const d = b.clone().sub(a), L = d.length();
+    mesh.position.copy(a).addScaledVector(d, 0.5); mesh.scale.set(r, L, r); mesh.quaternion.setFromUnitVectors(UP, d.normalize());
+  };
+  // colliders: one ball per joint + one for the palm, kinematic (driven by tracking, push everything else)
+  const bodies = Array.from({ length: 22 }, (_, i) => {
+    const b = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(FAR.x, FAR.y, FAR.z));
+    world.createCollider(RAPIER.ColliderDesc.ball(i < 21 ? Math.max(JOINT_R[i], 0.01) : 0.035), b); return b;
+  });
+  return {
+    group,
+    draw(pts, visible) {
+      const mat = visible ? skin : ghost;
+      for (const bn of bones) { placeCylinder(bn.mesh, pts[bn.a], pts[bn.b], bn.r); bn.mesh.material = mat; }
+      joints.forEach((m, i) => { m.position.copy(pts[i]); m.scale.setScalar(JOINT_R[i]); m.material = mat; });
+      const fore = pts[0].clone().sub(pts[9]).normalize();
+      placeCylinder(forearm, pts[0], pts[0].clone().addScaledVector(fore, 0.16), 0.024); forearm.material = mat;
+      const pos = palm.geometry.attributes.position; let k = 0;
+      for (const [i1, i2] of PALM_EDGES) for (const i of [0, i1, i2]) pos.setXYZ(k++, pts[i].x, pts[i].y, pts[i].z);
+      pos.needsUpdate = true; palm.geometry.computeVertexNormals(); palm.material.color.copy(mat.color);
+      const sp = skel.geometry.attributes.position; let q = 0;
+      for (const [a, b] of CONNECTIONS) for (const i of [a, b]) sp.setXYZ(q++, pts[i].x, pts[i].y, pts[i].z);
+      sp.needsUpdate = true;
+      const dp = dots.geometry.attributes.position; pts.forEach((p, i) => dp.setXYZ(i, p.x, p.y, p.z)); dp.needsUpdate = true;
+      group.visible = true;
+      pts.forEach((p, i) => bodies[i].setNextKinematicTranslation(visible ? p : FAR));
+      bodies[21].setNextKinematicTranslation(visible ? palmCentre(pts) : FAR);
+    },
+    hide() { group.visible = false; for (const b of bodies) b.setNextKinematicTranslation(FAR); },
+  };
 }
 function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight, pr = renderer.getPixelRatio();
@@ -261,22 +310,23 @@ function resize() {
   }
 }
 
-// --- 2D overlay on the camera (raw landmarks, unfiltered, so you can compare against the 3D hand) -------
+// --- 2D overlay on the camera (raw landmarks, unfiltered, so you can compare against the 3D hands) ------
 const ov = $("ov"), octx = ov.getContext("2d");
-function drawOverlay(lm, src) {
+function drawOverlay(hands, src) {
   const w = src.videoWidth || src.naturalWidth || 0, h = src.videoHeight || src.naturalHeight || 0;
   if (ov.width !== w || ov.height !== h) { ov.width = w; ov.height = h; }
   octx.clearRect(0, 0, w, h);
-  if (!lm) return;
-  octx.lineWidth = Math.max(2, w / 240); octx.strokeStyle = "#78ff78"; octx.lineCap = "round";
-  octx.beginPath();
-  for (const [a, b] of CONNECTIONS) { octx.moveTo(lm[a].x * w, lm[a].y * h); octx.lineTo(lm[b].x * w, lm[b].y * h); }
-  octx.stroke();
   const tips = [4, 8, 12, 16, 20];
-  lm.forEach((p, i) => {
-    octx.beginPath(); octx.arc(p.x * w, p.y * h, tips.includes(i) ? w / 90 : w / 140, 0, Math.PI * 2);
-    octx.fillStyle = i === 0 ? "#ff7878" : tips.includes(i) ? "#ffe678" : "#fff"; octx.fill();
-  });
+  for (const lm of hands) {
+    octx.lineWidth = Math.max(2, w / 240); octx.strokeStyle = "#78ff78"; octx.lineCap = "round";
+    octx.beginPath();
+    for (const [a, b] of CONNECTIONS) { octx.moveTo(lm[a].x * w, lm[a].y * h); octx.lineTo(lm[b].x * w, lm[b].y * h); }
+    octx.stroke();
+    lm.forEach((p, i) => {
+      octx.beginPath(); octx.arc(p.x * w, p.y * h, tips.includes(i) ? w / 90 : w / 140, 0, Math.PI * 2);
+      octx.fillStyle = i === 0 ? "#ff7878" : tips.includes(i) ? "#ffe678" : "#fff"; octx.fill();
+    });
+  }
 }
 
 // --- game ---------------------------------------------------------------------------------------
@@ -317,9 +367,11 @@ async function main() {
   const tracker = await makeTracker();
   $("status").remove();
 
-  const filt = new OneEuro(63);
-  let raw = null, lastSeen = -1e9, lastT = -1, ts = 0, inflight = false, move = null, ext = [0, 0, 0, 0], handName = "-", fit = 0;
-  let stat = { ms: 0, lat: 0, n: 0, t: performance.now() };
+  // one slot per hand, keyed by MediaPipe's handedness label
+  const slots = { Right: null, Left: null };
+  for (const k in slots) slots[k] = { key: k, filt: new OneEuro(63), raw: null, lastSeen: -1e9, ext: [0, 0, 0, 0], fit: 0, depth: 0, hand: makeHand() };
+  let lastT = -1, ts = 0, inflight = false, move = null, nHands = 0, lastRecv = 0, hold = HOLD_MS;
+  let stat = { ms: 0, lat: 0, n: 0, t: performance.now() }, prev = performance.now();
 
   const pump = async () => {
     const fresh = imgSrc || (video.currentTime !== lastT && video.readyState >= 2);
@@ -329,31 +381,41 @@ async function main() {
     const r = await tracker.detect(video, ts);
     inflight = false;
     const recv = performance.now();
-    stat.ms += r.ms; stat.lat += recv - cap; stat.n++;
-    drawOverlay(r.landmarks, video);
-    if (r.world && r.landmarks) {
-      let T; [T, fit] = locate(r.world, r.landmarks, frameW, frameH);
-      raw = toGL(r.world, T); filt.push(raw, cap / 1000); lastSeen = recv; handName = r.hand ?? "-";
-      ext = fingersUp(retarget(filt.x)); move = moveFromFingers(ext);
-    } else { move = null; handName = "-"; }
+    hold = Math.max(HOLD_MS, 2.5 * (recv - lastRecv)); lastRecv = recv;   // slow devices get a longer hold so hands don't flicker between results
+    stat.ms += r.ms; stat.lat += recv - cap; stat.n++; nHands = r.hands.length;
+    drawOverlay(r.hands.map(h => h.landmarks), video);
+    const used = new Set();
+    for (const h of r.hands) {
+      const key = h.name in slots && !used.has(h.name) ? h.name : used.has("Right") ? "Left" : "Right";   // duplicate labels go to the free slot
+      if (used.has(key)) continue;
+      used.add(key);
+      const s = slots[key]; let T; [T, s.fit] = locate(h.world, h.landmarks, frameW, frameH);
+      s.raw = toGL(h.world, T); s.filt.push(s.raw, cap / 1000); s.lastSeen = recv;
+      const pts = retarget(s.filt.x); s.ext = fingersUp(pts); s.depth = -palmCentre(pts).z;
+    }
   };
 
   const loop = () => {
-    const now = performance.now();
+    const now = performance.now(), dt = Math.min((now - prev) / 1000, 1 / 30); prev = now;
     pump();
-    const visible = now - lastSeen < HOLD_MS;
-    if (!visible) { move = null; }
-    if (filt.x) {
-      const lead = Math.min(MAX_LEAD, Math.max(0, (now - lastSeen) / 1000 + 0.02));
-      const pts = MODES[mode] === "predict" ? filt.predict(visible ? lead : 0) : MODES[mode] === "smooth" ? filt.x : raw;
-      drawHand(retarget(pts), visible);
+    const hud = [];
+    move = null;
+    for (const s of [slots.Right, slots.Left]) {
+      const visible = now - s.lastSeen < hold;
+      if (s.filt.x) {
+        const lead = Math.min(MAX_LEAD, Math.max(0, (now - s.lastSeen) / 1000 + 0.02));
+        const pts = MODES[mode] === "predict" ? s.filt.predict(visible ? lead : 0) : MODES[mode] === "smooth" ? s.filt.x : s.raw;
+        s.hand.draw(retarget(pts), visible);
+      } else s.hand.hide();
+      if (visible) { move ??= moveFromFingers(s.ext); hud.push(`${s.key[0]} ${s.depth.toFixed(2)}m ${s.ext.filter(Boolean).length}up fit ${(s.fit * 100).toFixed(1)}%`); }
     }
+    world.timestep = dt; world.step();
+    for (const p of props) { p.mesh.position.copy(p.body.translation()); p.mesh.quaternion.copy(p.body.rotation()); }
     if (now - stat.t > 1000) {
-      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms\n${tracker.where} | mode ${MODES[mode]}`;
+      $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}\n${tracker.where} | mode ${MODES[mode]}`;
       stat = { ms: 0, lat: 0, n: 0, t: now };
     }
-    const depth = filt.x ? -palmCentre(Array.from({ length: 21 }, (_, i) => vec(filt.x, i))).z : 0;
-    $("hand").textContent = visible ? `HAND: ${handName}  fingers up: ${ext.filter(Boolean).length}  depth ${depth.toFixed(2)} m  fit ${(fit * 100).toFixed(1)}%` : "HAND: -";
+    $("hand").textContent = "HANDS: " + (hud.join("  |  ") || "-");
     $("move").textContent = "MOVE: " + (move ?? "?"); $("move").style.color = move ? "#78ff78" : "#ffc850";
     updateGame(now, move);
     resize(); renderer.render(scene, camera);
