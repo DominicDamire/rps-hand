@@ -1,9 +1,9 @@
-import {HeadLook} from './head-look.mjs?v=14';
-import {DustMap} from './map.mjs?v=14';
+import {HeadLook} from './head-look.mjs?v=15';
+import {DustMap} from './map.mjs?v=15';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=14';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=14';
+import {setupUI} from './ui.mjs?v=15';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=15';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();
 const swipe=new SwipeController();const headLook=new HeadLook();let lookDemo=0;
@@ -12,7 +12,7 @@ const scene=new THREE.Scene();scene.background=new THREE.Color('#25394a');scene.
 const camera=new THREE.PerspectiveCamera(65,1,.05,200);camera.position.set(0,1.65,7);
 scene.background=new THREE.Color('#abc9d9');scene.fog=new THREE.Fog('#abc9d9',90,180);
 const dustMap=new DustMap(scene);
-dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · ready';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
+dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · auto-step on';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}addEventListener('resize',resize);resize();
 let head=null,lastHeadVideo=-1,lastFrameTime=0;
 let worker=null,stream=null,running=false,busy=false,lastVideo=-1,lastResult=0,demo=false,demoRun=null;
@@ -26,7 +26,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=14',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=15',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
