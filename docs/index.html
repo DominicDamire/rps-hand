@@ -16,7 +16,7 @@
   #gl { width: 100%; height: 100%; display: block; background: #1a1f2b; }
   .hud { position: absolute; left: 12px; right: 12px; pointer-events: none; text-shadow: 0 0 6px #000, 0 0 2px #000; font-weight: 700; }
   #top { top: 10px; } #bottom { bottom: 12px; }
-  #hand { color: #c8dcff; font-size: 14px; } #move { color: #78ff78; font-size: 26px; }
+  #hand { color: #c8dcff; font-size: 14px; } #move { display: none; } #mode { display: none; }
   #stats { font-size: 13px; color: #9aa4b8; white-space: pre-line; }
   #game { color: #ffe678; font-size: 22px; } #score { font-size: 15px; }
   #status { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; background: #0f1116; font-size: 18px; white-space: pre-line; }
@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 27)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 28)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -48,7 +48,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 
-const BUILD = 27;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 28;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -458,7 +458,7 @@ const CHAIN_OF = {}; for (const [k, js] of Object.entries(CHAINS)) for (const j 
 const HYPER = { mcp: 25, pip: 8, dip: 8 };   // degrees of backward bend allowed at each finger joint
 const FIST = { mcp: 85, pip: 100, dip: 60 };  // a closed fist's joint angles; blended in as the tracked tip approaches the knuckle (the tracker under-reads hidden joints)
 const _b = V(), _c = V(), _e = V();
-function poseFK(pts, bind, chirRight, scale) {
+function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing state for the joint angles
   const s = scale ?? pts[0].distanceTo(pts[9]) / bind[0].distanceTo(bind[9]), out = pts.map(p => p.clone());
   _l.subVectors(pts[17], pts[5]).normalize();
   _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize(); if (!chirRight) _n.negate();   // now points OUT of the palm
@@ -485,6 +485,7 @@ function poseFK(pts, bind, chirRight, scale) {
       let flex = Math.atan2(_d.dot(_b), _d.dot(prev)) * 180 / Math.PI;             // > 0 = curl toward the palm, < 0 = hyperextension
       flex = Math.max(flex, closeness * fist);                                        // never less curled than the fist prior says for this closeness
       if (flex < -lim) flex = -lim;
+      if (st) { const k = "f" + j, prevF = st[k]; if (prevF != null) { const a = Math.min(1, Math.max(0.12, Math.abs(flex - prevF) / 12)); flex = prevF + a * (flex - prevF); } st[k] = flex; }   // hold still on a held pose (12 deg per frame = full speed)
       const a = flex * Math.PI / 180; _d.copy(prev).multiplyScalar(Math.cos(a)).addScaledVector(_b, Math.sin(a));
       seg(j, _d); prev = _e.copy(_d);
     }
@@ -591,7 +592,7 @@ function makeRigSkin(variant, color) {
     // rigged (default): the mesh keeps its own proportions at one size (the hand's palm ratio, settled slowly); only the joints bend
     ratio.n = (ratio.n || 0) + 1; const scNow = tracked[0].distanceTo(tracked[9]) / L0;
     ratio.size = ratio.size == null ? scNow : ratio.size + Math.max(0.01, 1 / ratio.n) * (scNow - ratio.size);
-    const pts = FIT_EXACT ? meshPts(tracked) : poseFK(tracked, bind, chirRight, ratio.size), sc = FIT_EXACT ? scNow : ratio.size;
+    const pts = FIT_EXACT ? meshPts(tracked) : poseFK(tracked, bind, chirRight, ratio.size, ratio), sc = FIT_EXACT ? scNow : ratio.size;
     for (const [k, js] of Object.entries(CHAINS)) {
       if (!FIT_EXACT) { ratio[k] = sc * FINGER_FAT; continue; }
       const r = js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k];   // exact: thickness = the chain's PEAK measured length
@@ -865,7 +866,7 @@ async function main() {
       shown[s.key] = camToGL(MODES[mode] === "predict" ? s.filt.predict(lead) : MODES[mode] === "smooth" ? s.filt.x : s.raw);
       if (s.det && ovW) { const pr = toImage(shown[s.key]); dbg.reprojSum += pr.reduce((t, q, i) => t + Math.hypot(q.x - s.det.lm[i].x, q.y - s.det.lm[i].y), 0) / 21; dbg.reprojN++; }
       s.hist.push({ t: now, a: Float32Array.from(shown[s.key]) }); if (s.hist.length > 12) s.hist.shift();
-      move ??= moveFromFingers(s.ext); hud.push(`${s.name[0]} ${s.depth.toFixed(2)}m ${s.ext.filter(Boolean).length}up fit ${(s.fit * 100).toFixed(1)}%`);
+      move ??= moveFromFingers(s.ext); hud.push(`${s.name[0]} ${s.depth.toFixed(2)}m`);
     }
     // handshake rule: a hand that vanished while touching the other hand keeps its pose and rides along with that hand
     for (const s of [slots.Right, slots.Left]) {
