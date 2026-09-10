@@ -15,7 +15,7 @@ export function setupUI(){
  addEventListener('resize',()=>{if(panel.style.left)keepInside(panel);if(preview.style.left&&!preview.hidden)keepInside(preview);});
  const canvas=$('tracking'),ctx=canvas.getContext('2d');let trail=[];
  const edges=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
- return {clear(){trail=[];ctx.clearRect(0,0,canvas.width,canvas.height);},camera(on){$('previewNote').hidden=on;this.clear();},draw(hands,w,h,active=false){
+ return {clear(){trail=[];ctx.clearRect(0,0,canvas.width,canvas.height);},camera(on){$('previewNote').hidden=on;this.clear();},draw(hands,w,h,active=false,joystick=null){
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;$('previewImage').style.aspectRatio=w+'/'+h;}
   ctx.clearRect(0,0,w,h);if(preview.hidden)return;
   const point=p=>[(1-p.x)*w,p.y*h];
@@ -26,6 +26,40 @@ export function setupUI(){
    for(let i=0;i<21;i++){ctx.fillStyle=i===4?'#ffdf75':'#e5fff3';ctx.beginPath();ctx.arc(...point(hand[i]),i===4?w/65:w/160,0,Math.PI*2);ctx.fill();}
    const [x,y]=point(hand[4]);ctx.strokeStyle=active?'#ffdf75':'#ffffff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,w/38,0,Math.PI*2);ctx.stroke();
   }
+  if(joystick&&hands?.length===1)drawThumbJoystick(ctx,hands[0],w,h,joystick);
   if(trail.length>1){ctx.strokeStyle='#ffab45';ctx.lineWidth=Math.max(3,w/140);ctx.beginPath();trail.forEach((p,i)=>i?ctx.lineTo(...p.xy):ctx.moveTo(...p.xy));ctx.stroke();}
  }};
+}
+
+// Use exactly the same thumb-base coordinates and scale as movement detection.
+export function drawThumbJoystick(ctx,hand,w,h,joystick){
+ const {centre,scale,active,reason}=joystick;
+ if(!hand?.[4])return;
+ ctx.save();ctx.font=`bold ${Math.max(12,w/42)}px sans-serif`;
+ ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
+ const label=(text,x,y)=>{ctx.lineWidth=5;ctx.strokeStyle='#07131fee';ctx.strokeText(text,x,y);ctx.fillStyle='#ffffff';ctx.fillText(text,x,y);};
+ if(!centre||!Number.isFinite(scale)){
+  label('HOLD RESTING FIST TO SET CENTRE',w/2,h-24);ctx.restore();return;
+ }
+ const unit=scale*w,cx=(1-hand[2].x)*w+centre[0]*unit,cy=hand[2].y*h+centre[1]*unit;
+ const r=.5*unit,dead=(active?.14:.20)*unit;
+ const tx=(1-hand[4].x)*w,ty=hand[4].y*h;
+ ctx.lineWidth=Math.max(2,w/300);
+ ctx.fillStyle='#06172744';ctx.strokeStyle='#ffffffdd';
+ ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();ctx.stroke();
+ ctx.fillStyle='#6dffb344';ctx.strokeStyle='#6dffb3';
+ ctx.beginPath();ctx.arc(cx,cy,dead,0,Math.PI*2);ctx.fill();ctx.stroke();
+ ctx.setLineDash([4,5]);ctx.strokeStyle='#ffffff77';ctx.beginPath();
+ ctx.moveTo(cx-r,cy);ctx.lineTo(cx+r,cy);ctx.moveTo(cx,cy-r);ctx.lineTo(cx,cy+r);ctx.stroke();ctx.setLineDash([]);
+ ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(cx,cy,3,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle=active?'#ffdb68':'#6dffb3';ctx.lineWidth=3;
+ ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(tx,ty);ctx.stroke();
+ ctx.fillStyle='#ffdb68';ctx.beginPath();ctx.arc(tx,ty,Math.max(5,w/90),0,Math.PI*2);ctx.fill();
+ const font=Math.max(12,w/42),gap=font+5;
+ const clampX=x=>Math.max(font*2,Math.min(w-font*2,x));
+ const clampY=y=>Math.max(font,Math.min(h-font,y));
+ label('FORWARD',clampX(cx),clampY(cy-r-gap));label('BACK',clampX(cx),clampY(cy+r+gap));
+ label('LEFT',clampX(cx-r-gap-font),clampY(cy));label('RIGHT',clampX(cx+r+gap+font),clampY(cy));
+ label(active?'WALKING':reason?.includes('FIST')?'FIST REST':'CENTRE = STOP',w/2,20);
+ ctx.restore();
 }

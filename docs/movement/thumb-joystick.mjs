@@ -15,7 +15,7 @@ export function measureThumb(image,world,aspect=4/3){
  const wrapped=[5,9,13,17].filter(m=>reach(m)<.82).length>=3&&along>-.16&&d(4,6)/d(5,17)<.72;
  // Screen-space thumb displacement from its own base, scaled by palm size.
  // Mirroring happens once here, matching the visible selfie preview.
- return {rest:wrapped,point:[-(image[4].x-image[2].x)/span,(image[4].y-image[2].y)/aspect/span]};
+ return {rest:wrapped,scale:span,point:[-(image[4].x-image[2].x)/span,(image[4].y-image[2].y)/aspect/span]};
 }
 const valid=s=>s?.point?.length===2&&s.point.every(Number.isFinite);
 const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
