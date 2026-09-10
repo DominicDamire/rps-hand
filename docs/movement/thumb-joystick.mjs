@@ -4,7 +4,7 @@ export function measureThumb(image,world,aspect=4/3){
  const d=(a,b)=>Math.hypot(world[a].x-world[b].x,world[a].y-world[b].y,world[a].z-world[b].z);
  const reach=m=>d(m,m+3)/(d(m,m+1)+d(m+1,m+2)+d(m+2,m+3)||1);
  if([5,9,13,17].filter(m=>reach(m)>.82).length>=2)return null;
- // Keep the working lateral offset from thumb tip to index PIP unchanged.
+ // Restore v23: thumb base (2) to tip (4), not the neighbouring index knuckle.
  const span=(Math.hypot(image[0].x-image[9].x,(image[0].y-image[9].y)/aspect)+Math.hypot(image[5].x-image[17].x,(image[5].y-image[17].y)/aspect))/2;
  if(span<.015)return null;
  const palm=(d(0,9)+d(5,17))/2;if(palm<.005)return null;
@@ -16,7 +16,7 @@ export function measureThumb(image,world,aspect=4/3){
  const coverage=across.reduce((s,v,i)=>s+v*(world[4][['x','y','z'][i]]-world[5][['x','y','z'][i]]),0)/width2;
  // A wrapped thumb crosses toward the middle/ring fingers; a backward curl stays by the index.
  const resting=coverage>.2&&coverage<1.3&&Math.min(d(4,10),d(4,14),d(4,11),d(4,15))/palm<.65;
- return {x:(image[4].x-image[6].x)/span,straight,resting};
+ return {x:(image[2].x-image[4].x)/span,straight,resting};
 }
 export class ThumbJoystick {
  constructor(){this.speed=4.5;this.reset();}
@@ -30,6 +30,8 @@ export class ThumbJoystick {
   const dead=v=>Math.sign(v)*Math.max(0,(Math.abs(v)-.2)/.8);
   this.x=dead(clamp((sample.x-this.neutral.x)/.55));
   this.z=sample.straight>.88?-Math.min(1,(sample.straight-.88)/.1):sample.straight<.78?Math.min(1,(.78-sample.straight)/.25):0;
+  // A sideways stroke must not also walk forward just because the thumb is straight.
+  if(Math.abs(this.x)>0)this.z=0;
   const length=Math.hypot(this.x,this.z);if(length>1){this.x/=length;this.z/=length;}
   this.reason=length>.01?'MOVING':'THUMB CENTRED';
  }
