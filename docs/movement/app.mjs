@@ -1,27 +1,27 @@
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=30';
-import {setupThumbstick} from './thumbstick.mjs?v=30';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=31';
+import {setupThumbstick} from './thumbstick.mjs?v=31';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=30';
-import {DustMap} from './map.mjs?v=30';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=31';
+import {DustMap} from './map.mjs?v=31';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=30';
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=30';
+import {setupUI} from './ui.mjs?v=31';
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=31';
 const $=id=>document.getElementById(id);
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const held=new ThumbJoystick();let inputMode='poses',trackedHand=null,resting=false;
 let thumbSetup=null;
 const setupNames=['centre (comfortable, partly bent)','left','right','forward (straight)','backward (thumb bent above fingers)','rest (closed fist, thumb wrapped around fingers)'];
 function setupPrompt(){
- const name=setupNames[thumbSetup.samples.length];
- $('thumbSetupText').textContent='Hold your fist still. Put your thumb at '+name+'. Then tap Capture and hold it there.';
+ const name=setupNames[thumbSetup.step];
+ $('thumbSetupText').textContent='Step '+(thumbSetup.step+1)+' of 6. Hold your fist still. Put your thumb at '+name+'. Then tap Capture and hold it there.';
  $('captureThumb').textContent='Capture '+name.split(' ')[0];
 }
-function beginThumbSetup(){held.calibration=null;held.reset();headLook.resetLook();$('captureThumb').disabled=false;$('panel').classList.remove('collapsed');$('collapse').textContent='Hide controls';$('collapse').setAttribute('aria-expanded','true');thumbSetup={samples:[],frames:[],captureAt:null};$('thumbSetup').hidden=false;setupPrompt();$('thumbSetup').scrollIntoView({block:'nearest'});}
+function beginThumbSetup(){held.calibration=null;held.reset();headLook.resetLook();$('captureThumb').disabled=false;$('panel').classList.remove('collapsed');$('collapse').textContent='Hide controls';$('collapse').setAttribute('aria-expanded','true');thumbSetup={samples:Array(6).fill(null),step:0,frames:[],captureAt:null};$('thumbSetup').hidden=false;setupPrompt();$('thumbSetup').scrollIntoView({block:'nearest'});}
 $('captureThumb').onclick=()=>{if(!running||resting){$('thumbSetupText').textContent='Start the camera and press Resume if resting.';return;}thumbSetup.frames=[];thumbSetup.captureAt=performance.now()+1000;$('captureThumb').disabled=true;};
 function collectThumbSetup(sample,now){
  if(thumbSetup.captureAt===null)return;
- if(now<thumbSetup.captureAt){$('thumbSetupText').textContent='Get ready: '+setupNames[thumbSetup.samples.length];return;}
+ if(now<thumbSetup.captureAt){$('thumbSetupText').textContent='Get ready: '+setupNames[thumbSetup.step];return;}
  $('thumbSetupText').textContent='Hold still...';
  if(sample)thumbSetup.frames.push(sample);
  if(now-thumbSetup.captureAt<650)return;
@@ -30,11 +30,13 @@ function collectThumbSetup(sample,now){
  const frames=thumbSetup.frames;
  if(frames.length<3){$('thumbSetupText').textContent='Thumb not clear enough. Show one fist with your thumb visible, then retry.';return;}
  const axes=[0,1,2,3].map(i=>frames.map(f=>f.axes[i]).sort((a,b)=>a-b)[Math.floor(frames.length/2)]);
- if(frames.some(f=>Math.hypot(...f.axes.map((v,i)=>v-axes[i]))>.18)){$('thumbSetupText').textContent='Thumb moved during capture. Hold it still and retry.';return;}
- thumbSetup.samples.push({axes});
- if(thumbSetup.samples.length<6){setupPrompt();return;}
+ const noise=[0,1,2,3].map(i=>frames.map(f=>Math.abs(f.axes[i]-axes[i])).sort((a,b)=>a-b)[Math.floor(frames.length/2)]*1.4826);
+ if(Math.hypot(...noise)>.12){$('thumbSetupText').textContent='Thumb moved during capture. Hold it still and retry.';return;}
+ thumbSetup.samples[thumbSetup.step]={axes,noise};
+ const next=thumbSetup.samples.findIndex(v=>!v);
+ if(next>=0){thumbSetup.step=next;setupPrompt();return;}
  try{held.configure(thumbSetup.samples);thumbSetup=null;$('thumbSetup').hidden=true;walkReason='RETURN THUMB TO CENTRE';}
- catch(e){thumbSetup.samples=[];setupPrompt();$('thumbSetupText').textContent=e.message+' Start again at centre.';}
+ catch(e){thumbSetup.step=Number.isInteger(e.retryIndex)?e.retryIndex:0;setupPrompt();$('thumbSetupText').textContent=e.message+' Your other captures are kept.';}
 }
 const swipe=new SwipeController();const headLook=new HeadLook();let lookDemo=0;
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:false});renderer.setPixelRatio(1);
@@ -56,7 +58,7 @@ async function start(){
   if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=30',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=31',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;

@@ -17,20 +17,32 @@ export function measureThumb(image,world,aspect=4/3){
 }
 const valid=s=>s?.axes?.length===4&&s.axes.every(Number.isFinite);
 const dot=(a,b)=>a.reduce((sum,v,i)=>sum+v*b[i],0);
+const failure=(message,retryIndex)=>Object.assign(new Error(message),{retryIndex});
+const noise=s=>s.noise?.length===4?s.noise.map(v=>Number.isFinite(v)?Math.max(0,v):0):[0,0,0,0];
 export function fitThumbDirections(samples){
  if(samples.length!==5||!samples.every(valid))throw Error('Capture centre and four directions.');
  const origin=samples[0].axes.slice(),rows=samples.slice(1,5).map(s=>s.axes.map((v,i)=>v-origin[i]));
  const targets=[[-1,0],[1,0],[0,-1],[0,1]];
- if(rows.some(r=>Math.hypot(...r)<.09))throw Error('Thumb travel was too small. Keep your fist still and move your thumb farther.');
+ const names=['left','right','forward','backward'];
+ rows.forEach((r,i)=>{const uncertainty=Math.hypot(...noise(samples[0]).map((v,k)=>v+noise(samples[i+1])[k]));
+  if(Math.hypot(...r)<Math.max(.008,uncertainty*3))throw failure('The '+names[i]+' capture looks like centre. Retry only '+names[i]+', holding your thumb there until capture finishes.',i+1);
+ });
+ // Fit in units of this user's measured travel, not a fixed minimum thumb size.
+ const scales=[0,1,2,3].map(i=>Math.max(.005,...rows.map(r=>Math.abs(r[i]))));
+ const normalized=rows.map(r=>r.map((v,i)=>v/scales[i]));
  // Regularized least squares fits continuous travel, including cross-axis coupling.
- const a=Array.from({length:4},(_,i)=>Array.from({length:6},(_,j)=>j<4?rows.reduce((sum,r)=>sum+r[i]*r[j],0)+(i===j?.0001:0):rows.reduce((sum,r,k)=>sum+r[i]*targets[k][j-4],0)));
+ const a=Array.from({length:4},(_,i)=>Array.from({length:6},(_,j)=>j<4?normalized.reduce((sum,r)=>sum+r[i]*r[j],0)+(i===j?.0001:0):normalized.reduce((sum,r,k)=>sum+r[i]*targets[k][j-4],0)));
  for(let i=0;i<4;i++){
   let pivot=i;for(let k=i+1;k<4;k++)if(Math.abs(a[k][i])>Math.abs(a[pivot][i]))pivot=k;
   [a[i],a[pivot]]=[a[pivot],a[i]];const scale=a[i][i];for(let j=i;j<6;j++)a[i][j]/=scale;
   for(let k=0;k<4;k++)if(k!==i){const f=a[k][i];for(let j=i;j<6;j++)a[k][j]-=f*a[i][j];}
  }
- const weights=[a.map(r=>r[4]),a.map(r=>r[5])];
- if(weights.some(w=>!w.every(Number.isFinite)||Math.hypot(...w)>18)||rows.some((r,i)=>Math.hypot(...weights.map((w,j)=>dot(w,r)-targets[i][j]))>.25))throw Error('The camera could not distinguish those directions. Try again with your thumb clearly visible.');
+ const weights=[a.map((r,i)=>r[4]/scales[i]),a.map((r,i)=>r[5]/scales[i])];
+ const errors=rows.map((r,i)=>Math.hypot(...weights.map((w,j)=>dot(w,r)-targets[i][j])));
+ const worst=errors.indexOf(Math.max(...errors));
+ if(weights.some(w=>!w.every(Number.isFinite))||errors[worst]>.25)throw failure('The '+names[worst]+' direction overlaps another direction. Retry only '+names[worst]+'.',worst+1);
+ for(let i=0;i<samples.length;i++)if(weights.some(w=>Math.hypot(...w.map((v,k)=>v*noise(samples[i])[k]))>.18))throw failure('Tracking varied too much during '+(i?names[i-1]:'centre')+'. Hold still and retry this capture.',i);
+
  return {origin,weights};
 }
 export function fitThumbCalibration(samples){
@@ -38,7 +50,7 @@ export function fitThumbCalibration(samples){
  const {origin,weights}=fitThumbDirections(samples.slice(0,5));
  const rest=samples[5].axes.slice();
  const separation=Math.min(...samples.slice(0,5).map(s=>Math.hypot(...s.axes.map((v,i)=>v-rest[i]))));
- if(separation<.16)throw Error('Resting fist looks too similar to a walking position. Wrap your thumb around your fingers for Rest; keep it above them for backward.');
+ if(separation<Math.max(.012,Math.hypot(...noise(samples[5]))*4))throw failure('Resting fist looks too similar to a walking position. Retry Rest with your thumb wrapped around your fingers.',5);
  return {origin,weights,rest,restRadius:Math.min(.24,separation*.4)};
 }
 export class ThumbJoystick {
