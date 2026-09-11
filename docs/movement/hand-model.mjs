@@ -100,11 +100,11 @@ const THUMB_Z = Q.get("tz") !== "0";        // thumb bones take their depth from
 
 const HYPER = { mcp: 25, pip: 8, dip: 8 };   // degrees of backward bend allowed at each finger joint
 
-const FIST = F_Q.length === 3 ? { mcp: F_Q[0], pip: F_Q[1], dip: F_Q[2] } : { mcp: 85, pip: 100, dip: 60 };  // a closed fist's joint angles; blended in as the tracked tip approaches the knuckle (the tracker under-reads hidden joints)
+const FIST = F_Q.length === 3 ? { mcp: F_Q[0], pip: F_Q[1], dip: F_Q[2] } : { mcp: 85, pip: 100, dip: 60 };
 
 const _b = V(), _c = V(), _e = V(), _pw = V();
 
-function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing state for the joint angles
+function poseFK(pts, bind, chirRight, scale, st, grip) {   // st: per-hand smoothing state for the joint angles; grip: hand locked on the gun
   const s = scale ?? pts[0].distanceTo(pts[9]) / bind[0].distanceTo(bind[9]), out = pts.map(p => p.clone());
   _l.subVectors(pts[17], pts[5]).normalize();
   const Lp = _pw.subVectors(pts[9], pts[0]).length(); _pw.normalize();                                     // along the palm
@@ -118,7 +118,7 @@ function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing s
   // bone), else the sign remembered for that bone. A picture longer than the bone is left as tracked. ?tz=0 disables.
   for (const j of [2, 3, 4]) {
     _d.subVectors(pts[j], pts[PARENT[j]]);
-    if (THUMB_Z) {
+    if (THUMB_Z && !grip) {   // (the gripping hand's points are exact, no depth guess)
       _r.copy(pts[PARENT[j]]).normalize(); const L = s * bind[j].distanceTo(bind[PARENT[j]]), dz = _d.dot(_r);   // ray from the phone (origin) through the joint
       _b.copy(_d).addScaledVector(_r, -dz); const lp = _b.length();                                                     // the picture part
       if (lp > 1e-6 && lp < 0.98 * L) {
@@ -148,16 +148,17 @@ function poseFK(pts, bind, chirRight, scale, st) {   // st: per-hand smoothing s
     _d.subVectors(pts[m + 3], pts[0]); const uT = _d.dot(_pw), vT = _d.dot(_l), hT = Math.abs(_d.dot(_n));
     const c01 = x => Math.min(1, Math.max(0, x));
     const fold = c01((0.95 * Lp - uT) / (0.15 * Lp)) * c01((uT - 0.05 * Lp) / (0.1 * Lp)) * c01((0.6 * Lp - hT) / (0.15 * Lp)) * (vT > vLo && vT < vHi ? 1 : 0);
-    closeness = Math.max(closeness, fold);
-    for (const [j, lim, fist] of [[m + 1, HYPER.mcp, FIST.mcp], [m + 2, HYPER.pip, FIST.pip], [m + 3, HYPER.dip, FIST.dip]]) {
+    closeness = grip ? 0 : Math.max(closeness, fold);   // the gripping hand's points are exact: no fist prior
+    const lock = false, FA = FIST;
+    for (const [j, lim, fist] of [[m + 1, HYPER.mcp, FA.mcp], [m + 2, HYPER.pip, FA.pip], [m + 3, HYPER.dip, FA.dip]]) {
       _d.subVectors(pts[j], pts[j - 1]).normalize();
       // the knuckle is a two-axis joint: it bends AND spreads (that is how fingers cross); the middle and end joints are hinges
-      let side = j === m + 1 ? Math.max(-0.64, Math.min(0.64, _d.dot(_q))) : 0;   // sideways component at the knuckle, within +-40 degrees
+      let side = j === m + 1 && !lock ? Math.max(-0.64, Math.min(0.64, _d.dot(_q))) : 0;   // sideways component at the knuckle, within +-40 degrees
       if (st && side) { const k = "s" + j, prevS = st[k]; if (prevS != null) { const a = Math.min(1, Math.max(0.12, Math.abs(side - prevS) / 0.2)); side = prevS + a * (side - prevS); } st[k] = side; }
       _d.addScaledVector(_q, -_d.dot(_q)); if (_d.lengthSq() < 1e-10) _d.copy(prev); _d.normalize();   // the bend part, in the finger's plane
       _b.crossVectors(_q, prev).normalize();                                          // curl direction at this joint (rotating prev about the flexion axis)
       let flex = Math.atan2(_d.dot(_b), _d.dot(prev)) * 180 / Math.PI;             // > 0 = curl toward the palm, < 0 = hyperextension
-      flex = Math.max(flex, closeness * fist);                                        // never less curled than the fist prior says for this closeness
+      flex = lock ? fist : Math.max(flex, closeness * fist);                          // never less curled than the fist prior says for this closeness; locked on the grip
       if (flex < -lim) flex = -lim;
       if (st) { const k = "f" + j, prevF = st[k]; if (prevF != null) { const a = Math.min(1, Math.max(0.12, Math.abs(flex - prevF) / 12)); flex = prevF + a * (flex - prevF); } st[k] = flex; }   // hold still on a held pose (12 deg per frame = full speed)
       const a = flex * Math.PI / 180; _d.copy(prev).multiplyScalar(Math.cos(a)).addScaledVector(_b, Math.sin(a));
@@ -291,11 +292,12 @@ function makeRigSkin(variant, color) {
   mesh.castShadow = false; mesh.frustumCulled = false; mesh.visible = false;
   const L0 = bind[0].distanceTo(bind[9]); const bindLen = {}; for (const [k, js] of Object.entries(CHAINS)) bindLen[k] = js.reduce((t, j) => t + bind[j].distanceTo(bind[PARENT[j]]), 0);
   const ratio = {}; const M = new THREE.Matrix4(), dirW = V(), o = V();
-  return { mesh, update(tracked, chirRight) {
+  const fwd = V(), armDir = V();
+  return { mesh, update(tracked, chirRight, elbow, shoulder, grip) {
     // rigged (default): the mesh keeps its own proportions at one size (the hand's palm ratio, settled slowly); only the joints bend
     ratio.n = (ratio.n || 0) + 1; const scNow = tracked[0].distanceTo(tracked[9]) / L0;
     ratio.size = ratio.size == null ? scNow : ratio.size + Math.max(0.01, 1 / ratio.n) * (scNow - ratio.size);
-    const pts = FIT_EXACT ? meshPts(tracked) : poseFK(tracked, bind, chirRight, ratio.size, ratio), sc = FIT_EXACT ? scNow : ratio.size;
+    const pts = FIT_EXACT ? meshPts(tracked) : poseFK(tracked, bind, chirRight, ratio.size, ratio, grip), sc = FIT_EXACT ? scNow : ratio.size;
     for (const [k, js] of Object.entries(CHAINS)) {
       if (!FIT_EXACT) { ratio[k] = sc * FINGER_FAT; continue; }
       const r = js.reduce((t, j) => t + pts[j].distanceTo(pts[PARENT[j]]), 0) / bindLen[k];   // exact: thickness = the chain's PEAK measured length
@@ -312,9 +314,17 @@ function makeRigSkin(variant, color) {
       bones[e.i].matrixWorldNeedsUpdate = true;
     }
     for (const i of riders) { bones[i].matrix.copy(handM); bones[i].matrixWorldNeedsUpdate = true; }
-    if (rest.forearm) {   // straight forearm behind the wrist (hands only: its skin is cut away at load, see cutArm; ?arms=1 keeps it)
-      o.copy(pts[0]).addScaledVector(dirW, -rest.forearm.L * sc); frameDir(o, dirW, rest.forearm.L * sc, ratio.palm, _n, _l, bones[rest.forearm.i].matrix); bones[rest.forearm.i].matrixWorldNeedsUpdate = true;
-      if (rest.arm) { o.addScaledVector(dirW, -rest.arm.L * sc); frameDir(o, dirW, rest.arm.L * sc, ratio.palm, _n, _l, bones[rest.arm.i].matrix); bones[rest.arm.i].matrixWorldNeedsUpdate = true; }
+    if (rest.forearm) {   // forearm: toward the tracked elbow when the pose gives one (wrist bend up to 80 deg), else straight behind the wrist
+      fwd.copy(dirW);
+      if (elbow) {
+        fwd.subVectors(pts[0], elbow).normalize(); const c = fwd.dot(dirW), lim = Math.cos(80 * Math.PI / 180);
+        if (c < lim) { const ang = Math.acos(Math.max(-1, Math.min(1, c))) - 80 * Math.PI / 180; _r.crossVectors(fwd, dirW); if (_r.lengthSq() > 1e-6) fwd.applyAxisAngle(_r.normalize(), ang); }   // clamp the wrist bend
+      }
+      o.copy(pts[0]).addScaledVector(fwd, -rest.forearm.L * sc); frameDir(o, fwd, rest.forearm.L * sc, ratio.palm, _n, _l, bones[rest.forearm.i].matrix); bones[rest.forearm.i].matrixWorldNeedsUpdate = true;
+      if (rest.arm) {
+        armDir.copy(fwd); if (elbow && shoulder) armDir.subVectors(elbow, shoulder).normalize();
+        o.addScaledVector(armDir, -rest.arm.L * sc); frameDir(o, armDir, rest.arm.L * sc, ratio.palm, _n, _l, bones[rest.arm.i].matrix); bones[rest.arm.i].matrixWorldNeedsUpdate = true;
+      }
     }
     mesh.visible = true;
   } };
