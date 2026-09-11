@@ -3,7 +3,7 @@
 // which is the whole point: the WebRTC video path (camlink.mjs) only completes when both devices can reach each other
 // directly, and every free TURN relay it could fall back on is dead (owner: it worked on one phone, not on his).
 // Extra: the phone does the inference, so the PC only draws, and the link carries about 0.5 KB per hand frame.
-import { connectLink, packHands } from "./link.mjs?v=86";
+import { connectLink, packHands } from "./link.mjs?v=88";
 
 const HFOV = Math.PI / 3;
 
@@ -20,8 +20,8 @@ export async function startPhone(code, video, onStatus = () => {}) {
 
   let wantBody = new URLSearchParams(location.search).get("body") === "1";   // off until the PC asks: with "head only" there is nothing to drive
   const dbg = window.rpshPhone = { face: null, body: null, get ready() { return ready; }, get fps() { return fps; }, get err() { return err; } };   // diagnostics for the owner's phone
-  const hand = new Worker(new URL("./tracker.mjs?v=86", import.meta.url), { type: "module" });
-  const head = new Worker(new URL("./head-tracker.mjs?v=86", import.meta.url), { type: "module" });
+  const hand = new Worker(new URL("./tracker.mjs?v=88", import.meta.url), { type: "module" });
+  const head = new Worker(new URL("./head-tracker.mjs?v=88", import.meta.url), { type: "module" });
   let bodyW = null;   // started a few seconds later: the hand and the face matter more and three models at once stall a phone
   const ready = { hand: false, head: false, body: false };
   const WIDTHS = [288, 384, 512]; let widthIdx = 0;   // the face detector misses some faces at one size and finds them at another
@@ -53,7 +53,7 @@ export async function startPhone(code, video, onStatus = () => {}) {
     if (!on) { bodyW?.terminate(); bodyW = null; ready.body = false; bodyBusy = false; return; }
     if (bodyW) return;
     try {
-      bodyW = new Worker(new URL("../body/worker.mjs?v=86", import.meta.url), { type: "module" });
+      bodyW = new Worker(new URL("../body/worker.mjs?v=88", import.meta.url), { type: "module" });
       bodyW.onerror = () => { bodyW = null; };
       bodyW.onmessage = ({ data }) => {
         if (data.type === "ready") { ready.body = true; return; }

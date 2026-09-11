@@ -1,6 +1,6 @@
 const RAD=Math.PI/180;
 export class HeadLook {
- constructor(){this.heading=0;this.gain=1.5;this.lookGain=2.5;this.deadzoneDegrees=14;this.smooth=.025;this.mode='hybrid';this.resetLook();}
+ constructor(){this.heading=0;this.gain=1.5;this.lookGain=2.5;this.deadzoneDegrees=14;this.smooth=.025;this.mode='hybrid';this.recenterPitch=false;this.resetLook();}
  // The class keeps its original response, which its own tests pin. The page asks for a calmer one at startup
  // (app.mjs: lookGain from the slider, smooth 0.12), because 2.5x through a 25 ms filter swung the view too far and
  // jittered with the tracker - the owner's "the head movement is too much".
@@ -42,7 +42,13 @@ export class HeadLook {
   return this.heading+this.look;
  }
  updatePitch(pitch,dt,valid=true){
-  if(!valid||!Number.isFinite(pitch))return this.pitch;
+  // `recenterPitch` (off by default, so the original rule and its test stand): losing the face used to freeze the view
+  // at whatever angle it was last at, so a glance down before the tracker dropped left the player staring at the floor
+  // with no way back. With it on, and nothing to follow, the pitch eases level again over about a second.
+  if(!valid||!Number.isFinite(pitch)){
+   if(this.recenterPitch)this.pitch+=(0-this.pitch)*(1-Math.exp(-Math.min(.1,Math.max(0,dt))/.6));
+   return this.pitch;
+  }
   const target=Math.max(-70*RAD,Math.min(70*RAD,pitch*this.lookGain));
   this.pitch+=(target-this.pitch)*(1-Math.exp(-Math.min(.1,Math.max(0,dt))/Math.max(.01,this.smooth)));return this.pitch;
  }
