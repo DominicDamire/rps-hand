@@ -18,16 +18,17 @@ const _lp = new THREE.Vector3(), _lp2 = new THREE.Vector3(), _qy = new THREE.Qua
 const _s = new THREE.Vector3(), _elbow = new THREE.Vector3(), _end = new THREE.Vector3(), _rU = new THREE.Vector3(), _rL = new THREE.Vector3(), _dir = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const ID = new THREE.Quaternion();
+const _parentInverse = new THREE.Quaternion();
 
 export class DollRig {
-  constructor(scene, { url = new URL("../doll.glb", import.meta.url).href, report = null, headLayer = true } = {}) {
+  constructor(scene, { url = new URL("../doll.glb?v=89", import.meta.url).href, report = null, headLayer = true } = {}) {
     this.root = new THREE.Group(); scene.add(this.root);
     this.joints = {};        // name -> Object3D
     this.rest = {};          // name -> { world: Vector3, localQ: Quaternion }
     this.parts = [];
     this.loaded = false;
     this.headLayer = headLayer;
-    const reportUrl = report || url.replace(/\.glb$/, "-report.json");
+    const reportUrl = report || url.replace(/\.glb(?=\?|$)/, "-report.json");
     this.ready = Promise.all([new GLTFLoader().loadAsync(url), fetch(reportUrl).then(r => r.json())])
       .then(([gltf, rep]) => this._build(gltf, rep));
   }
@@ -67,8 +68,8 @@ export class DollRig {
   /** world-space rotation for a joint, applied on top of its rest pose */
   setWorldQuat(name, q) {
     const o = this.joints[name]; if (!o) return;
-    o.parent.getWorldQuaternion(_q2).invert();
-    o.quaternion.copy(_q2.multiply(q));
+    _parentInverse.setFromRotationMatrix(_m.extractRotation(o.parent.matrixWorld)).invert();
+    o.quaternion.copy(_parentInverse.multiply(q));
     // Refresh this one node only. updateMatrixWorld(true) walked the whole subtree every time, and with ~25 joints set
     // a frame that was tens of thousands of matrix updates a second on the main thread, which the trackers pay for.
     // Callers that need a child's world position after this use refresh(); the renderer updates the tree once a frame.
@@ -129,7 +130,9 @@ export class DollRig {
     this.root.quaternion.setFromAxisAngle(UP, yaw);
     const eyeNow = _v2.copy(this.eye).applyQuaternion(this.root.quaternion);
     this.root.position.copy(pos).sub(eyeNow);
-    this.root.updateMatrixWorld(true);   // once: everything below is posed against this
+    this.root.updateMatrix();
+    this.root.matrixWorld.multiplyMatrices(this.root.parent.matrixWorld, this.root.matrix);
+    for (const n of ["Root", "Hips", "Waist", "Chest", "Neck", "Head"]) this.refresh(this.joints[n]);
   }
 
   /** head and neck from the tracked physical angles (radians), on top of the body's heading */
@@ -148,9 +151,13 @@ export class DollRig {
     if (!this.eyeInHead) return;
     // the spine chain is what moved: Root -> Hips -> Waist -> Chest -> Neck -> Head
     for (const n of ["Hips", "Waist", "Chest", "Neck", "Head"]) this.refresh(this.joints[n]);
-    _eye.copy(this.eyeInHead).applyMatrix4(this.joints.Head.matrixWorld);
+    // Use the head's POSITION but the body's orientation, not the head's. Rotating a head does not move a person's
+    // body, yet pinning the rotated eye to a fixed camera translated the whole doll: a 0.35 rad head roll pushed the
+    // shoulder 7 cm away from the hand it was reaching for, and the wrist ended up 10 cm off the tracked one.
+    _eye.copy(this.eyeInHead).applyQuaternion(this.root.quaternion).add(_lp.setFromMatrixPosition(this.joints.Head.matrixWorld));
     this.root.position.add(_a.copy(pos).sub(_eye));
     this.root.updateMatrix(); this.root.matrixWorld.multiplyMatrices(this.root.parent.matrixWorld, this.root.matrix);
+    for (const n of ["Root", "Hips", "Waist", "Chest", "Neck", "Head"]) this.refresh(this.joints[n]);
   }
 
   dispose() { this.root.parent?.remove(this.root); }

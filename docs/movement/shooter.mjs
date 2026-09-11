@@ -6,8 +6,8 @@
 import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
 import { makeGun, fingersUp } from "../gun.mjs";
-import { setupPunch } from "./punch.mjs?v=76";
-import * as sfx from "./sound.mjs?v=76";
+import { setupPunch } from "./punch.mjs?v=89";
+import * as sfx from "./sound.mjs?v=89";
 
 const TABLE_H = 1.32;   // table top above the floor: the tracked hand sits at chest height in front of the eye (1.65 m)
 // ?mirror=N refreshes the reflection every Nth frame it is on screen (default 3, 1 = every frame)
@@ -22,7 +22,8 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
   if (Q.get("gun") === "0") return null;
   // Measured on an RX 6650 XT with the doll in the scene: 1024x512 every frame took the page to 55 fps and the hand
   // tracker to 12; every second frame 77 fps and 23. Every second frame is not visible; a tracker at 12 fps is.
-  const MIRROR_EVERY = Math.max(1, +Q.get("mirror") || (isPhone() ? 3 : 2));
+  let MIRROR_EVERY = Math.max(1, +Q.get("mirror") || (isPhone() ? 3 : 2));
+  let mirrorOff = false;
   let gun = null, mirror = null, error = null, bag = null, wasMode = "rest";
   if (!hud) { const d = document.createElement("div"); d.id = "gunHud"; d.style.cssText = "position:fixed;top:64px;left:50%;transform:translateX(-50%);padding:6px 12px;background:#101b25cc;border-radius:8px;font:12px monospace;color:#ffdf75;pointer-events:none;z-index:5"; document.body.appendChild(d); hud = t => { d.textContent = t; }; }
   // (the player's body used to be a capsule here; body.mjs now draws the tracked upper-body rig)
@@ -52,13 +53,19 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
     {
       const original = mirror.onBeforeRender, sphere = new THREE.Sphere(mirror.position.clone(), Math.hypot(mw, mh) / 2);
       const frustum = new THREE.Frustum(), _m4 = new THREE.Matrix4();
-      let tick = 0;
+      let tick = 0, lastReflection = -Infinity;
       mirror.onBeforeRender = function (renderer, sc, cam) {
         _m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); frustum.setFromProjectionMatrix(_m4);
         if (!frustum.intersectsSphere(sphere)) return;   // behind you: keep the texture we already have
         const d = cam.position.distanceTo(mirror.position);
-        const every = MIRROR_EVERY * (d < 3 ? 1 : d < 6 ? 2 : 4);   // across the room a stale reflection is invisible anyway
-        if (tick++ % every) return;
+        // Measured: slowing the reflection from every 12th frame to every 48th took the page from 97 to 153 fps, the
+        // hand tracker from 24 to 30 and face inference from 43 ms to 21. So it stays quick only while you are close
+        // enough to be looking at yourself in it; across the room a stale reflection is invisible anyway.
+        const every = MIRROR_EVERY * (d < 2.5 ? 1 : d < 5 ? 3 : 8);
+        const now = performance.now();
+        const interval = Q.has("mirror") ? 1000 / 60 * every : (d < 2.5 ? 1000 / 30 : d < 5 ? 1000 / 20 : 100);
+        if (now - lastReflection < interval) return;
+        lastReflection = now;
         original.call(this, renderer, sc, cam);
       };
     }
@@ -72,7 +79,13 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
   ready.catch(e => { error = e; console.warn("shooter unavailable:", e); });
 
   return {
-    ready, get gun() { return gun; }, get mirror() { return mirror; }, get bag() { return bag; },
+    ready, get gun() { return gun; },
+    /** the quality governor in app.mjs turns this down when the machine cannot keep up: 0 full, 3 no reflection */
+    quality(level) {
+      MIRROR_EVERY = [2, 8, 20, 20][Math.max(0, Math.min(3, level))];
+      mirrorOff = level >= 3;
+      if (mirror) mirror.visible = !mirrorOff;
+    }, get mirror() { return mirror; }, get bag() { return bag; },
     update(dt, now) {
       if (!gun) return;
       const shown = handModel.visible;

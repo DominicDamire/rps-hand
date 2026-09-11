@@ -18,7 +18,10 @@ export function facePose(points, aspect = 1) {
     centerY: (points[33].y + points[263].y) / 2,
     span: Math.hypot(...sub(points[263], points[33])),
     yaw: Math.atan2(n[0], n[2]),
-    pitch: Math.atan2(n[1], Math.hypot(n[0], n[2]))
+    pitch: Math.atan2(n[1], Math.hypot(n[0], n[2])),
+    // head tilt, from the line between the outer eye corners. Nothing computed this before, so every consumer of
+    // `roll` was reading zero.
+    roll: Math.atan2((points[263].y - points[33].y) / aspect, points[263].x - points[33].x)
   };
   return Object.values(pose).every(v => typeof v === 'boolean' || Number.isFinite(v)) ? pose : null;
 }
@@ -45,7 +48,7 @@ export function firstPersonForward(yaw, pitch, navYaw = 0) {
 }
 
 export class ViewPose {
-  constructor() { this.mode = 'head'; this.sensitivity=5; this.physicalYaw=0; this.physicalPitch=0; this.neutral = null; this.latest = null; this.seen = -Infinity; this.yaw = 0; this.pitch = 0; }
+  constructor() { this.mode = 'head'; this.sensitivity=5; this.physicalYaw=0; this.physicalPitch=0; this.physicalRoll=0; this.neutral = null; this.latest = null; this.seen = -Infinity; this.yaw = 0; this.pitch = 0; }
   recenter() { this.neutral = null; this.latest = null; }
   receive(pose, now) {
     if (!pose) return;
@@ -61,6 +64,7 @@ export class ViewPose {
       // image mirrored, a positive plane yaw looks screen-right (negative camera yaw).
       physicalYaw=-(this.latest.yaw-this.neutral.yaw);
       physicalPitch=this.latest.pitch-this.neutral.pitch;
+      this.physicalRoll=Math.max(-.35,Math.min(.35,((this.latest.roll??0)-(this.neutral.roll??0))*.7));   // damped: the eye-corner line is noisy
       const deadzone=v=>Math.sign(v)*Math.max(0,Math.abs(v)-.025);
       yaw=this.mode==='first'?deadzone(physicalYaw)*this.sensitivity:physicalYaw*.65;
       pitch=this.mode==='first'?deadzone(physicalPitch)*this.sensitivity*.6:physicalPitch*.65;

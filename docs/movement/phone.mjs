@@ -3,7 +3,7 @@
 // which is the whole point: the WebRTC video path (camlink.mjs) only completes when both devices can reach each other
 // directly, and every free TURN relay it could fall back on is dead (owner: it worked on one phone, not on his).
 // Extra: the phone does the inference, so the PC only draws, and the link carries about 0.5 KB per hand frame.
-import { connectLink, packHands } from "./link.mjs?v=76";
+import { connectLink, packHands } from "./link.mjs?v=89";
 
 const HFOV = Math.PI / 3;
 
@@ -20,8 +20,8 @@ export async function startPhone(code, video, onStatus = () => {}) {
 
   let wantBody = new URLSearchParams(location.search).get("body") === "1";   // off until the PC asks: with "head only" there is nothing to drive
   const dbg = window.rpshPhone = { face: null, body: null, get ready() { return ready; }, get fps() { return fps; }, get err() { return err; } };   // diagnostics for the owner's phone
-  const hand = new Worker(new URL("./tracker.mjs?v=76", import.meta.url), { type: "module" });
-  const head = new Worker(new URL("./head-tracker.mjs?v=76", import.meta.url), { type: "module" });
+  const hand = new Worker(new URL("./tracker.mjs?v=89", import.meta.url), { type: "module" });
+  const head = new Worker(new URL("./head-tracker.mjs?v=89", import.meta.url), { type: "module" });
   let bodyW = null;   // started a few seconds later: the hand and the face matter more and three models at once stall a phone
   const ready = { hand: false, head: false, body: false };
   const WIDTHS = [288, 384, 512]; let widthIdx = 0;   // the face detector misses some faces at one size and finds them at another
@@ -53,7 +53,7 @@ export async function startPhone(code, video, onStatus = () => {}) {
     if (!on) { bodyW?.terminate(); bodyW = null; ready.body = false; bodyBusy = false; return; }
     if (bodyW) return;
     try {
-      bodyW = new Worker(new URL("../body/worker.mjs?v=76", import.meta.url), { type: "module" });
+      bodyW = new Worker(new URL("../body/worker.mjs?v=89", import.meta.url), { type: "module" });
       bodyW.onerror = () => { bodyW = null; };
       bodyW.onmessage = ({ data }) => {
         if (data.type === "ready") { ready.body = true; return; }
@@ -65,7 +65,7 @@ export async function startPhone(code, video, onStatus = () => {}) {
   }
   if (wantBody) setTimeout(() => setBody(true), 3000);
 
-  const round = p => ({ centerX: +p.centerX.toFixed(5), centerY: +p.centerY.toFixed(5), span: +p.span.toFixed(5), yaw: +p.yaw.toFixed(4), pitch: +p.pitch.toFixed(4) });
+  const round = p => ({ centerX: +p.centerX.toFixed(5), centerY: +p.centerY.toFixed(5), span: +p.span.toFixed(5), yaw: +p.yaw.toFixed(4), pitch: +p.pitch.toFixed(4), roll: +(p.roll ?? 0).toFixed(4) });
   const r4 = a => Array.isArray(a) ? a.map(v => +v.toFixed(4)) : a;   // an upperBodyPose sample, small enough to send
   const trim = s => ({ joints: Object.fromEntries(Object.entries(s.joints).map(([k, v]) => [k, r4(v)])), width: s.width == null ? null : +s.width.toFixed(4),
     shoulder: r4(s.shoulder), hip: r4(s.hip), hipsTracked: s.hipsTracked, evidence: s.evidence, headAnchored: s.headAnchored, partial: s.partial });
