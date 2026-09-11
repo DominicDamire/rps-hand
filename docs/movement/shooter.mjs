@@ -6,8 +6,8 @@
 import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
 import { makeGun, fingersUp } from "../gun.mjs";
-import { setupPunch } from "./punch.mjs?v=83";
-import * as sfx from "./sound.mjs?v=83";
+import { setupPunch } from "./punch.mjs?v=84";
+import * as sfx from "./sound.mjs?v=84";
 
 const TABLE_H = 1.32;   // table top above the floor: the tracked hand sits at chest height in front of the eye (1.65 m)
 // ?mirror=N refreshes the reflection every Nth frame it is on screen (default 3, 1 = every frame)
@@ -57,7 +57,10 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
         _m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); frustum.setFromProjectionMatrix(_m4);
         if (!frustum.intersectsSphere(sphere)) return;   // behind you: keep the texture we already have
         const d = cam.position.distanceTo(mirror.position);
-        const every = MIRROR_EVERY * (d < 3 ? 1 : d < 6 ? 2 : 4);   // across the room a stale reflection is invisible anyway
+        // Measured: slowing the reflection from every 12th frame to every 48th took the page from 97 to 153 fps, the
+        // hand tracker from 24 to 30 and face inference from 43 ms to 21. So it stays quick only while you are close
+        // enough to be looking at yourself in it; across the room a stale reflection is invisible anyway.
+        const every = MIRROR_EVERY * (d < 2.5 ? 1 : d < 5 ? 3 : 8);
         if (tick++ % every) return;
         original.call(this, renderer, sc, cam);
       };

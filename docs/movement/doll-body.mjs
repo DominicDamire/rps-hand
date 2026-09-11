@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=83";
-import { BodyView } from "../body/BodyView.js?v=83";
-import { BodyPose } from "../body/pose.mjs?v=83";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=84";
+import { BodyView } from "../body/BodyView.js?v=84";
+import { BodyPose } from "../body/pose.mjs?v=84";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
