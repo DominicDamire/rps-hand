@@ -140,6 +140,22 @@ def side_island(fam, side):
 
 def mid(a, b): return (a + b) / 2
 
+def corners(i):
+    lo, hi = i["lo"], i["hi"]
+    return [Vector((x, y, z)) for x in (lo.x, hi.x) for y in (lo.y, hi.y) for z in (lo.z, hi.z)]
+
+def joint_between(famA, famB, side=""):
+    """The pivot between two parts of one chain: where their shells actually meet along the chain's own axis.
+    The midpoint of their centroids is not it - on a finger that is a centimetre out, which is most of a phalanx, and
+    the segments visibly fly apart as they curl."""
+    a, b = centroid(famA, side), centroid(famB, side)
+    axis = (b - a)
+    if axis.length < 1e-6: return mid(a, b)
+    axis.normalize()
+    endA = max((c - a).dot(axis) for i in group(famA, side) for c in corners(i))
+    startB = min((c - a).dot(axis) for i in group(famB, side) for c in corners(i))
+    return a + axis * ((endA + startB) / 2)
+
 # ---------------------------------------------------------------- the skeleton: every pivot measured from the parts
 def build_bones():
     B = {}
@@ -160,9 +176,10 @@ def build_bones():
                                          ("Middle", "middleRoot", "middleMid", "middleTip", "middleKnot"),
                                          ("Ring", "ringRoot", "ringMid", "ringTip", "ringKnot"),
                                          ("Pinky", "pinkyRoot", "pinkyMid", "pinkyTip", "pinkyKnot")):
-            add(f"{S}{f}1", f"{S}Hand", centroid(knot, S))
-            add(f"{S}{f}2", f"{S}{f}1", mid(centroid(root, S), centroid(midp, S)))
-            add(f"{S}{f}3", f"{S}{f}2", mid(centroid(midp, S), centroid(tip, S)))
+            add(f"{S}{f}1", f"{S}Hand", centroid(knot, S))          # the knuckle ball the doll actually has
+            add(f"{S}{f}2", f"{S}{f}1", joint_between(root, midp, S))
+            add(f"{S}{f}3", f"{S}{f}2", joint_between(midp, tip, S))
+        # the hip shell is not sided, so the thigh pivot stays the midpoint of the two centroids
         add(f"{S}Thigh", "Hips", mid(centroid("hip"), biggest("tight", S)))
         add(f"{S}Shin", f"{S}Thigh", centroid("knee", S))
         add(f"{S}Foot", f"{S}Shin", smallest("foot", S))

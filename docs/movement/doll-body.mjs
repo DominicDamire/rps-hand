@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=78";
-import { BodyView } from "../body/BodyView.js?v=78";
-import { BodyPose } from "../body/pose.mjs?v=78";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=79";
+import { BodyView } from "../body/BodyView.js?v=79";
+import { BodyPose } from "../body/pose.mjs?v=79";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
@@ -73,7 +73,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
   // with no slack at all, so a stride of any length puts the foot out of reach and it floats. A person solves this by
   // dropping their hips as they walk; so does this. The eyes are pinned a few centimetres lower while walking, which
   // bends the knees and lets the planted foot stay on the floor. Invisible from the player's own eyes.
-  const CROUCH = 0.055;
+  const CROUCH = 0.14;   // the most the hips may drop; the walk only uses what the planted foot actually needs
 
   const restFoot = (out, i, pos, yaw) => {
     const c = Math.cos(yaw), sn = Math.sin(yaw), side = i ? SPREAD : -SPREAD;
@@ -86,7 +86,25 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
     const moved = Math.hypot(pos.x - lastPos.x, pos.z - lastPos.z);
     lastPos.copy(pos);
     gait += (Math.min(1, (moved / Math.max(1e-3, dt)) / 1.2) - gait) * Math.min(1, dt * 6);
-    crouch += (gait * CROUCH - crouch) * Math.min(1, dt * 5);
+    // Crouch exactly as much as the planted foot needs, rather than a fixed amount scaled by speed. The leg is dead
+    // straight at rest, so the moment a contact is further from the thigh than the leg is long the IK clamps and the
+    // foot lifts off the floor. Measuring the shortfall and dropping the hips by it keeps the stance foot down.
+    let need = 0;
+    for (const i of [0, 1]) {
+      if (i === swing) continue;
+      const S = i ? "R" : "L";
+      _t.setFromMatrixPosition(rig.joints[`${S}Thigh`].matrixWorld);
+      const flat = Math.hypot(contact[i].x - _t.x, contact[i].z - _t.z);
+      const legLen = rig.rest[`${S}Shin`].world.distanceTo(rig.rest[`${S}Thigh`].world)
+                   + rig.rest[`${S}Foot`].world.distanceTo(rig.rest[`${S}Shin`].world);
+      const drop = (_t.y + crouch) - (pos.y - EYE_H + ankleH);           // vertical gap without the crouch
+      const reach = Math.sqrt(Math.max(0, (legLen * 0.985) ** 2 - flat * flat));
+      need = Math.max(need, drop - reach);
+    }
+    const want = Math.max(0, Math.min(CROUCH, need));
+    // drop at once when the foot needs it - easing into it left the stance foot briefly in the air right after a
+    // handover - and come back up gently, which is what reads as a walk rather than a bounce
+    crouch = want > crouch ? want : crouch + (want - crouch) * Math.min(1, dt * 6);
 
     if (gait < 0.03 && swing < 0) {                       // standing: settle both feet under the hips
       for (const i of [0, 1]) contact[i].lerp(restFoot(_t, i, pos, yaw), Math.min(1, dt * 5));
@@ -116,6 +134,14 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
       }
     }
 
+    // The hip drop is applied to the two thigh joints, not to the root. Dropping the root moved the shoulders away
+    // from the hands the arms were reaching for - the tracked wrist ended up 10 cm out - and the eyes off the camera.
+    // Lowering only where the legs hang from gives them their slack and leaves the spine, the arms and the head alone.
+    for (const S of ["L", "R"]) {
+      const t = rig.joints[`${S}Thigh`];
+      t.position.y = rig.rest[`${S}Thigh`].world.y - rig.rest.Hips.world.y - crouch;
+    }
+    rig.refresh(rig.joints.Hips);
     for (const [S, i] of [["L", 0], ["R", 1]]) {
       _foot.copy(contact[i]); _foot.y = floor + ankleH;
       if (swing === i && swingT < 1) _foot.y += Math.sin(Math.min(1, swingT) * Math.PI) * LIFT;
@@ -205,20 +231,21 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
         : raw ? `Body · ${mode}` : "Body tracker: hold a relaxed pose";
 
       // --- arms -------------------------------------------------------------------------------------------------
+      // The eyes are pinned BEFORE the arms and legs are solved. Pinning afterwards moved the root out from under
+      // limbs that had already been solved to world targets: it dragged the planted foot 2 cm into the floor, and once
+      // head roll started moving the head it put the hand 14 cm off the tracked wrist.
+      rig.pinEyes(camera.position);
       // The shoulder: a clavicle that never moved left the cap behind while the arm swung away, opening the socket.
       // It lifts with the arm, and the elbow hint is forced behind and below the shoulder so the elbow can never lead
       // forwards and turn the joint inside out.
       const armTo = (S, wrist) => {
         for (const n of ["Hips", "Waist", "Chest"]) rig.refresh(rig.joints[n]);
         const clav = rig.joints[`${S}Clavicle`], sh = rig.joints[`${S}UpperArm`];
-        if (clav && sh) {
-          rig.refresh(clav); rig.refresh(sh);
-          _t.setFromMatrixPosition(sh.matrixWorld);
-          const up = Math.max(0, (wrist.y - _t.y) / 0.45);              // how far above the shoulder the hand is
-          clav.rotation.z = (S === "R" ? -1 : 1) * Math.min(0.35, up * 0.3);
-          rig.refresh(clav); rig.refresh(sh);
-          _t.setFromMatrixPosition(sh.matrixWorld);
-        }
+        // The clavicle is deliberately left alone. Lifting it with the arm was meant to close the shoulder socket, but
+        // measured both ways it moves the shoulder further from the hand - the shoulder-to-wrist distance went from
+        // 0.52 m to 0.58 m against an arm that reaches 0.517 - and the hand ended up 8-10 cm off the tracked wrist.
+        // Accuracy at the hand matters more than a seam at the shoulder, and a cosmetic gap is the model's to fix.
+        if (clav && sh) { rig.refresh(clav); rig.refresh(sh); _t.setFromMatrixPosition(sh.matrixWorld); }
         // elbow hint: out to the side, down, and behind the shoulder in body space
         _hint.set(S === "R" ? 0.32 : -0.32, -0.34, 0.2).applyAxisAngle(UP, heading).add(_t);
         rig.reach(`${S}UpperArm`, `${S}Forearm`, `${S}Hand`, wrist, _hint);
@@ -257,10 +284,6 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
       }
 
       // --- legs -------------------------------------------------------------------------------------------------
-      // The eyes are pinned BEFORE the legs are solved: pinning afterwards dragged the planted foot down with
-      // the root and sank it 2 cm into the floor.
-      _crouched.copy(camera.position); _crouched.y -= bodyCrouch();   // the walk's hip drop, so the legs have slack
-      rig.pinEyes(_crouched);
       if (mode !== "head") {
         legs(dt, camera.position, heading);
         // an arm that nothing is tracking swings with the opposite leg, which is what a person does
