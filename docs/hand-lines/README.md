@@ -7,3 +7,7 @@ The three segments of each digit use consecutive tracker endpoints. Each joint i
 Controls at the top: smoothing in milliseconds, positional deadband in estimated model millimetres, thumb-tip contact proximity in source-image pixels, and distal coupling strength. All default to zero for direct tracking. Contact compares thumb to each fingertip, snaps endpoints to their midpoint and releases at 1.5 times the entry distance. It does not classify skin pixels or prove physical contact. Coupling optionally makes the final finger bend follow the preceding bend; it excludes the thumb. These assists intentionally deviate from raw points.
 
 Validation: direct-check.html loads the real asset and verifies both hands' joint and transformed mesh endpoints against synthetic targets, with maximum error below 1e-6 metres. Sample image tracking loaded successfully. Actual phone-camera quality and occluded depth remain unverified.
+
+## Finger shape update
+
+Thickness scales both transverse axes of all finger segments (default 1.3). Tip inset extends distal meshes beyond their tracked endpoints (default 2 estimated mm), leaving the tracked joint positions unchanged. Contact proximity now starts at 8 pixels; smoothing, deadband and coupling remain zero. Save starting settings persists these six controls locally; Restore defaults restores the new defaults. Excessive thickness/inset can intersect meshes; this is not collision physics. The original GLB is unchanged. Geometry check now verifies 1.3 thickness and 2 mm extension on both hands.

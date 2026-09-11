@@ -2,7 +2,7 @@ import * as T from 'three';
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>[m,m.matrix.clone()]));let held=null,lastSide=null,contact=null;
  const fingers=['Thumb','Index','Middle','Ring','Pinky'];
- return function(points,side,palmQ,dt,{smooth=0,threshold=0,contactPixels=0,coupling=0,lm,width,height}){
+ return function(points,side,palmQ,dt,{smooth=0,threshold=0,contactPixels=0,coupling=0,thickness=1,tipInset=0,lm,width,height}){
   if(lastSide!==side){held=null;contact=null;lastSide=side;}
   let p=points.map(v=>v.clone());
   if(!held)held=p.map(v=>v.clone());
@@ -29,7 +29,7 @@ export function directDriver(rig,tips){
    const facing=axis.clone().applyQuaternion(palmQ),q=new T.Quaternion().setFromUnitVectors(facing,target.clone().normalize()).multiply(palmQ);
    rig.setWorldQuat(name,q);rig.refresh(j);
    const basis=new T.Quaternion().setFromUnitVectors(new T.Vector3(0,0,1),axis),rot=new T.Matrix4().makeRotationFromQuaternion(basis);
-   const stretch=rot.clone().multiply(new T.Matrix4().makeScale(1,1,target.length()/length)).multiply(rot.clone().invert());
+   const stretch=rot.clone().multiply(new T.Matrix4().makeScale(thickness,thickness,(target.length()+(k===3?tipInset/1000:0))/length)).multiply(rot.clone().invert());
    for(const m of rig.parts)if(m.parent===j){m.matrixAutoUpdate=false;m.matrix.copy(stretch).multiply(matrices.get(m));m.matrixWorldNeedsUpdate=true;}
   }
   rig.root.updateMatrixWorld(true);return {points:p,contact};

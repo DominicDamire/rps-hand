@@ -1,4 +1,4 @@
-import {directDriver} from './direct.mjs?v=1';
+import {directDriver} from './direct.mjs?v=2';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -164,7 +164,7 @@ for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,1
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
 configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready. Connect camera or Phone camera · QR. Zero assistance follows the tracked segments.');
 let lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(stream&&!editing&&$('video').readyState>=2&&!inflight&&$('video').currentTime!==lastVideo){lastVideo=$('video').currentTime;detect($('video'));}
- if(now-lastPaint<16)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,{smooth:+$('directSmooth').value,threshold:+$('directThreshold').value,contactPixels:+$('directContact').value,coupling:+$('directCoupling').value,lm:latest.landmarks,width:$('preview').width,height:$('preview').height});$('directStatus').textContent=directResult.contact?'Estimated fingertip contact held':'Direct tracking · no pose presets';}if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked;
+ if(now-lastPaint<16)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,{smooth:+$('directSmooth').value,threshold:+$('directThreshold').value,contactPixels:+$('directContact').value,coupling:+$('directCoupling').value,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm:latest.landmarks,width:$('preview').width,height:$('preview').height});$('directStatus').textContent=directResult.contact?'Estimated fingertip contact held':'Direct tracking · no pose presets';}if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked;
  for(const n of JOINTS){const dot=jointDots[n];dot.visible=true;dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  for(const [i,f] of FINGERS.entries())tipDots[f].position.copy(directResult?directResult.points[4+i*4]:tipWorld(rig,tips,side,f));
  modelLines.visible=$('dots').checked;let lineIndex=0;const linePoints=lineGeometry.attributes.position;
@@ -174,3 +174,9 @@ let lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if
  if(pinching&&!editing)$('contactState').textContent=(contactHold?'Contact held · ':'Closing contact · ')+'thumb–'+pinchFinger.toLowerCase()+' gap '+(tipDots.Thumb.position.distanceTo(tipDots[pinchFinger].position)*1000).toFixed(1)+' mm';
  const j=rig.joints[side+selected];gizmo.position.setFromMatrixPosition(j.matrixWorld);gizmo.quaternion.copy(j.parent.getWorldQuaternion(new THREE.Quaternion())).multiply(jointBasis(selected));renderer.render(scene,camera);
 }requestAnimationFrame(loop);addEventListener('pagehide',()=>{stopCamera();worker?.terminate();});
+
+const startFields=['directSmooth','directThreshold','directContact','directCoupling','fingerThickness','tipInset'];
+function restoreStart(values){for(const id of startFields){const el=$(id),value=Number(values[id]);if(Number.isFinite(value)&&value>=Number(el.min)&&value<=Number(el.max)){el.value=value;el.nextElementSibling.value=value;}}}
+try{const saved=JSON.parse(localStorage.getItem('direct-lines-start-v2')||'null');if(saved)restoreStart(saved);}catch{}
+$('saveStart').onclick=()=>{try{localStorage.setItem('direct-lines-start-v2',JSON.stringify(Object.fromEntries(startFields.map(id=>[id,+$(id).value]))));$('startStatus').textContent='Starting settings saved in this browser.';}catch{$('startStatus').textContent='Browser storage unavailable.';}};
+$('resetStart').onclick=()=>{restoreStart({directSmooth:0,directThreshold:0,directContact:8,directCoupling:0,fingerThickness:1.3,tipInset:2});$('startStatus').textContent='Defaults restored. Save to use on next visit.';};
