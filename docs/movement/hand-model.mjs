@@ -327,7 +327,8 @@ function makeRigSkin(variant, color) {
 // group sits at (0, -height, -dist) in the eye's frame, turned half a turn about the vertical axis. A proper rotation,
 // so the right hand stays a right hand and appears on the right.
 // Joint depths come from the world model + one translation (locate, as the main page); the picture fixes x/y exactly.
-export const view = { phoneFov: 60, dist: 0.5, height: 0.15, tilt: 0, smooth: 0.5 };   // sliders write here
+export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5 };   // sliders write here
+const MIN_AHEAD = 0.25;   // the hand is never closer than this to the eye (a hand farther from the phone than `dist` would land behind the eye and vanish)
 function locate(world, image, W, H) {
   const k = 2 * Math.tan(view.phoneFov * Math.PI / 360), n = 21;
   const xu = new Float32Array(n), yv = new Float32Array(n);
@@ -351,6 +352,7 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
   rigPromise ??= loadRig("../arm");
   const ready = rigPromise.then(rig => { skinR = makeRigSkin(rig.R, 0xd9a58a); skinL = makeRigSkin(rig.L, 0xd9a58a); group.add(skinR.mesh, skinL.mesh); }).catch(e => console.warn("hand mesh unavailable:", e));
   const pts = Array.from({ length: 21 }, () => new THREE.Vector3()), q = new THREE.Quaternion(), ax = new THREE.Vector3(1, 0, 0), _w = new THREE.Vector3();
+  const offset = [0, 0.6];   // [height, dist] the group is placed with (sent to the other player so their copy lands in the same place)
   let shown = false;
   function drive() {   // the rig follows pts
     shown = true; if (!skinR) return;
@@ -359,7 +361,7 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
     const right = model.right, on = right ? skinR : skinL, off = right ? skinL : skinR;
     off.mesh.visible = false; on.update(pts, right);
   }
-  const model = { group, ready, points: pts, get visible() { return shown; }, get right() { return chir * CHIR_RIGHT >= 0; },
+  const model = { group, ready, points: pts, offset, get visible() { return shown; }, get right() { return chir * CHIR_RIGHT >= 0; },
     update(image, world, W, H) {   // from the tracker: picture + world landmarks -> the phone's GL frame
       const [Tz, xu, yv] = locate(world, image, W, H); if (!Number.isFinite(Tz) || Tz <= 0.05) return;
       q.setFromAxisAngle(ax, view.tilt * Math.PI / 180);
@@ -369,8 +371,8 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
         _w.set(xu[i] * z, -yv[i] * z, -z).applyQuaternion(q);   // x right, y up, z toward the phone; tilt levelled
         pts[i].lerp(_w, a);
       }
-      group.position.set(0, -view.height, -view.dist);
-      window.dbg = Object.assign(window.dbg || {}, { model: pts }); drive();
+      offset[0] = view.height; offset[1] = Math.max(view.dist, Tz + MIN_AHEAD); group.position.set(0, -offset[0], -offset[1]);
+      window.dbg = Object.assign(window.dbg || {}, { model: pts, offset }); drive();
     },
     setPoints(flat, o) {   // from the network: 63 numbers in the other player's phone frame + their [height, dist]
       if (flat?.length !== 63) { model.hide(); return; }

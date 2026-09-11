@@ -73,7 +73,7 @@ async function start(){
       held.receive(sample,lastResult);
       trackingLog.push({time:lastResult,captureTime:data.time,point:sample?.point??null,rest:sample?.rest??false,centre:held.centre,raw:held.raw,x:held.x,z:held.z,reason:held.reason});while(trackingLog.length>450||trackingLog.length&&lastResult-trackingLog[0].time>15000)trackingLog.shift();
       const active=!!held.direction;walkReason=handIndex<0?'SHOW YOUR LEFT HAND':held.reason;
-      $('gestureStats').textContent=`${fingerMode.toUpperCase()} X ${held.x.toFixed(2)} · Y ${(-held.z).toFixed(2)} · raw X ${held.raw.x.toFixed(2)} Y ${(-held.raw.z).toFixed(2)} · tracker ${Math.round(data.inferenceMs||0)} ms`;
+      $('gestureStats').textContent=`${fingerMode.toUpperCase()} X ${held.x.toFixed(2)} · Y ${(-held.z).toFixed(2)} · raw X ${held.raw.x.toFixed(2)} Y ${(-held.raw.z).toFixed(2)} · tracker ${Math.round(data.inferenceMs||0)} ms · hands ${n}${n===1?' (show both: left steers, right is the model)':''}`;
       trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,active,{tip:fingerMode==='index'?8:4,centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,active,x:held.x,z:held.z,reason:held.reason});
       status(active?fingerMode.toUpperCase()+' · '+held.direction:walkReason,active);
     }
@@ -102,10 +102,10 @@ $('centerThumb').onclick=()=>{held.reset();status('Show '+fingerMode+' to place 
 $('joystickSize').oninput=()=>{held.setSize(+$('joystickSize').value);$('joystickSizeValue').textContent=Math.round(held.size*100)+'%';};
 $('gain').oninput=()=>held.speed=+$('gain').value;
 const VIEW=['viewFov','phoneFov','handDist','handHeight','handTilt'];
-try{const saved=JSON.parse(localStorage.getItem('move.view')||'{}');for(const id of VIEW)if(saved[id]!=null)$(id).value=saved[id];}catch{}
+try{const saved=JSON.parse(localStorage.getItem('move.view2')||'{}');for(const id of VIEW)if(saved[id]!=null)$(id).value=saved[id];}catch{}
 function applyView(){camera.fov=+$('viewFov').value;camera.updateProjectionMatrix();handView.phoneFov=+$('phoneFov').value;handView.dist=+$('handDist').value;handView.height=+$('handHeight').value;handView.tilt=+$('handTilt').value;
  $('viewFovValue').textContent=camera.fov+'°';$('phoneFovValue').textContent=handView.phoneFov+'°';$('handDistValue').textContent=handView.dist.toFixed(2)+' m';$('handHeightValue').textContent=handView.height.toFixed(2)+' m';$('handTiltValue').textContent=handView.tilt+'°';
- try{localStorage.setItem('move.view',JSON.stringify(Object.fromEntries(VIEW.map(id=>[id,$(id).value]))));}catch{}}
+ try{localStorage.setItem('move.view2',JSON.stringify(Object.fromEntries(VIEW.map(id=>[id,$(id).value]))));}catch{}}
 for(const id of VIEW)$(id).oninput=applyView;applyView();
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
 document.querySelectorAll('[data-look]').forEach(b=>b.onclick=()=>{lookDemo=+b.dataset.look;if(!lookDemo)headLook.speed=0;});
@@ -136,7 +136,7 @@ function frame(now){
  const dot=$('joystickDot');dot.style.transform=`translate(${held.x*30}px,${held.z*30}px)`;$('joystickState').textContent=resting?'REST':held.direction||held.reason;
  }
  if(remote.group.visible){const k=Math.min(1,dt*12);remote.group.position.lerp(remote.target.p,k);remote.group.rotation.y+=(remote.target.yaw-remote.group.rotation.y)*k;remote.eye.rotation.x+=(remote.target.pitch-remote.eye.rotation.x)*k;if(now-remote.seen>3000){remote.group.visible=false;remote.hand.hide();}}
- if(net?.opp?.open&&now-lastSent>=50){lastSent=now;const h=handModel.visible?handModel.points.flatMap(p=>[+p.x.toFixed(3),+p.y.toFixed(3),+p.z.toFixed(3)]):null;net.sendHands({t:'h',p:[+camera.position.x.toFixed(2),+camera.position.y.toFixed(2),+camera.position.z.toFixed(2)],r:[+camera.rotation.x.toFixed(3),+camera.rotation.y.toFixed(3)],h,o:[handView.height,handView.dist],ts:Math.round(now)});}
+ if(net?.opp?.open&&now-lastSent>=50){lastSent=now;const h=handModel.visible?handModel.points.flatMap(p=>[+p.x.toFixed(3),+p.y.toFixed(3),+p.z.toFixed(3)]):null;net.sendHands({t:'h',p:[+camera.position.x.toFixed(2),+camera.position.y.toFixed(2),+camera.position.z.toFixed(2)],r:[+camera.rotation.x.toFixed(3),+camera.rotation.y.toFixed(3)],h,o:handModel.offset,ts:Math.round(now)});}
  renderer.render(scene,camera);
 }controlsChanged();requestAnimationFrame(frame);
 if(new URLSearchParams(location.search).has('cam')){$('start').textContent='Connect phone camera';start();}   // phone-as-camera mode: no local permission prompt, connect right away

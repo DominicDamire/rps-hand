@@ -14,7 +14,7 @@ async def page(b, errors, tag):
     pg = await b.new_page(viewport={"width": 1000, "height": 640})
     pg.on("pageerror", lambda e: errors.append(tag + ": " + str(e)))
     pg.on("console", lambda m: errors.append(tag + ": " + m.text[:150]) if m.type == "error" and "favicon" not in m.text else None)
-    await pg.add_init_script("localStorage.setItem('move.view', " + repr(VIEW) + ")")
+    await pg.add_init_script("localStorage.setItem('move.view2', " + repr(VIEW) + ")")
     await pg.goto(URL + "&t=" + tag); await pg.wait_for_timeout(1500)
     return pg
 
