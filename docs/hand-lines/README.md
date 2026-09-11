@@ -11,3 +11,7 @@ Validation: direct-check.html loads the real asset and verifies both hands' join
 ## Finger shape update
 
 Thickness scales both transverse axes of all finger segments (default 1.3). Tip inset extends distal meshes beyond their tracked endpoints (default 2 estimated mm), leaving the tracked joint positions unchanged. Contact proximity now starts at 8 pixels; smoothing, deadband and coupling remain zero. Save starting settings persists these six controls locally; Restore defaults restores the new defaults. Excessive thickness/inset can intersect meshes; this is not collision physics. The original GLB is unchanged. Geometry check now verifies 1.3 thickness and 2 mm extension on both hands.
+
+## View and two-hand update
+Fingertip inset now ranges from 0 to 100 estimated mm. View switches between camera mirror and an opposite-side first-person inspection camera; no head tracking is added. Both detected hands render by default, with independent filter/contact state and blue skeleton lines for the second hand. MediaPipe was already configured for two hands. Single-hand first-person sample verified; live two-hand input remains unverified.
+
