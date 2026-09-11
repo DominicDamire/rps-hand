@@ -1,6 +1,6 @@
-import {FINGERS,JOINTS,blankAngles,constrainAngles} from './profile.mjs?v=4';
+import {FINGERS,JOINTS,blankAngles,constrainAngles} from './profile.mjs?v=5';
 export const FIST={Thumb1:[-9,10,1],Thumb2:[1,-20,0],Thumb3:[-27,-47,-12],Index1:[80,0,0],Index2:[90,-7,0],Index3:[90,0,0],Middle1:[80,0,0],Middle2:[90,-2,0],Middle3:[90,0,0],Ring1:[80,0,0],Ring2:[90,0,0],Ring3:[80,0,0],Pinky1:[80,0,0],Pinky2:[90,8,0],Pinky3:[90,7,0]};
-export function alignment(n){return n.startsWith('Thumb')?[0,0,0]:[0,FIST[n][1],FIST[n][2]];}
+export function alignment(n){return [0,FIST[n][1],FIST[n][2]];}
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const smooth=v=>{v=clamp(v,0,1);return v*v*(3-2*v);};
 function bend(a,b,c){const u=b.map((x,i)=>x-a[i]),v=c.map((x,i)=>x-b[i]);return Math.acos(clamp(u.reduce((s,x,i)=>s+x*v[i],0)/(Math.hypot(...u)*Math.hypot(...v)||1),-1,1))*180/Math.PI;}
@@ -15,3 +15,6 @@ export class Settler{
 }
 export function depthEstimate(lm,world,aspect=1){const pairs=[[0,5],[0,9],[0,17],[5,17]],values=[];for(const [a,b] of pairs){const projected=Math.hypot((lm[b].x-lm[a].x)*aspect,lm[b].y-lm[a].y),physical=Math.hypot(world[b].x-world[a].x,world[b].y-world[a].y);if(projected>.015&&physical>.015)values.push(physical/projected);}if(!values.length)return null;values.sort((a,b)=>a-b);return values[Math.floor(values.length/2)]/(2*Math.tan(Math.PI/6));}
 export function positionAt(lm,depth,aspect,mirror=true){const h=2*depth*Math.tan(Math.PI/6);return [(lm[0].x-.5)*h*aspect*(mirror?-1:1),(.5-lm[0].y)*h,-depth];}
+
+export function straightJoints(points,previous={},tolerance=10){const out={};for(const [f,i] of [['Index',5],['Middle',9],['Ring',13],['Pinky',17]])for(const [k,a,b,c] of [[2,i,i+1,i+2],[3,i+1,i+2,i+3]]){const n=f+k,angle=bend(points[a],points[b],points[c]);out[n]=tolerance>0&&angle<(previous[n]?tolerance+6:tolerance);}return out;}
+export function pinchDistance(points){const a=points[4],b=points[8],w=points[5],p=points[17];return Math.hypot(...a.map((v,i)=>v-b[i]))/Math.max(.001,Math.hypot(...w.map((v,i)=>v-p[i])));}

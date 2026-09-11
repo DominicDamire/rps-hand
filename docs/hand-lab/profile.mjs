@@ -32,16 +32,17 @@ export function validateProfile(input){
   const angles=blankAngles();for(const n of JOINTS){if(!Array.isArray(p.angles?.[n])||p.angles[n].length!==3||!p.angles[n].every(x=>finite(x,-180,180)))throw Error('Invalid angles: '+n);angles[n]=[...p.angles[n]];}
   let capture=null;if(p.capture!=null){if(typeof p.capture!=='string'||!/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(p.capture)||p.capture.length>700000)throw Error('Invalid saved image');capture=p.capture;}
   if(p.referenceCurl!=null&&(!Array.isArray(p.referenceCurl)||p.referenceCurl.length!==4||!p.referenceCurl.every(x=>finite(x,0,1))))throw Error('Invalid reference curl');
-  out.poses.push({...(p.referenceCurl?{referenceCurl:[...p.referenceCurl],referenceEnabled:p.referenceEnabled!==false}:{}),id:p.id,name:p.name.trim(),side:p.side,features:[...p.features],angles,capture});
+  if(p.solvedAngles!=null)for(const n of JOINTS)if(!Array.isArray(p.solvedAngles[n])||p.solvedAngles[n].length!==3||!p.solvedAngles[n].every(x=>finite(x,-180,180)))throw Error('Invalid solved pose');
+  out.poses.push({...(p.solvedAngles?{solvedAngles:structuredClone(p.solvedAngles)}:{}),...(p.referenceCurl?{referenceCurl:[...p.referenceCurl],referenceEnabled:p.referenceEnabled!==false}:{}),id:p.id,name:p.name.trim(),side:p.side,features:[...p.features],angles,capture});
  }
  return out;
 }
 
 // Structural constraints take precedence over user limits and imported poses.
-export const lockedAxis=(name,axis)=>axis===2||(axis===1&&!name.endsWith('1'));
+export const lockedAxis=(name,axis)=>axis===2||(axis===1&&!name.endsWith('1')&&name!=='Thumb2');
 export function constrainJoint(name,values,limits){return values.map((v,i)=>lockedAxis(name,i)?0:limits?.[i]?.enabled?Math.max(limits[i].min,Math.min(limits[i].max,v)):v);}
 export const constrainAngles=(angles,limits)=>Object.fromEntries(JOINTS.map(n=>[n,constrainJoint(n,angles[n],limits[n])]));
 export function directionAngles(name,[x,y,z],previous=0){
  const radial=Math.hypot(y,z),bend=radial<1e-8?previous:Math.atan2(-y,z)*180/Math.PI;
- return [bend,name.endsWith('1')?Math.atan2(x,radial)*180/Math.PI:0,0];
+ return [bend,(name.endsWith('1')||name==='Thumb2')?Math.atan2(x,radial)*180/Math.PI:0,0];
 }
