@@ -27,7 +27,7 @@
   <footer style="color:#9aa4b8;font-size:13px">Keep this page open and the phone awake. Hold the phone so it sees your hands (and face for head look).</footer>
 </div>
 <script type="module">
-import { startPhone } from "./phone.mjs?v=80";
+import { startPhone } from "./phone.mjs?v=82";
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search), q = params.get("cam"), VIDEO = params.has("video");
 let last = ""; try { last = localStorage.getItem("rpsh_last_cam") || ""; } catch {}
@@ -40,7 +40,7 @@ async function go() {
   try {
     // Default: track here and send the landmarks (works on any network). ?video=1: send the camera itself over WebRTC,
     // which only completes when the phone and the PC can reach each other directly (one Wi-Fi, no client isolation).
-    if (VIDEO) { const { sendCamera } = await import("./camlink.mjs?v=80"); await sendCamera(c, $("cam"), t => $("status").textContent = t); }
+    if (VIDEO) { const { sendCamera } = await import("./camlink.mjs?v=82"); await sendCamera(c, $("cam"), t => $("status").textContent = t); }
     else await startPhone(c, $("cam"), t => $("status").textContent = t);
   } catch (e) { $("status").textContent = "error: " + e.message; $("go").disabled = false; }
 }
