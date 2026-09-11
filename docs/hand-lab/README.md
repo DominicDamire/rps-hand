@@ -30,3 +30,7 @@ Camera processing uses the existing MediaPipe worker locally in the browser. Ass
 ## Validation
 
 Run `node --test docs/hand-lab/profile.test.mjs`. Tests cover invariant signatures, nearest-pose recognition, hand-side isolation, enabled-only limits, JSON roundtrip and malformed import rejection. Browser checks exercised image inference, freeze/edit/save, a 72-degree correction on recognition, a 45-degree limit, invalid import rejection and valid import. Live webcam performance depends on the user's camera and hardware; image tests do not measure webcam latency.
+
+## Phone camera via QR
+
+On the PC click **Phone camera · QR**, scan the code on your phone, choose front/back camera and tap **Start camera**. Keep the phone page open. Both devices should use the same Wi-Fi; networks with client isolation or blocked WebRTC may not connect. This lab connection uses PeerJS signaling and direct WebRTC video with STUN; no TURN relay is configured. Tracking runs on the PC against the received video. Freeze captures the exact received frame just as it does for a local webcam. Disconnect on the PC or Stop camera on the phone ends sharing. Each connection has a fresh random pairing address, separate from the game's camera codes.

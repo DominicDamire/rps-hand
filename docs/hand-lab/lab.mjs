@@ -1,9 +1,11 @@
+import {receivePhone} from './phone-link.mjs?v=2';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
 import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile} from './profile.mjs?v=1';
 const $=id=>document.getElementById(id),clone=x=>JSON.parse(JSON.stringify(x)),RAD=Math.PI/180,KEY='hand-pose-lab-v1';
 let profile=emptyProfile();try{const saved=localStorage.getItem(KEY);if(saved)profile=validateProfile(JSON.parse(saved));}catch{$('notice').textContent='Saved profile could not be read. Import your JSON backup to recover it.';}
+let closePhone=null;
 let side='R',selected='Index1',editing=false,latest=null,editBase=null,frozenFeature=null,frozenCapture=null,savedId=null,angles=blankAngles(),epoch=0,stream=null,worker=null,workerReady=null,request=null,inflight=false,lastVideo=-1,sampleSource=null;
 const palmQ=new THREE.Quaternion(),frozenPalm=new THREE.Quaternion(),basisCache={},jointDots={};
 const notice=t=>$('notice').textContent=t;
@@ -66,9 +68,10 @@ async function detect(source){if(inflight||editing)return;inflight=true;const to
  $('matchState').textContent=match?'Matched “'+match.pose.name+'” · distance '+match.distance.toFixed(3):'No saved match — tracker pose';$('captureState').textContent=(stream?'Live camera':'Image input')+' · '+data.landmarks.length+' hand(s) · '+Math.round(data.inferenceMs)+' ms inference';updateMode();
  }catch(e){notice(e.message);}finally{inflight=false;}
 }
-function stopCamera(){epoch++;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
+function stopCamera(){epoch++;closePhone?.();closePhone=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
 async function startCamera(){try{stopCamera();editing=false;sampleSource=null;latest=null;notice('Opening camera…');const id=$('cameraSelect').value;stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(id?{deviceId:{exact:id}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}}});$('video').srcObject=stream;await $('video').play();lastVideo=-1;await listCameras();await ensureWorker();notice('Make a pose, then click Freeze & edit.');updateMode();}catch(e){stopCamera();notice('Camera could not start: '+e.message);}}
 async function listCameras(){const current=$('cameraSelect').value,devices=await navigator.mediaDevices.enumerateDevices();$('cameraSelect').replaceChildren(new Option('Default camera',''));for(const d of devices.filter(d=>d.kind==='videoinput'))$('cameraSelect').add(new Option(d.label||'Camera '+($('cameraSelect').options.length),d.deviceId));$('cameraSelect').value=current;}
+$('phone').onclick=()=>{stopCamera();editing=false;sampleSource=null;latest=null;updateMode();try{closePhone=receivePhone(async incoming=>{stream=incoming;$('video').srcObject=incoming;lastVideo=-1;try{await $('video').play();if(stream!==incoming)return;await ensureWorker();notice('Phone camera connected. Hold a pose, then Freeze & edit.');updateMode();}catch(e){stopCamera();notice('Could not start phone video: '+e.message);}},notice,message=>{stopCamera();notice(message);});}catch(e){notice(e.message);}};
 $('start').onclick=startCamera;$('stop').onclick=stopCamera;
 async function loadImage(url){stopCamera();editing=false;latest=null;updateMode();const img=new Image();img.src=url;await img.decode();sampleSource=img;notice('Image input — edit it just like a camera pose.');await detect(img);}
 $('sample').onclick=()=>loadImage(new URL('../test/count5.png',import.meta.url).href).catch(e=>notice(e.message));
@@ -115,4 +118,3 @@ let lastPaint=0;function loop(now){requestAnimationFrame(loop);if(stream&&!editi
  for(const n of JOINTS){const dot=jointDots[n];dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  const j=rig.joints[side+selected];gizmo.position.setFromMatrixPosition(j.matrixWorld);gizmo.quaternion.copy(j.parent.getWorldQuaternion(new THREE.Quaternion())).multiply(jointBasis(selected));renderer.render(scene,camera);
 }requestAnimationFrame(loop);addEventListener('pagehide',()=>{stopCamera();worker?.terminate();});
-
