@@ -1,6 +1,7 @@
-import {FINGERS,JOINTS,blankAngles,constrainAngles} from './profile.mjs?v=6';
+import {FINGERS,JOINTS,blankAngles,constrainAngles} from './profile.mjs?v=7';
 export const FIST={Thumb1:[-9,10,1],Thumb2:[1,-20,0],Thumb3:[-27,-47,-12],Index1:[80,0,0],Index2:[90,-7,0],Index3:[90,0,0],Middle1:[80,0,0],Middle2:[90,-2,0],Middle3:[90,0,0],Ring1:[80,0,0],Ring2:[90,0,0],Ring3:[80,0,0],Pinky1:[80,0,0],Pinky2:[90,8,0],Pinky3:[90,7,0]};
 export function alignment(n){return [0,FIST[n][1],FIST[n][2]];}
+export function poseAlignment(n,thumbCurl=1){const a=alignment(n);return n.startsWith('Thumb')?a.map(v=>v*Math.max(0,Math.min(1,thumbCurl))):a;}
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const smooth=v=>{v=clamp(v,0,1);return v*v*(3-2*v);};
 function bend(a,b,c){const u=b.map((x,i)=>x-a[i]),v=c.map((x,i)=>x-b[i]);return Math.acos(clamp(u.reduce((s,x,i)=>s+x*v[i],0)/(Math.hypot(...u)*Math.hypot(...v)||1),-1,1))*180/Math.PI;}

@@ -1,9 +1,16 @@
 import * as THREE from 'three';
-export function buildTips(rig){rig.root.updateMatrixWorld(true);const out={};for(const S of ['R','L'])for(const f of ['Thumb','Index','Middle','Ring','Pinky']){const j=rig.joints[S+f+'3'],origin=rig.rest[S+f+'3'].world,dir=origin.clone().sub(rig.rest[S+f+'2'].world).normalize(),points=[];let max=-Infinity;for(const m of rig.parts.filter(m=>m.name.startsWith(S+f+'3__'))){const attr=m.geometry.attributes.position;for(let i=0;i<attr.count;i++){const v=new THREE.Vector3().fromBufferAttribute(attr,i).applyMatrix4(m.matrixWorld);const d=v.clone().sub(origin).dot(dir);points.push([v,d]);max=Math.max(max,d);}}const tip=new THREE.Vector3();let count=0;for(const [v,d] of points)if(d>max-.001){tip.add(v);count++;}if(!count)throw Error('Missing fingertip geometry: '+S+f);tip.divideScalar(count);out[S+f]=j.worldToLocal(tip);}return out;}
+export function buildTips(rig){rig.root.updateMatrixWorld(true);const out={};for(const S of ['R','L'])for(const f of ['Thumb','Index','Middle','Ring','Pinky']){const j=rig.joints[S+f+'3'],origin=rig.rest[S+f+'3'].world,dir=origin.clone().sub(rig.rest[S+f+'2'].world).normalize(),points=[];let max=-Infinity;for(const m of rig.parts.filter(m=>!m.userData.hiddenThumbBase&&m.name.startsWith(S+f+'3__'))){const attr=m.geometry.attributes.position;for(let i=0;i<attr.count;i++){const v=new THREE.Vector3().fromBufferAttribute(attr,i).applyMatrix4(m.matrixWorld);const d=v.clone().sub(origin).dot(dir);points.push([v,d]);max=Math.max(max,d);}}const tip=new THREE.Vector3();let count=0;for(const [v,d] of points)if(d>max-.001){tip.add(v);count++;}if(!count)throw Error('Missing fingertip geometry: '+S+f);tip.divideScalar(count);out[S+f]=j.worldToLocal(tip);}return out;}
 export function tipWorld(rig,tips,side,finger){return rig.joints[side+finger+'3'].localToWorld(tips[side+finger].clone());}
 // Preserve the original connected metacarpal and both outer thumb segments.
-// Preserve the original connected metacarpal and both outer thumb segments.
-export function tuckThumb(rig){for(const S of ['R','L']){const j=rig.joints[S+'Thumb1'];j.position.copy(rig.rest[S+'Thumb1'].world).sub(rig.rest[S+'Hand'].world);}for(const m of rig.parts)if(/^[RL]Thumb1__/.test(m.name))m.userData.hiddenThumbBase=false;}
+export function tuckThumb(rig){
+ for(const S of ['R','L']){
+  const j=rig.joints[S+'Thumb1'];
+  if(!j.userData.raisedThumb){const shift=rig.rest[S+'Middle1'].world.clone().sub(rig.rest[S+'Hand'].world).normalize().multiplyScalar(.004);for(const k of [1,2,3])rig.rest[S+'Thumb'+k].world.add(shift);j.userData.raisedThumb=true;}
+  j.position.copy(rig.rest[S+'Thumb1'].world).sub(rig.rest[S+'Hand'].world);
+ }
+ for(const m of rig.parts)if(/^[RL]Thumb1__/.test(m.name))m.userData.hiddenThumbBase=false;
+ rig.root.updateMatrixWorld(true);
+}
 // Bounded fitting of true mesh endpoints, without moving joints apart or stretching bones.
 export function fitPinch(rig,tips,side,values,basis,limits){const names=['Thumb1','Thumb2','Thumb3','Index1','Index2','Index3'],start=structuredClone(values),work=structuredClone(values),hand=rig.joints[side+'Hand'];
  const update=()=>{for(const n of names){const q=basis(n),v=work[n];rig.joints[side+n].quaternion.copy(q).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...v.map(x=>x*Math.PI/180),'XYZ'))).multiply(q.clone().invert());}hand.updateMatrixWorld(true);};

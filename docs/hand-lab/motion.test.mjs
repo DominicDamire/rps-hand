@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {Settler,depthEstimate,positionAt,referencePose,FIST,alignment} from './motion.mjs';import {blankAngles} from './profile.mjs';
-import {AngleLimiter} from './motion.mjs';
+import {AngleLimiter,poseAlignment} from './motion.mjs';
 test('final angle deadband rejects jitter and permits accumulated slow movement',()=>{const f=new AngleLimiter();f.seed([30]);for(let i=0;i<120;i++)assert.equal(f.step([30+Math.sin(i)*2.9],1/60,3,180)[0],30);assert.equal(f.step([34],1/60,3,180)[0],33);assert.equal(f.step([34],1/60,3,180)[0],34);});
 test('angle speed cap is independent of frame rate and rejects large jumps',()=>{for(const hz of [30,60,120]){const f=new AngleLimiter();f.seed([0]);let previous=0;for(let i=0;i<hz/2;i++){const value=f.step([120],1/hz,3,180)[0];assert.ok(value-previous<=180/hz+1e-9);previous=value;}assert.ok(Math.abs(previous-90)<1e-8);}});
 test('zero deadband allows fine motion but retains speed cap on reversals',()=>{const f=new AngleLimiter();f.seed([0]);assert.equal(f.step([.5],1/60,0,180)[0],.5);assert.equal(f.step([-90],1/60,0,180)[0],-2.5);});
@@ -10,3 +10,5 @@ test('doubling apparent palm size halves estimated depth',()=>{const w=Array.fro
 test('3D translation follows mirrored wrist and changes depth without camera movement',()=>{const lm=[{x:.25,y:.25}];const p=positionAt(lm,.5,1.5);assert.ok(p[0]>0&&p[1]>0);assert.equal(p[2],-.5);assert.equal(positionAt(lm,.25,1.5)[2],-.25);});
 
 test('disabling tolerance releases an existing hold',()=>{const f=new Settler();for(let i=0;i<30;i++)f.step([60],.033,1);assert.ok(f.anchor);f.step([61],.033,0);assert.equal(f.anchor,null);});
+
+test('relaxed thumb has no fist offset, full fist preserves the screenshot, four fingers stay fixed',()=>{assert.deepEqual(poseAlignment('Thumb3',0),[0,-0,-0]);assert.deepEqual(poseAlignment('Thumb3',1),[0,-47,-12]);for(const n of ['Index2','Index3','Middle2','Middle3','Ring2','Ring3','Pinky2','Pinky3'])for(const t of [0,.5,1])assert.deepEqual(poseAlignment(n,t),alignment(n));});

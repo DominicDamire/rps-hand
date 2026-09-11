@@ -1,11 +1,12 @@
-import {buildThenar} from './thenar.mjs?v=6';
-import {buildTips,tipWorld,tuckThumb,fitPinch,fitThumb} from './contact.mjs?v=6';
-import {FIST,AngleLimiter,alignment,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=6';
+import {buildThumbShape} from './thumb-shape.mjs?v=7';
+import {buildThenar} from './thenar.mjs?v=7';
+import {buildTips,tipWorld,tuckThumb,fitPinch,fitThumb} from './contact.mjs?v=7';
+import {FIST,AngleLimiter,alignment,poseAlignment,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=7';
 import {receivePhone} from './phone-link.mjs?v=2';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
-import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile,lockedAxis,constrainJoint,constrainAngles,directionAngles} from './profile.mjs?v=6';
+import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile,lockedAxis,constrainJoint,constrainAngles,directionAngles} from './profile.mjs?v=7';
 const $=id=>document.getElementById(id),clone=x=>JSON.parse(JSON.stringify(x)),RAD=Math.PI/180,KEY='hand-pose-lab-v1';
 let profile=emptyProfile();try{const saved=localStorage.getItem(KEY);if(saved)profile=validateProfile(JSON.parse(saved));}catch{$('notice').textContent='Saved profile could not be read. Import your JSON backup to recover it.';}
 let updateThenar=null;let closePhone=null,tips=null,straight={},pinching=false,contactAngles=null;const tipDots={};let thumbGap=null;
@@ -46,17 +47,18 @@ function solveRaw(world){const pts=world.map(p=>new THREE.Vector3(p.x,-p.y,-p.z)
   dir.applyQuaternion(j.parent.getWorldQuaternion(new THREE.Quaternion()).invert()).normalize();
   const qb=jointBasis(n);dir.applyQuaternion(qb.clone().invert());
   result[n]=constrainJoint(n,directionAngles(n,dir.toArray(),angles[n][0]),profile.limits[side][n]);
-  j.quaternion.copy(qb).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...result[n].map((v,i)=>(v+alignment(n)[i])*RAD),'XYZ'))).multiply(qb.clone().invert());rig.refresh(j);
+  j.quaternion.copy(qb).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...result[n].map((v,i)=>(v+currentAlignment(n)[i])*RAD),'XYZ'))).multiply(qb.clone().invert());rig.refresh(j);
 
  }
  return result;
 }
 function stabilizePalm(dt){const tolerance=(+$('stability').value)*RAD;if(!smoothPalmQ){smoothPalmQ=palmQ.clone();previousPalmQ=palmQ.clone();return;}if(heldPalmQ&&palmQ.angleTo(heldPalmQ)<=tolerance*2.5){palmQ.copy(heldPalmQ);return;}heldPalmQ=null;palmQuiet=tolerance>0&&palmQ.angleTo(previousPalmQ)<tolerance?palmQuiet+dt:0;previousPalmQ.copy(palmQ);smoothPalmQ.slerp(palmQ,1-Math.exp(-dt/(smoothPalmQ.angleTo(palmQ)>.12?.025:.08)));if(palmQuiet>.3)heldPalmQ=smoothPalmQ.clone();palmQ.copy(smoothPalmQ);}
-function modelAngles(n){if(posePreview)return FIST[n];const fixed=alignment(n);if(contactAngles)return contactAngles[n].map((v,i)=>lockedAxis(n,i)?fixed[i]:v);const v=angles[n].map((x,i)=>x+fixed[i]);if(n.startsWith('Thumb')&&$('reference').checked){const t=Math.min(...curls);v[0]=v[0]*(1-t)+FIST[n][0]*t;for(let i=1;i<3;i++)v[i]=fixed[i]+(lockedAxis(n,i)?0:angles[n][i]*(1-t));}return v;}
+function currentAlignment(n){return poseAlignment(n,posePreview?1:$('reference').checked?Math.min(...curls):0);}
+function modelAngles(n){if(posePreview)return FIST[n];const fixed=currentAlignment(n);if(contactAngles)return contactAngles[n].map((v,i)=>lockedAxis(n,i)?fixed[i]:v);const v=angles[n].map((x,i)=>x+fixed[i]);if(n.startsWith('Thumb')&&$('reference').checked){const t=Math.min(...curls);v[0]=v[0]*(1-t)+FIST[n][0]*t;for(let i=1;i<3;i++)v[i]=fixed[i]+(lockedAxis(n,i)?0:angles[n][i]*(1-t));}return v;}
 
 function applyAngles(renderDt=null){if(!rig.loaded)return;angles=constrainAngles(angles,profile.limits[side]);rig.joints[side+'Hand'].quaternion.copy(editing?frozenPalm:($('follow').checked||$('spatial').checked)?palmQ:new THREE.Quaternion());
  for(const n of JOINTS){const qb=jointBasis(n);let v=modelAngles(n);
- if(renderDt!==null){v=editing||!stream?finalFilters[n].seed(v):finalFilters[n].step(v,renderDt,+$('changeThreshold').value,+$('changeSpeed').value);v=v.map((x,i)=>lockedAxis(n,i)?alignment(n)[i]:x);(displayedAngles??={})[n]=[...v];}
+ if(renderDt!==null){v=editing||!stream?finalFilters[n].seed(v):finalFilters[n].step(v,renderDt,+$('changeThreshold').value,+$('changeSpeed').value);v=v.map((x,i)=>lockedAxis(n,i)&&!n.startsWith('Thumb')?currentAlignment(n)[i]:x);(displayedAngles??={})[n]=[...v];}
 rig.joints[side+n].quaternion.copy(qb).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...v.map(x=>x*RAD),'XYZ'))).multiply(qb.clone().invert());}
  rig.root.updateMatrixWorld(true);
 }
@@ -111,6 +113,10 @@ for(const id of ['changeThreshold','changeSpeed'])$(id).oninput=()=>{$(id+'Value
 $('stability').oninput=()=>{$('stabilityValue').textContent=$('stability').value+'°';for(const f of Object.values(filters))f.reset();};
 $('calibrateDepth').onclick=()=>{const d=+$('distance').value;if(!lastDepth||!latest)return notice('Show your hand to the camera first.');if(d<.15||d>1.5)return notice('Enter a distance between 0.15 and 1.5 metres.');depthScale=d/lastDepth;profile.calibration.depthScale=depthScale;persist();positionFilter.reset();notice('Depth calibrated at '+d.toFixed(2)+' m.');if(!editing&&sampleSource)detect(sampleSource);};
 $('calibrateStraight').onclick=()=>{if(!latest||editing)return notice('In live mode, hold your fingers straight and together, then click this button.');for(const n of JOINTS)neutralSplay[side][n]=latest.raw[n][1];profile.calibration.neutralSplay=neutralSplay;persist();for(const f of Object.values(filters))f.reset();notice('Straight-finger sideways neutral captured for this hand.');if(sampleSource)detect(sampleSource);};
+$('photoPreview').onclick=()=>{epoch++;editing=true;posePreview=false;curls=[0,0,0,0];angles=blankAngles();contactAngles=blankAngles();
+ const z=rig.rest[side+'Middle1'].world.clone().sub(rig.rest[side+'Hand'].world).normalize().applyQuaternion(jointBasis('Thumb1').clone().invert());contactAngles.Thumb1=directionAngles('Thumb1',z.toArray());
+ for(const n of JOINTS)if(!n.startsWith('Thumb'))contactAngles[n]=alignment(n);
+ frozenPalm.setFromRotationMatrix(restBasis(side).invert());rig.root.position.copy(rig.rest[side+'Hand'].world).negate().add(new THREE.Vector3(0,-.065,-.3));editBase=clone(angles);frozenFeature=null;savedId=null;applyAngles();updateMode();$('save').disabled=true;notice('Photo reference: fingers together, two straight thumb segments. This is a model preview, not camera calibration.');};
 $('referencePreview').onclick=()=>{epoch++;contactAngles=null;editing=true;posePreview=true;curls=[1,1,1,1];angles=blankAngles();for(const n of JOINTS)angles[n][0]=FIST[n][0];frozenPalm.identity();if($('spatial').checked){const q=new THREE.Quaternion().setFromRotationMatrix(restBasis(side)).invert();frozenPalm.copy(q);rig.root.position.copy(rig.rest[side+'Hand'].world).negate().add(new THREE.Vector3(0,-.07,-.27));}editBase=clone(angles);frozenFeature=null;savedId=null;applyAngles();updateMode();$('save').disabled=true;$('undo').disabled=true;$('zero').disabled=true;notice('Screenshot reference preview. Resume tracking to capture your own input.');};
 $('follow').onchange=()=>{applyAngles();};$('viewReset').onclick=resetView;
 $('usePoses').onchange=()=>{if(!editing&&sampleSource)detect(sampleSource);};
@@ -123,7 +129,7 @@ function loadPose(pose){epoch++;contactAngles=null;posePreview=false;curls=[0,0,
  notice('Editing saved pose “'+pose.name+'”. Save updates this example.');updateMode();}
 $('save').onclick=()=>{const name=$('poseName').value.trim();if(!editing||!frozenFeature)return notice('Freeze a tracked pose first.');if(!name)return notice('Give this pose a name, such as Fist.');if(!savedId&&profile.poses.length>=100)return notice('This profile already has 100 examples. Export it and remove an example first.');
  const pose={id:savedId||crypto.randomUUID(),name,side,features:[...frozenFeature],angles:clone(angles),...(contactAngles?{solvedAngles:clone(contactAngles)}:{}),referenceCurl:[...curls],referenceEnabled:$('reference').checked,capture:frozenCapture};const at=profile.poses.findIndex(p=>p.id===pose.id);if(at>=0)profile.poses[at]=pose;else profile.poses.push(pose);savedId=pose.id;if(persist())notice('Saved “'+name+'”. Resume live to test recognition, or export JSON.');renderLibrary();};
-function controlAngles(n){const fixed=alignment(n),actual=editing?modelAngles(n):displayedAngles?.[n]||modelAngles(n);return actual.map((v,i)=>lockedAxis(n,i)?0:v-fixed[i]);}
+function controlAngles(n){const fixed=currentAlignment(n),actual=editing?modelAngles(n):displayedAngles?.[n]||modelAngles(n);return actual.map((v,i)=>lockedAxis(n,i)?0:v-fixed[i]);}
 function renderControls(){if(!rig.loaded)return;
  $('jointName').textContent=selected.replace(/\d$/,'')+' · '+jointLabel(selected);for(const n of JOINTS){const b=$('joint-'+n);b.setAttribute('aria-pressed',String(n===selected));b.querySelector('small').textContent=controlAngles(n).map(v=>Math.round(v)).join(' / ');}
  for(let i=0;i<3;i++){const v=controlAngles(selected)[i];$('angle'+i).value=v;$('number'+i).value=v.toFixed(1);$('angle'+i).disabled=$('number'+i).disabled=!editing||posePreview||lockedAxis(selected,i);
@@ -132,7 +138,7 @@ function renderControls(){if(!rig.loaded)return;
 function jointLabel(n){const k=+n.slice(-1);return n.startsWith('Thumb')?['CMC','MCP','IP'][k-1]:['MCP','PIP','DIP'][k-1];}
 for(const f of FINGERS){const label=document.createElement('div');label.className='finger';label.textContent=f;$('joints').append(label);for(let k=1;k<=3;k++){const n=f+k,b=document.createElement('button');b.id='joint-'+n;b.setAttribute('aria-label','Select '+f+' '+jointLabel(n));b.innerHTML=jointLabel(n)+'<small>0 / 0 / 0</small>';b.onclick=()=>{selected=n;renderControls();};$('joints').append(b);}}
 for(let i=0;i<3;i++){const axis=['X · Bend','Y · Sideways','Z · Twist'][i],row=document.createElement('div');row.className='angleRow';row.innerHTML=`<label for="angle${i}">${axis}</label><input id="number${i}" type="number" min="-180" max="180" step="0.1" aria-label="${axis} degrees"><input id="angle${i}" type="range" min="-180" max="180" step="0.1" aria-label="${axis}">`;$('axes').append(row);
- const edit=e=>{if(!editing)return;const v=Number(e.target.value);if(!Number.isFinite(v))return;angles[selected][i]=Math.max(-180,Math.min(180,v));if(contactAngles)contactAngles[selected][i]=angles[selected][i]+alignment(selected)[i];applyAngles();renderControls();};$('angle'+i).oninput=edit;$('number'+i).oninput=e=>{if(!editing||e.target.value===''||!Number.isFinite(e.target.valueAsNumber))return;angles[selected][i]=Math.max(-180,Math.min(180,e.target.valueAsNumber));if(contactAngles)contactAngles[selected][i]=angles[selected][i]+alignment(selected)[i];applyAngles();$('angle'+i).value=angles[selected][i];};$('number'+i).onchange=edit;
+ const edit=e=>{if(!editing)return;const v=Number(e.target.value);if(!Number.isFinite(v))return;angles[selected][i]=Math.max(-180,Math.min(180,v));if(contactAngles)contactAngles[selected][i]=angles[selected][i]+currentAlignment(selected)[i];applyAngles();renderControls();};$('angle'+i).oninput=edit;$('number'+i).oninput=e=>{if(!editing||e.target.value===''||!Number.isFinite(e.target.valueAsNumber))return;angles[selected][i]=Math.max(-180,Math.min(180,e.target.valueAsNumber));if(contactAngles)contactAngles[selected][i]=angles[selected][i]+currentAlignment(selected)[i];applyAngles();$('angle'+i).value=angles[selected][i];};$('number'+i).onchange=edit;
  const limit=document.createElement('div');limit.className='limitRow';limit.innerHTML=`<label><input id="enabled${i}" type="checkbox" aria-label="Enable ${axis} limit">${'XYZ'[i]}</label><input id="min${i}" type="number" min="-180" max="180" aria-label="${axis} minimum"><span>to</span><input id="max${i}" type="number" min="-180" max="180" aria-label="${axis} maximum">`;$('limits').append(limit);
  const setLimit=()=>{const min=+$('min'+i).value,max=+$('max'+i).value;if(!Number.isFinite(min)||!Number.isFinite(max)||min< -180||max>180||min>max){notice('Limits must be between −180° and 180°, with minimum ≤ maximum.');renderControls();return;}profile.limits[side][selected][i]={enabled:$('enabled'+i).checked,min,max};applyAngles();renderControls();$('limitState').textContent='Limits changed. Click Save my limits to keep them.';};for(const id of ['enabled','min','max'])$(id+i).onchange=setLimit;
 }
@@ -144,7 +150,7 @@ $('importPaste').onclick=()=>{try{importText($('jsonText').value);}catch(e){noti
 $('png').onclick=()=>{renderer.render(scene,camera);const c=document.createElement('canvas');c.width=1400;c.height=850;const ctx=c.getContext('2d');ctx.fillStyle='#10151d';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#edf6ff';ctx.font='bold 25px system-ui';ctx.fillText('Hand Pose Lab — '+($('poseName').value||'Live comparison'),28,42);ctx.font='16px system-ui';ctx.fillText(editing?'Frozen input and corrected model':'Latest tracked frame and model',28,74);const fit=(img,x,y,w,h)=>{const a=img.width/img.height;let iw=w,ih=w/a;if(ih>h){ih=h;iw=h*a;}ctx.drawImage(img,x+(w-iw)/2,y+(h-ih)/2,iw,ih);};fit($('preview'),24,100,510,710);fit($('scene'),560,100,810,710);c.toBlob(blob=>{if(blob)download(blob,'hand-pose-comparison.png');});};
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children)[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
 await rig.ready;
-tuckThumb(rig);tips=buildTips(rig);updateThenar=buildThenar(rig);
+tuckThumb(rig);buildThumbShape(rig);tips=buildTips(rig);updateThenar=await buildThenar(rig);
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.001,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}

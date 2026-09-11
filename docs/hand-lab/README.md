@@ -74,3 +74,12 @@ The final rendered finger angles pass through a configurable deadband (default 3
 All controls now display offsets from the screenshot alignment, including when a contact solution is active. Upper two joints on index/middle/ring/pinky keep sideways/twist at zero relative to that alignment. Freeze retains the displayed filtered pose. Smaller yellow markers and the displayed tip-gap readout help distinguish marker overlap from actual contact.
 
 Validation: node --test docs/hand-lab/motion.test.mjs docs/hand-lab/profile.test.mjs; open geometry-check.html and run the real-asset checks. Fist preview and settings verified in browser. Camera jitter and physical proportions still require live user testing.
+
+
+## Lab 7: photo-guided thumb geometry
+
+The thumb attachment moves 4 mm toward the knuckles. All thumb joint-to-joint distances are unchanged. Two rounded outer phalanges replace the mechanical shells; the distal tip retains the original geometric length, without added nails. A Blender voxel union produces a continuous palm/thenar mesh (2,600 triangles per hand), replacing the overlapping prototype mound. Weighted thumb-side vertices follow the MCP while the wrist/heel stay anchored. Normals update only when the MCP moves. The generation script is tools/doll/build_lab_palm.py; original doll.glb is unchanged.
+
+The relaxed thumb uses neutral side/twist calibration; closing the four fingers blends it to the saved thumb-fist calibration. Four-finger fixed offsets remain unchanged. Thumb side/twist are never free tracking axes; the final speed/deadband stage also smooths the thumb reference transition. The photo-reference preview is a geometry inspection pose, not a measured reconstruction or tracking calibration.
+
+The single photo does not establish exact 3D proportions or physical contact accuracy. Verify live with the user's camera, including open hand, spread, fist and pinch. The editable Blender palm file is generated outside the published docs folder.
