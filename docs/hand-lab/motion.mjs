@@ -1,4 +1,4 @@
-import {FINGERS,JOINTS,blankAngles,constrainAngles} from './profile.mjs?v=5';
+import {FINGERS,JOINTS,blankAngles,constrainAngles} from './profile.mjs?v=6';
 export const FIST={Thumb1:[-9,10,1],Thumb2:[1,-20,0],Thumb3:[-27,-47,-12],Index1:[80,0,0],Index2:[90,-7,0],Index3:[90,0,0],Middle1:[80,0,0],Middle2:[90,-2,0],Middle3:[90,0,0],Ring1:[80,0,0],Ring2:[90,0,0],Ring3:[80,0,0],Pinky1:[80,0,0],Pinky2:[90,8,0],Pinky3:[90,7,0]};
 export function alignment(n){return [0,FIST[n][1],FIST[n][2]];}
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -18,3 +18,21 @@ export function positionAt(lm,depth,aspect,mirror=true){const h=2*depth*Math.tan
 
 export function straightJoints(points,previous={},tolerance=10){const out={};for(const [f,i] of [['Index',5],['Middle',9],['Ring',13],['Pinky',17]])for(const [k,a,b,c] of [[2,i,i+1,i+2],[3,i+1,i+2,i+3]]){const n=f+k,angle=bend(points[a],points[b],points[c]);out[n]=tolerance>0&&angle<(previous[n]?tolerance+6:tolerance);}return out;}
 export function pinchDistance(points){const a=points[4],b=points[8],w=points[5],p=points[17];return Math.hypot(...a.map((v,i)=>v-b[i]))/Math.max(.001,Math.hypot(...w.map((v,i)=>v-p[i])));}
+
+
+// Final displayed angles: deadband rejects noise; time-based speed cap limits jumps.
+export class AngleLimiter {
+ constructor(){this.reset();}
+ reset(){this.value=null;this.target=null;}
+ seed(v){this.value=[...v];this.target=[...v];return [...v];}
+ step(input,dt,deadband=3,speed=180){
+  if(!this.value)return this.seed(input);
+  const budget=Math.max(0,speed)*clamp(dt,0,.05);
+  for(let i=0;i<input.length;i++){
+   if(Math.abs(input[i]-this.target[i])>deadband||deadband===0)this.target[i]=input[i];
+   const delta=this.target[i]-this.value[i];
+   this.value[i]+=clamp(delta,-budget,budget);
+  }
+  return [...this.value];
+ }
+}

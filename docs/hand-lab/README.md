@@ -63,3 +63,14 @@ Thumb tracking now fits the actual mesh tip and the two exposed joint positions 
 Screenshot sideways/twist offsets now remain fixed regardless of fist blending or its toggle. Four-finger middle/tip joints cannot move sideways. The thumb tip cannot move sideways; the lower exposed thumb joint and its internal base can. Thumb-tip sideways was previously blended during fist closure; it is now constant. Saved fitted poses retain solved angles in JSON; prohibited live axes are overridden by fixed alignment on application. Additional bend tuning was deferred at the user's request; existing settling and fist behavior remain.
 
 The browser geometry-check page uses the actual GLB to verify ten fingertip targets, reduction of a known thumb-target error, pinch gap reduction, and preservation of the thumb-tip sideways lock. Controlled test results do not establish physical-camera accuracy. All changes are lab-only; game integration remains separate.
+
+
+## Lab 6: final angle limiting and thumb palm extension
+
+The original thumb joint positions and segment lengths are restored. A procedural palm mound replaces the visible metacarpal meshes and follows the MCP, leaving two exposed outer thumb segments. It overlaps the existing rigid palm; it is not a newly sculpted, watertight skin mesh. Thumb proportions still require comparison with the user's reference.
+
+The final rendered finger angles pass through a configurable deadband (default 3 degrees) and time-based maximum speed (default 180 degrees/second). This stage runs after saved-pose, thumb, and pinch fitting, so none of those bypass the speed cap. Frozen editing and static image previews are immediate. Smaller movements within the deadband are intentionally ignored; slower speed means more lag for fast gestures. The existing stillness filter remains available separately.
+
+All controls now display offsets from the screenshot alignment, including when a contact solution is active. Upper two joints on index/middle/ring/pinky keep sideways/twist at zero relative to that alignment. Freeze retains the displayed filtered pose. Smaller yellow markers and the displayed tip-gap readout help distinguish marker overlap from actual contact.
+
+Validation: node --test docs/hand-lab/motion.test.mjs docs/hand-lab/profile.test.mjs; open geometry-check.html and run the real-asset checks. Fist preview and settings verified in browser. Camera jitter and physical proportions still require live user testing.
