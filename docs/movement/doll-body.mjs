@@ -13,15 +13,15 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=75";
-import { BodyView } from "../body/BodyView.js?v=75";
-import { BodyPose } from "../body/pose.mjs?v=75";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=76";
+import { BodyView } from "../body/BodyView.js?v=76";
+import { BodyPose } from "../body/pose.mjs?v=76";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
 const FOOT_SPREAD = 0.09;   // half the distance between the feet
 
-export function setupBody({ scene, camera, handModel, video, getRemote = () => null }) {
+export function setupBody({ scene, camera, handModel, handModelL = null, video, getRemote = () => null }) {
   const Q = new URLSearchParams(location.search);
   const mode0 = Q.get("body");
   if (mode0 === "off") return null;
@@ -104,7 +104,7 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
       const mode = modeEl.value;
       rig.root.visible = mode !== "off";
       // the doll's hand replaces the old mesh only while the doll is actually drawing one
-      if (handModel) handModel.drawMesh = (mode === "off" || mode === "head");
+      const drawOld = (mode === "off" || mode === "head"); if (handModel) handModel.drawMesh = drawOld; if (handModelL) handModelL.drawMesh = drawOld;
       if (mode === "off") return;
       const link = getRemote();
       if (tracked()) { if (link && wired !== link) startFar(link); else if (!link && !local && !far && !error) startLocal(); }
@@ -154,6 +154,21 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
         fitHand(rig, S, src, handModel.group.matrixWorld);
         setPalm(rig, S, src, handModel.group.matrixWorld);
         setFingers(rig, S, src, handModel.group.matrixWorld);
+      }
+      // the steering hand: same treatment, it is a tracked hand like the other (owner: "make the left hand appear too")
+      if (handModelL?.visible) {
+        handModelL.group.updateMatrixWorld(true);
+        const srcL = handModelL.points, SL = handModelL.right ? "R" : "L";
+        if (!(handModel?.visible && (handModel.right ? "R" : "L") === SL)) {   // never two hands on one arm
+          _w.copy(srcL[0]).applyMatrix4(handModelL.group.matrixWorld);
+          _e.copy(_w).add(_v.set(SL === "R" ? 0.22 : -0.22, -0.2, 0.12).applyAxisAngle(UP, heading));
+          for (const n of ["Hips", "Waist", "Chest", `${SL}Clavicle`]) rig.refresh(rig.joints[n]);
+          rig.reach(`${SL}UpperArm`, `${SL}Forearm`, `${SL}Hand`, _w, _e);
+          rig.refresh(rig.joints[`${SL}Hand`]);
+          fitHand(rig, SL, srcL, handModelL.group.matrixWorld);
+          setPalm(rig, SL, srcL, handModelL.group.matrixWorld);
+          setFingers(rig, SL, srcL, handModelL.group.matrixWorld);
+        }
       }
       if (raw) for (const S of ["L", "R"]) {
         if (handModel?.visible && (handModel.right ? "R" : "L") === S) continue;   // already driven, and better

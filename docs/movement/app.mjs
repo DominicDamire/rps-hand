@@ -1,19 +1,19 @@
-import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=75';
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=75';
-import {setupThumbstick} from './thumbstick.mjs?v=75';
+import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=76';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=76';
+import {setupThumbstick} from './thumbstick.mjs?v=76';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=75';
-import {DustMap} from './map.mjs?v=75';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=76';
+import {DustMap} from './map.mjs?v=76';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=75';
-import {phoneCamera} from './camlink.mjs?v=75';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=75';
-import {makeHandModel,view as handView} from './hand-model.mjs?v=75';
-import {createNet} from './net.mjs?v=75';
-import {setupShooter} from './shooter.mjs?v=75';
-import {setupBody} from './doll-body.mjs?v=75';   // the ball-joint doll; the old skinned avatar is body.mjs, kept for reference
-import {startRemote,shimVideoSize} from './remote.mjs?v=75';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
+import {setupUI} from './ui.mjs?v=76';
+import {phoneCamera} from './camlink.mjs?v=76';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=76';
+import {makeHandModel,view as handView} from './hand-model.mjs?v=76';
+import {createNet} from './net.mjs?v=76';
+import {setupShooter} from './shooter.mjs?v=76';
+import {setupBody} from './doll-body.mjs?v=76';   // the ball-joint doll; the old skinned avatar is body.mjs, kept for reference
+import {startRemote,shimVideoSize} from './remote.mjs?v=76';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
 const $=id=>document.getElementById(id);const CAM=new URLSearchParams(location.search).has('cam');   // ?cam: the phone streams its camera here
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
@@ -22,7 +22,7 @@ const held=new ThumbJoystick();held.fistCentre=new URLSearchParams(location.sear
 const scheduler=new TrackingScheduler();const swipe=new SwipeController();const headLook=new HeadLook();let lookDemo=0;
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:false});renderer.setPixelRatio(Math.min(1,Math.sqrt(900000/(innerWidth*innerHeight))));
 const scene=new THREE.Scene();scene.background=new THREE.Color('#25394a');scene.fog=new THREE.FogExp2('#25394a',.018);
-const camera=new THREE.PerspectiveCamera(65,1,.05,200);camera.position.set(0,1.65,7);scene.add(camera);const handModel=makeHandModel(camera);window.handModel=handModel;
+const camera=new THREE.PerspectiveCamera(65,1,.05,200);camera.position.set(0,1.65,7);scene.add(camera);const handModel=makeHandModel(camera);window.handModel=handModel;const handModelL=makeHandModel(camera,false);window.handModelL=handModelL;   // the joystick hand is drawn too (the doll's left arm follows it)
 const remote={group:new THREE.Group(),eye:new THREE.Group(),seen:-Infinity,target:{p:new THREE.Vector3(),pitch:0,yaw:0}};remote.group.visible=false;scene.add(remote.group);remote.group.add(remote.eye);
 {const skin=new THREE.MeshStandardMaterial({color:0xd9a58a,roughness:.7}),body=new THREE.Mesh(new THREE.CapsuleGeometry(.18,1.05,4,10),new THREE.MeshStandardMaterial({color:0x7d8fa6,roughness:.8}));body.position.y=-.95;remote.group.add(body);
  const head=new THREE.Mesh(new THREE.SphereGeometry(.12,16,12),skin);remote.eye.add(head);}
@@ -41,10 +41,15 @@ $('closeLobby').onclick=()=>$('lobby').hidden=true;$('refresh').onclick=()=>{$('
 $('quick').onclick=()=>{$('rooms').textContent='looking for a player…';ensureNet().quickMatch();};$('create').onclick=()=>ensureNet().createRoom();
 scene.background=new THREE.Color('#abc9d9');scene.fog=new THREE.Fog('#abc9d9',90,180);
 {const q=new URLSearchParams(location.search),r=+q.get('reach'),d=q.get('drop');if(r>0)handView.reach=r;if(d!==null&&Number.isFinite(+d))handView.drop=+d;}window.handView=handView;   // ?reach=1 restores the old 1:1 arm
-const dustMap=new DustMap(scene);const shooter=setupShooter({scene,camera,dustMap,handModel});window.shooter=shooter;window.dustMap=dustMap;const bodyRig=setupBody({scene,camera,handModel,video:$('cam'),getRemote:()=>phoneLink});window.bodyRig=bodyRig;window.headLook=headLook;
+const dustMap=new DustMap(scene);const shooter=setupShooter({scene,camera,dustMap,handModel});window.shooter=shooter;window.dustMap=dustMap;const bodyRig=setupBody({scene,camera,handModel,handModelL,video:$('cam'),getRemote:()=>phoneLink});window.bodyRig=bodyRig;window.headLook=headLook;
 dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · auto-step on';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
 function resize(){renderer.setPixelRatio(Math.min(1,Math.sqrt(900000/(innerWidth*innerHeight))));renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();handView.aspect=camera.aspect;}addEventListener('resize',resize);resize();
-let head=null,lastHeadVideo=-1,lastFrameTime=0,lastHUD=-Infinity,phoneLink=null;const hf={n:0,t:performance.now()},dbg=window.dbg=window.dbg||{};let headSeen=false;const walkF={x:0,z:0};const LABELS=new URLSearchParams(location.search).get('labels')==='1';
+let head=null,lastHeadVideo=-1,lastFrameTime=0,lastHUD=-Infinity,phoneLink=null;const hf={n:0,t:performance.now()},dbg=window.dbg=window.dbg||{};let headSeen=false;
+// a tap = the thumb tip meets
+// the index tip while the other three fingers stay up (a fist, and the gun grip, also bring those tips together,
+// so without that condition every fist would be a jump). Rising edge only: hold the pinch and you jump once.
+const jump={h:0,v:0,applied:0,pinched:false,taps:0};
+function pinchTap(hm,now){if(!hm.visible)return;const p=hm.points,palm=p[0].distanceTo(p[9])||1;const close=p[4].distanceTo(p[8])<.3*palm,up=[12,16,20].every(t=>p[t].distanceTo(p[0])>p[t-2].distanceTo(p[0]));const pinch=close&&up;if(pinch&&!jump.pinched&&jump.h===0){jump.v=3.6;jump.h=1e-4;jump.taps++;}jump.pinched=pinch;}window.jump=jump;const walkF={x:0,z:0};const LABELS=new URLSearchParams(location.search).get('labels')==='1';
 let walkReason='START CAMERA';
 let worker=null,stream=null,running=false,busy=false,lastVideo=-1,lastResult=0,demo=false,demoRun=null;
 function status(text,active=false){$('status').textContent=text;$('lamp').classList.toggle('on',active);}
@@ -64,7 +69,7 @@ async function start(){
    stream=useCam?(stream?.active?stream:await phoneCamera(t=>status(t),takeCam)):await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
    $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
   }
-  worker=phoneLink?phoneLink.handWorker:new Worker(new URL('./tracker.mjs?v=75',import.meta.url),{type:'module'});   // the shim answers 'ready' as soon as the phone speaks
+  worker=phoneLink?phoneLink.handWorker:new Worker(new URL('./tracker.mjs?v=76',import.meta.url),{type:'module'});   // the shim answers 'ready' as soon as the phone speaks
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;{const t=performance.now();hf.n++;if(t-hf.t>=1000){dbg.handFps=Math.round(hf.n*1000/(t-hf.t));hf.n=0;hf.t=t;}}   // hand tracker rate, shown in the HUDif(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -77,10 +82,12 @@ async function start(){
       if(singleChir>.3)singleRole='model';else if(singleChir<-.3)singleRole='stick';if(inputMode==='touch')singleRole='model';   // the physical RIGHT hand is the 3D hand that takes the gun, the physical left stays the joystick; the screen thumbstick never needs a tracked hand
       if(singleRole==='model'){modelIndex=0;handIndex=-1;}}
     window.dbg=Object.assign(window.dbg||{},{hands:n,label:data.handedness?.map(h=>h[0]?(h[0].categoryName+':'+h[0].score.toFixed(2)):'?'),handIndex,modelIndex,wl:window.dbgWL&&n?data.worldLandmarks[0].map(p=>[p.x,p.y,p.z]):undefined});
-    if(resting){held.receive(null,lastResult);swipe.reset();handModel.hide();walkReason='RESTING';return;}
+    if(resting){held.receive(null,lastResult);swipe.reset();handModel.hide();handModelL.hide();walkReason='RESTING';return;}
     const label=handIndex>=0?data.handedness?.[handIndex]?.[0]?.categoryName:null;
     trackedHand=label;
     if(modelIndex>=0)handModel.update(data.landmarks[modelIndex],data.worldLandmarks[modelIndex],$('cam').videoWidth,$('cam').videoHeight);else handModel.hide();
+    if(handIndex>=0)handModelL.update(data.landmarks[handIndex],data.worldLandmarks[handIndex],$('cam').videoWidth,$('cam').videoHeight);else handModelL.hide();   // the steering hand keeps steering AND is shown
+    pinchTap(handModel,performance.now());
     if(inputMode==='index'){
       const sample=handIndex>=0?measurePointer(data.landmarks[handIndex],data.worldLandmarks[handIndex],$('cam').videoWidth/$('cam').videoHeight):null;
       const result=apply(sample,data.time);trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,result.active);
@@ -94,7 +101,7 @@ async function start(){
       status(active?fingerMode.toUpperCase()+' · '+held.direction:walkReason,active);
     }
   };
-  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:66,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=75',import.meta.url),worker:phoneLink?phoneLink.headWorker:null});window.head=head;head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
+  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:66,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=76',import.meta.url),worker:phoneLink?phoneLink.headWorker:null});window.head=head;head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
  }catch(e){stop();status('Camera not started');$('error').textContent=e.name==='NotAllowedError'?'Camera access was declined. Allow camera access in your browser, then retry.':e.message;}
  finally{$('start').disabled=false;}
 }
@@ -164,6 +171,8 @@ function frame(now){
  }
  if(remote.group.visible){const k=Math.min(1,dt*12);remote.group.position.lerp(remote.target.p,k);remote.group.rotation.y+=(remote.target.yaw-remote.group.rotation.y)*k;remote.eye.rotation.x+=(remote.target.pitch-remote.eye.rotation.x)*k;if(now-remote.seen>3000){remote.group.visible=false;remote.hand.hide();}}
  if(net?.opp?.open&&now-lastSent>=50){lastSent=now;const h=handModel.visible?handModel.points.flatMap(p=>[+p.x.toFixed(3),+p.y.toFixed(3),+p.z.toFixed(3)]):null;net.sendHands({t:'h',p:[+camera.position.x.toFixed(2),+camera.position.y.toFixed(2),+camera.position.z.toFixed(2)],r:[+camera.rotation.x.toFixed(3),+camera.rotation.y.toFixed(3)],h,o:handModel.offset,ts:Math.round(now)});}
+ if(jump.h>0||jump.v>0){const s=Math.min(.05,dt);jump.v-=9.8*s;jump.h=Math.max(0,jump.h+jump.v*s);if(jump.h===0)jump.v=0;}
+ camera.position.y+=jump.h-jump.applied;jump.applied=jump.h;   // apply the CHANGE: adding the height every frame made it climb and never land
  bodyRig?.update(dt,now,{head,heading:headLook.heading});
  if(phoneLink&&bodyRig&&bodyRig.told!==bodyRig.wants()){bodyRig.told=bodyRig.wants();phoneLink.link.sendJSON('c',{body:bodyRig.told?1:0});}   // the phone only runs its pose tracker when the body is actually shown   // the rig's eyes follow the camera, its body faces the heading, its right arm reaches our hand
  shooter?.update(dt,now);
