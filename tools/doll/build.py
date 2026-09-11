@@ -152,7 +152,7 @@ def build_bones():
     add("Head", "Neck", mid(highest("chest"), centroid("head")))
     for S in ("L", "R"):
         add(f"{S}Clavicle", "Chest", side_island("chest", S))
-        add(f"{S}UpperArm", f"{S}Clavicle", mid(centroid("clavicleKnot", S), biggest("upperArm", S)))
+        add(f"{S}UpperArm", f"{S}Clavicle", centroid("shoulder", S))   # the shoulder cap IS the ball the arm turns on
         add(f"{S}Forearm", f"{S}UpperArm", centroid("elbow", S))
         add(f"{S}Hand", f"{S}Forearm", biggest("forearmKnot", S))
         for f, root, midp, tip, knot in (("Thumb", "thumbRoot", "thumbMid", "thumbTip", "thunbKnot"),
@@ -245,11 +245,19 @@ log("rebuilt", len(fresh), "parts as clean objects")
 
 # ---------------------------------------------------------------- report and export
 def loc(v): return [round(x, 4) for x in v]
+def L(a, b): return (BONES[b]["pos"] - BONES[a]["pos"]).length   # Vector.length is a property in Blender
 report = {
     "source": os.path.basename(FBX), "height_m": round(hi.z - lo.z, 4), "target_height_m": TARGET_HEIGHT,
     "triangles": total, "islands": len(islands), "bones": len(BONES),
     "note": "rigid ball-joint parts hung on joint nodes; no skinning. Blender Z-up +Y forward exports as Y-up -Z forward.",
-    # rest_world is in the GLB's frame: Blender Z-up (x, y forward, z up) becomes glTF Y-up (x, z, -y)
+    # the doll is stylised: long legs, a short torso and short arms. The retarget has to scale a real arm into this reach.
+    "measure": {"arm_reach": round(L("RUpperArm", "RForearm") + L("RForearm", "RHand"), 4),
+                "upper_arm": round(L("RUpperArm", "RForearm"), 4),
+                "forearm": round(L("RForearm", "RHand"), 4),
+                "leg": round(L("RThigh", "RShin") + L("RShin", "RFoot"), 4),
+                "shoulder_width": round(abs(BONES["RUpperArm"]["pos"].x - BONES["LUpperArm"]["pos"].x), 4),
+                "shoulder_height": round(BONES["RUpperArm"]["pos"].z, 4),
+                "hip_height": round(BONES["Hips"]["pos"].z, 4)},
     "joints": {n: {"parent": b["parent"], "rest": [round(b["pos"].x, 5), round(b["pos"].z, 5), round(-b["pos"].y, 5)]}
                for n, b in BONES.items()},
     "parts": sorted([{"node": i["node"], "family": i["fam"], "side": i["side"], "bone": i["bone"], "tris": i["tris"],

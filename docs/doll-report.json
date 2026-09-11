@@ -6,6 +6,15 @@
  "islands": 95,
  "bones": 50,
  "note": "rigid ball-joint parts hung on joint nodes; no skinning. Blender Z-up +Y forward exports as Y-up -Z forward.",
+ "measure": {
+  "arm_reach": 0.4698,
+  "upper_arm": 0.242,
+  "forearm": 0.2277,
+  "leg": 0.817,
+  "shoulder_width": 0.2932,
+  "shoulder_height": 1.4057,
+  "hip_height": 1.0449
+ },
  "joints": {
   "Root": {
    "parent": null,
@@ -66,9 +75,9 @@
   "LUpperArm": {
    "parent": "LClavicle",
    "rest": [
-    -0.13565,
-    1.34897,
-    0.04045
+    -0.14659,
+    1.40572,
+    0.01708
    ]
   },
   "LForearm": {
@@ -242,9 +251,9 @@
   "RUpperArm": {
    "parent": "RClavicle",
    "rest": [
-    0.13565,
-    1.34897,
-    0.04045
+    0.14659,
+    1.40572,
+    0.01708
    ]
   },
   "RForearm": {
