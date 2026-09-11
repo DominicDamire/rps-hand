@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 38)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 39)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -49,7 +49,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 import { makeGun } from "./gun.mjs";
 
-const BUILD = 38;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 39;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -190,6 +190,25 @@ function smoothFingerDepth(c) {
     for (let k = 0; k < 4; k++) for (let i = 0; i < n; i++) { B[i] += z[k] * x[k] ** i; for (let q = 0; q < n; q++) A[i][q] += x[k] ** (i + q); }
     for (let i = 0; i < n; i++) { const pv = A[i][i]; for (let q = i; q < n; q++) A[i][q] /= pv; B[i] /= pv; for (let r = 0; r < n; r++) if (r !== i) { const f = A[r][i]; for (let q = i; q < n; q++) A[r][q] -= f * A[i][q]; B[r] -= f * B[i]; } }
     for (let k = 0; k < 4; k++) { let v = 0; for (let i = 0; i < n; i++) v += B[i] * x[k] ** i; c[3 * J[k] + 2] = v; }
+  }
+  return c;
+}
+// Palm pitch from the palm's known lengths (default, ?pz=0 off). Tilting the hand up or down at the wrist changes how
+// deep the knuckles are relative to the wrist; the tracker's depth under-reads that (measured on the thumb and fingers
+// before), so the gun aimed by the wrist pitched too little. Each knuckle keeps its picture position and takes the depth
+// that makes its distance from the wrist equal to the model's own metric bone length (root nearest the tracker's depth,
+// 80 % blend); its finger rides along by the same shift.
+const PALM_Z = Q.get("pz") !== "0";
+function palmDepthFromLength(c, lens) {
+  const x0 = c[0], y0 = c[1], z0 = c[2];
+  for (const k of [5, 9, 13, 17]) {
+    const L = lens[k]; if (!L) continue;
+    const x = c[3 * k], y = c[3 * k + 1], z = c[3 * k + 2];
+    const A = x * x + y * y + 1, B = -2 * (x * x0 + y * y0 + 1) * z0, C = (x0 * x0 + y0 * y0 + 1) * z0 * z0 - L * L, disc = B * B - 4 * A * C;
+    if (disc <= 0) continue;                                                   // the picture is already longer than the bone: leave the depth
+    const r1 = (-B + Math.sqrt(disc)) / (2 * A), r2 = (-B - Math.sqrt(disc)) / (2 * A), zf = Math.abs(r1 - z) < Math.abs(r2 - z) ? r1 : r2;
+    const d = 0.8 * (zf - z); if (!Number.isFinite(d) || Math.abs(d) > 0.08) continue;
+    for (const j of [k, k + 1, k + 2, k + 3]) c[3 * j + 2] += d;
   }
   return c;
 }
@@ -608,11 +627,7 @@ function poseFK(pts, bind, chirRight, scale, st, grip) {   // st: per-hand smoot
   // bone), else the sign remembered for that bone. A picture longer than the bone is left as tracked. ?tz=0 disables.
   for (const j of [2, 3, 4]) {
     _d.subVectors(pts[j], pts[PARENT[j]]);
-    if (grip) {   // thumb along the side of the frame: the barrel direction (palm axis rotated 50 deg toward the palm normal), the first bone a little outward
-      _d.copy(_pw).multiplyScalar(Math.cos(GRIP_A)).addScaledVector(_n, Math.sin(GRIP_A)); if (j === 2) _d.addScaledVector(_l, -0.3);
-      seg(j, _d.normalize()); continue;
-    }
-    if (THUMB_Z) {
+    if (THUMB_Z && !grip) {   // (the gripping hand's points are exact, no depth guess)
       _r.copy(pts[PARENT[j]]).normalize(); const L = s * bind[j].distanceTo(bind[PARENT[j]]), dz = _d.dot(_r);   // ray from the phone (origin) through the joint
       _b.copy(_d).addScaledVector(_r, -dz); const lp = _b.length();                                                     // the picture part
       if (lp > 1e-6 && lp < 0.98 * L) {
@@ -642,8 +657,8 @@ function poseFK(pts, bind, chirRight, scale, st, grip) {   // st: per-hand smoot
     _d.subVectors(pts[m + 3], pts[0]); const uT = _d.dot(_pw), vT = _d.dot(_l), hT = Math.abs(_d.dot(_n));
     const c01 = x => Math.min(1, Math.max(0, x));
     const fold = c01((0.95 * Lp - uT) / (0.15 * Lp)) * c01((uT - 0.05 * Lp) / (0.1 * Lp)) * c01((0.6 * Lp - hT) / (0.15 * Lp)) * (vT > vLo && vT < vHi ? 1 : 0);
-    closeness = Math.max(closeness, fold);
-    const lock = grip && m !== 5, FA = lock ? GRIPF : FIST;
+    closeness = grip ? 0 : Math.max(closeness, fold);   // the gripping hand's points are exact: no fist prior
+    const lock = false, FA = FIST;
     for (const [j, lim, fist] of [[m + 1, HYPER.mcp, FA.mcp], [m + 2, HYPER.pip, FA.pip], [m + 3, HYPER.dip, FA.dip]]) {
       _d.subVectors(pts[j], pts[j - 1]).normalize();
       // the knuckle is a two-axis joint: it bends AND spreads (that is how fingers cross); the middle and end joints are hinges
@@ -978,7 +993,8 @@ async function main() {
 
   frameW = video.videoWidth || video.naturalWidth || frameW; frameH = video.videoHeight || video.naturalHeight || frameH; applyView(true);
   const tracker = await makeTracker();
-  const poseTracker = POSE && !BENCH ? await makePoseTracker().catch(e => { console.warn("wrist tracking unavailable:", e); return null; }) : null;
+  let poseTracker = null;   // starts in the background: the hand loop must not wait for the pose model (its init delayed the first hand frame by seconds)
+  if (POSE && !BENCH) makePoseTracker().then(t => { poseTracker = t; }, e => console.warn("wrist tracking unavailable:", e));
   let poseInflight = false, poseLast = null;
   SKIN = await skinPromise; window.SKIN = SKIN; if (SKIN) $("status").textContent = "Preparing the hand…";   // shader compile below can take seconds on some GPUs
   const gun = GUN && !BENCH ? await makeGun({ scene, worldGroup, worldObjs, floorY: FLOOR_Y, hold: Q.get("grab") === "1" }).catch(e => { console.warn("gun unavailable:", e); return null; }) : null; window.gun = gun;
@@ -1050,7 +1066,7 @@ async function main() {
     const assigned = new Set();
     for (let [d, s] of assign(r.hands, recv)) {
       const h = d.h; let T, xu, yv; [T, s.fit, xu, yv] = locate(h.world, h.landmarks, frameW, frameH);
-      const raw = toCam(h.world, T, xu, yv); if (FIT_LEN) fitDepths(raw, boneLengths(h.world, s.lens)); if (Z_SMOOTH) smoothFingerDepth(raw); if (PALM_CLAMP) palmClamp(raw);
+      const raw = toCam(h.world, T, xu, yv); if (FIT_LEN) fitDepths(raw, boneLengths(h.world, s.lens)); if (Z_SMOOTH) smoothFingerDepth(raw); if (PALM_Z) palmDepthFromLength(raw, boneLengths(h.world, s.lens)); if (PALM_CLAMP) palmClamp(raw);
       s.det = { lm: h.landmarks, cap }; lagOf(s, h.landmarks, cap);   // what the tracker saw vs what was on screen at that moment (before any gating)
       if (s.raw && recv - s.lastSeen < hold) { const g = camToGL(raw), g0 = camToGL(s.raw); let m = 0; for (let i = 0; i < 21; i++) m = Math.max(m, Math.hypot(g[3*i] - g0[3*i], g[3*i+1] - g0[3*i+1], g[3*i+2] - g0[3*i+2])); dbg.maxJump = Math.max(dbg.maxJump, m); if (m > 0.1) dbg.bigJumps++; }
       // Whole-hand jump gate: a palm move over JUMP since the last result is either a spike (one frame, then back) or a
@@ -1140,8 +1156,8 @@ async function main() {
     }
     for (const s of [slots.Right, slots.Left]) {
       if (shown[s.key]) {
-        const pts = shape(shown[s.key]);
-        const tD = performance.now(); s.hand.draw(pts, s.name, s.elbow, s.shoulder, !!gun && gun.state.mode === "held" && gun.state.holder === s.key); dbg.tm.draw += performance.now() - tD; displayed.push(shown[s.key]);
+        const pts = shape(shown[s.key]), held = !!gun && gun.state.mode === "held" && gun.state.holder === s.key;
+        const tD = performance.now(); s.hand.draw(held ? gun.handPose({ pts, right: s.hand.right }) : pts, s.name, s.elbow, s.shoulder, held); dbg.tm.draw += performance.now() - tD; displayed.push(shown[s.key]);
         const pc = palmFlat(shown[s.key]); if (s.lastPalm && pc.distanceTo(s.lastPalm) > 0.1) dbg.dispJumps++; s.lastPalm = pc;   // what the player actually sees jump
       } else { s.hand.hide(); s.lastPalm = null; }
     }

@@ -22,6 +22,28 @@ const MUZZLE = new THREE.Vector3(0, 0.124, -0.16);
 const SIGHT = new THREE.Vector3(0, 0.143, 0.005);          // centre of the red-dot window, gun space
 const SIGHT_R = 0.012;                                     // window radius: the dot is visible inside it
 const V = () => new THREE.Vector3();
+// The gripping hand, right hand, gun space (metres): palm on the back strap, middle/ring/pinky wrapped around the front
+// strap and curling to the left side, thumb along the left side of the frame, index resting along the frame above the
+// trigger guard. While the gun is held the drawn hand IS this pose (mirrored in x for a left hand), turned to the tracked
+// palm's orientation and put at the tracked palm centre; only the index chain comes from tracking. So the fingers never
+// pass through the gun and the gun points where the hand points.
+const CANON_R = [
+  [0.012, 0.005, 0.128],                                                          // 0 wrist (heel of the hand under the grip)
+  [-0.004, 0.045, 0.118], [-0.022, 0.078, 0.095], [-0.028, 0.09, 0.06], [-0.026, 0.093, 0.03],   // thumb: base, knuckle, joint, tip (left side, pointing forward)
+  [0.026, 0.084, 0.05], [0.022, 0.104, 0.024], [0.021, 0.107, 0.0], [0.02, 0.108, -0.022],      // index at rest: knuckle, then straight along the frame ABOVE the trigger guard
+  [0.027, 0.05, 0.05], [0.02, 0.048, 0.018], [-0.01, 0.046, 0.02], [-0.025, 0.043, 0.036],       // middle: wraps the front strap under the trigger guard (guard bottom y ~0.06)
+  [0.026, 0.032, 0.053], [0.019, 0.03, 0.022], [-0.01, 0.028, 0.024], [-0.025, 0.025, 0.04],     // ring
+  [0.024, 0.014, 0.056], [0.017, 0.012, 0.03], [-0.006, 0.01, 0.031], [-0.02, 0.008, 0.043],     // pinky
+].map(a => new THREE.Vector3(...a));
+const PULL_R = [[0.02, 0.095, 0.03], [0.01, 0.096, 0.024], [0.0, 0.094, 0.021]].map(a => new THREE.Vector3(...a));   // index joints 6, 7, 8 with the finger on the trigger (trigger blade at y 0.065-0.106, z ~0.016)
+const CANON_L = CANON_R.map(v => new THREE.Vector3(-v.x, v.y, v.z)), PULL_L = PULL_R.map(v => new THREE.Vector3(-v.x, v.y, v.z));
+const PULL_FROM = 15, PULL_TO = 60;   // index middle-knuckle bend (degrees) from resting on the frame to fully on the trigger
+const PALM_I = [0, 5, 9, 13, 17];
+function palmBasis(pts, out) {   // orthonormal (along, across, cross) of a hand: wrist->middle knuckle, index->pinky knuckle, their cross product
+  const a = out[0].subVectors(pts[9], pts[0]).normalize(), b = out[1].subVectors(pts[17], pts[5]); b.addScaledVector(a, -b.dot(a)).normalize(); out[2].crossVectors(a, b); return out;
+}
+const CB_R = palmBasis(CANON_R, [V(), V(), V()]), CB_L = palmBasis(CANON_L, [V(), V(), V()]);
+const CC_R = PALM_I.reduce((c, i) => c.add(CANON_R[i]), V()).multiplyScalar(0.2), CC_L = PALM_I.reduce((c, i) => c.add(CANON_L[i]), V()).multiplyScalar(0.2);
 
 export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun.glb", tableY = -0.14, tableZ = -0.3, hold = false }) {
   // --- table --------------------------------------------------------------------------------------------------
@@ -63,6 +85,7 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   const gun = gltf.scene; gun.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; if (o.material) { o.material.envMapIntensity = 0.8; } } });
   for (const nm of ["Bullet_low", "Catridge_low"]) { const o = gun.getObjectByName(nm); if (o) o.visible = false; }   // the model's loose display cartridge
   const slide = gun.getObjectByName("Slide_low"), slide0 = slide ? slide.position.clone() : null;
+  const trig = gun.getObjectByName("Trigger_low"), trig0 = trig ? trig.quaternion.clone() : null, _tq = new THREE.Quaternion(), _tx = new THREE.Vector3(1, 0, 0);   // the trigger pivots at its top: swing it back with the index
   const REST = { pos: new THREE.Vector3(0, tableY + 0.016, tableZ - 0.02), quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI) };   // standing on the magazine, barrel toward the phone
   gun.position.copy(REST.pos); gun.quaternion.copy(REST.quat); worldGroup.add(gun); worldObjs.push(gun);
 
@@ -73,6 +96,7 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   const light = new THREE.PointLight(0xffb060, 0, 0.9, 2); scene.add(light);
   const dotTex = radial([[0, "rgba(255,40,40,1)"], [0.35, "rgba(255,30,30,0.95)"], [0.6, "rgba(255,0,0,0.35)"], [1, "rgba(255,0,0,0)"]], 64);
   const dot = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true })); dot.scale.setScalar(0.006); dot.renderOrder = 20; dot.visible = false; scene.add(dot);
+  const aim = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true, opacity: 0.9 })); aim.renderOrder = 21; aim.visible = false; scene.add(aim);
   const tracer = new THREE.Line(new THREE.BufferGeometry().setFromPoints([V(), V()]), new THREE.LineBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.8 })); tracer.visible = false; scene.add(tracer);
   const markGeo = new THREE.CircleGeometry(0.012, 12), markMat = new THREE.MeshBasicMaterial({ color: 0x1a1612, transparent: true, opacity: 0.9, polygonOffset: true, polygonOffsetFactor: -2, depthWrite: false });
 
@@ -105,29 +129,36 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   const palmCentre = pts => { _c.set(0, 0, 0); for (const i of [0, 5, 9, 13, 17]) _c.add(pts[i]); return _c.multiplyScalar(0.2); };
   const bendDeg = (a, b, c) => { _a.subVectors(b, a).normalize(); _b.subVectors(c, b).normalize(); return Math.acos(Math.max(-1, Math.min(1, _a.dot(_b)))) * 180 / Math.PI; };
   const closed = h => !h.ext[1] && !h.ext[2] && !h.ext[3], open = h => h.ext[1] && h.ext[2] && h.ext[3];
-  const GRIP_ANGLE = (+new URLSearchParams(location.search).get("ga") || 12) * Math.PI / 180;   // barrel = the palm axis tilted this much toward the palm normal (the finger-gun hand: palm facing sideways, arm straight; 50 deg pointed the gun 70 deg left of the hand)
-  const WEB_OFF = 0.008;                   // the web skin sits this far to the palm side of the thumb-base / index-knuckle midpoint
+  const _tb = [V(), V(), V()], _mc = new THREE.Matrix4(), _mt = new THREE.Matrix4(), _hp = Array.from({ length: 21 }, V);
 
-  function gripFrame(h) {   // world frame of the held gun from the hand's points: barrel F, grip-up U, side R, grip centre C
-    const p = h.pts; _pu.subVectors(p[9], p[0]).normalize(); _pv.subVectors(p[17], p[5]).normalize();
-    _n.crossVectors(_a.subVectors(p[5], p[0]), _b.subVectors(p[17], p[0])).normalize(); if (!h.right) _n.negate();   // out of the palm, palm side
-    _U.copy(_pv).negate();                                                                    // pinky -> index: up the grip toward the slide
-    _F.copy(_pu).multiplyScalar(Math.cos(GRIP_ANGLE)).addScaledVector(_n, Math.sin(GRIP_ANGLE)); _F.addScaledVector(_U, -_F.dot(_U)).normalize();
-    _R.crossVectors(_F, _U).normalize(); _U.crossVectors(_R, _F).normalize();
-    _c.copy(p[2]).add(p[5]).multiplyScalar(0.5).addScaledVector(_n, WEB_OFF);              // the web of the hand
+  function gripFrame(h) {   // rotation (gun space -> world) and the tracked palm centre: the canonical hand's palm basis turned onto the tracked palm's basis
+    const cb = h.right ? CB_R : CB_L; palmBasis(h.pts, _tb);
+    _mc.makeBasis(cb[0], cb[1], cb[2]); _mt.makeBasis(_tb[0], _tb[1], _tb[2]);
+    _m.copy(_mt).multiply(_mc.clone().transpose()); _q.setFromRotationMatrix(_m);              // world = T * C^-1 (C orthonormal)
+    _c.copy(palmCentre(h.pts)); _R.set(1, 0, 0).applyQuaternion(_q);                          // side axis of the gun in the world
   }
-  const GB = new THREE.Matrix4().makeBasis(BARREL, GRIP_UP, new THREE.Vector3().crossVectors(BARREL, GRIP_UP).normalize()).invert();   // gun basis -> identity
   function placeInHand(h) {
     gripFrame(h);
-    _m.makeBasis(_F, _U, _R).multiply(GB);                                                     // gun space -> world rotation (as a matrix)
-    _q.setFromRotationMatrix(_m);
     if (st.kick > 1e-4) { _kq.setFromAxisAngle(_R, -st.kick); _q.premultiply(_kq); }         // recoil: muzzle up about the side axis
     gun.quaternion.copy(_q);
-    _g.copy(WEB).applyQuaternion(_q); gun.position.copy(_c).sub(_g);                         // the beavertail lands in the web of the hand
+    _g.copy(h.right ? CC_R : CC_L).applyQuaternion(_q); gun.position.copy(_c).sub(_g);       // the canonical palm centre lands on the tracked palm centre
+  }
+  const pullT = h => Math.min(1, Math.max(0, (bendDeg(h.pts[5], h.pts[6], h.pts[7]) - PULL_FROM) / (PULL_TO - PULL_FROM)));   // 0 = index resting on the frame, 1 = on the trigger
+  function handPose(h) {   // the 21 world points the hand is drawn from while holding: the canonical grip; the index slides from the frame onto the trigger with the tracked bend
+    gripFrame(h); const canon = h.right ? CANON_R : CANON_L, pull = h.right ? PULL_R : PULL_L, cc = h.right ? CC_R : CC_L, t = pullT(h);
+    for (let i = 0; i < 21; i++) _hp[i].copy(canon[i]).sub(cc).applyQuaternion(_q).add(_c);
+    for (let k = 0; k < 3; k++) _hp[6 + k].copy(canon[6 + k]).lerp(pull[k], t).sub(cc).applyQuaternion(_q).add(_c);
+    return _hp;
   }
   function reparent(obj, parent) {   // keep the world transform
     obj.updateMatrixWorld(true); _m.copy(obj.matrixWorld); parent.updateMatrixWorld(true); obj.removeFromParent(); parent.add(obj);
     _m.premultiply(parent.matrixWorld.clone().invert()); _m.decompose(obj.position, obj.quaternion, obj.scale);
+  }
+  function aimDot() {   // the impact point of the barrel ray, drawn as a dot that grows with distance so it stays visible
+    gun.updateMatrixWorld(true); _w.copy(MUZZLE).applyMatrix4(gun.matrixWorld); _dir.copy(BARREL).transformDirection(gun.matrixWorld);
+    ray.set(_w, _dir); const hit = ray.intersectObjects(targets, true)[0];
+    if (hit) { aim.position.copy(hit.point).addScaledVector(_dir, -0.004); aim.scale.setScalar(0.008 + 0.012 * hit.distance); aim.visible = true; }
+    else { aim.position.copy(_w).addScaledVector(_dir, 4); aim.scale.setScalar(0.06); aim.visible = true; }
   }
   function redDot(camera) {   // collimated sight: the dot sits where the ray from the eye parallel to the barrel crosses the sight glass
     gun.updateMatrixWorld(true); _g.copy(SIGHT).applyMatrix4(gun.matrixWorld); _dir.copy(BARREL).transformDirection(gun.matrixWorld);
@@ -178,7 +209,7 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   }
 
   return {
-    obj: gun, table, get state() { return st; }, fireNow: fire, testShootAt,
+    obj: gun, table, get state() { return st; }, fireNow: fire, testShootAt, handPose,
     get sight() { gun.updateMatrixWorld(true); const g = SIGHT.clone().applyMatrix4(gun.matrixWorld), d = BARREL.clone().transformDirection(gun.matrixWorld); return { g: g.toArray(), d: d.toArray() }; }, get marks() { return marks.children.length; }, get cans() { return cans.map(c => c.state); },
     hud() { const sc = st.shots ? ` · ${st.hits}/${st.shots} hits` : ""; return st.mode === "held" ? `gun held${st.dotOn ? " · ON TARGET" : ""}${sc}` : `gun on the table${sc}`; },
     update(dt, hands, now, camera) {   // hands: [{ key, group, pts (world Vector3[21]), right, ext: [index, middle, ring, pinky extended] }]
@@ -192,14 +223,15 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
       if (st.mode === "held") {
         if (holder) {
           st.lastSeen = now; placeInHand(holder);
+          st.pull = pullT(holder); if (trig) { _tq.setFromAxisAngle(_tx, -0.35 * st.pull); trig.quaternion.copy(trig0).multiply(_tq); }   // the trigger follows the finger
           const bend = bendDeg(holder.pts[5], holder.pts[6], holder.pts[7]);
           if (st.armed && bend > FIRE_ON && now - st.fireT > FIRE_GAP * 1000) { st.armed = false; st.fireT = now; fire(); } else if (!st.armed && bend < FIRE_OFF) st.armed = true;
           if (open(holder)) drop();
         } else if (now - st.lastSeen > 1000) drop();
-        if (st.mode === "held" && camera) redDot(camera); else { dot.visible = false; st.dotOn = false; }
+        if (st.mode === "held") { aimDot(); if (camera) redDot(camera); else { dot.visible = false; st.dotOn = false; } } else { dot.visible = aim.visible = false; st.dotOn = false; }
         return;
       }
-      dot.visible = false; st.dotOn = false;
+      dot.visible = aim.visible = false; st.dotOn = false;
       if (st.mode === "falling") {
         st.vel.y -= 9.8 * dt; gun.position.addScaledVector(st.vel, dt);
         const onTable = Math.abs(gun.position.x) < 0.45 && Math.abs(gun.position.z - tableZ) < 0.3, ground = (onTable ? tableY : floorY) + 0.016;
@@ -217,6 +249,7 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
     },
   };
   function drop() {
+    if (trig) trig.quaternion.copy(trig0);
     reparent(gun, worldGroup); worldObjs.push(gun); st.mode = "falling"; st.holder = null; st.cool = 0.8; st.vel.set(0, 0, 0);
   }
 }
