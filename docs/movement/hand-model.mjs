@@ -337,8 +337,12 @@ function makeRigSkin(variant, color) {
 // group sits at (0, -height, -dist) in the eye's frame, turned half a turn about the vertical axis. A proper rotation,
 // so the right hand stays a right hand and appears on the right.
 // Joint depths come from the world model + one translation (locate, as the main page); the picture fixes x/y exactly.
-export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5 };   // sliders write here
-const MIN_AHEAD = 0.25;   // the hand is never closer than this to the eye (a hand farther from the phone than `dist` would land behind the eye and vanish)
+export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5, eye: null };   // sliders write here; eye = [x, y up, distance] of the tracked eye behind the phone (phone frame, metres), set by the app when the head is seen
+// The eye is FIXED (the slider distance, or the tracked head): a hand brought toward the face comes close to the eye and
+// the gun's sight fills the view, as on the main page. (Before, the eye retreated to keep the hand 0.25 m ahead, so a
+// hand near the face moved AWAY - the owner wants aiming by bringing the gun to the eye.) The hand is only kept from
+// passing behind the eye: if any point would be closer than MIN_AHEAD, the whole hand is pushed toward the phone.
+const MIN_AHEAD = 0.12;
 function locate(world, image, W, H) {
   const k = 2 * Math.tan(view.phoneFov * Math.PI / 360), n = 21;
   const xu = new Float32Array(n), yv = new Float32Array(n);
@@ -369,9 +373,10 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
     _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize();
     chir += 0.2 * (Math.sign(_r.subVectors(pts[4], pts[0]).dot(_n)) - chir);
     const right = model.right, on = right ? skinR : skinL, off = right ? skinL : skinR;
-    off.mesh.visible = false; on.update(pts, right);
+    const src = model.override ? model.override() : pts;   // shooter.mjs: the gripping pose while the gun is held
+    off.mesh.visible = false; on.update(src, right, undefined, undefined, !!model.override);
   }
-  const model = { group, ready, points: pts, offset, get visible() { return shown; }, get right() { return chir * CHIR_RIGHT >= 0; },
+  const model = { group, ready, points: pts, offset, override: null, get visible() { return shown; }, get right() { return chir * CHIR_RIGHT >= 0; },
     update(image, world, W, H) {   // from the tracker: picture + world landmarks -> the phone's GL frame
       const [Tz, xu, yv] = locate(world, image, W, H); if (!Number.isFinite(Tz) || Tz <= 0.05) return;
       q.setFromAxisAngle(ax, view.tilt * Math.PI / 180);
@@ -381,7 +386,10 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
         _w.set(xu[i] * z, -yv[i] * z, -z).applyQuaternion(q);   // x right, y up, z toward the phone; tilt levelled
         pts[i].lerp(_w, a);
       }
-      offset[0] = view.height; offset[1] = Math.max(view.dist, Tz + MIN_AHEAD); group.position.set(0, -offset[0], -offset[1]);
+      const ex = view.eye ? view.eye[0] : 0, ey = view.eye ? view.eye[1] : view.height, D = view.eye ? view.eye[2] : view.dist;
+      let zMin = Infinity; for (const p of pts) zMin = Math.min(zMin, p.z);
+      const push = (MIN_AHEAD - D) - zMin; if (push > 0) for (const p of pts) p.z += push;   // never behind or inside the eye (phone frame: the eye at z = -D)
+      offset[0] = ey; offset[1] = D; group.position.set(ex, -ey, -D);
       window.dbg = Object.assign(window.dbg || {}, { model: pts, offset }); drive();
     },
     setPoints(flat, o) {   // from the network: 63 numbers in the other player's phone frame + their [height, dist]

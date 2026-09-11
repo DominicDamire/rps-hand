@@ -1,13 +1,17 @@
-// A pistol on a table that a tracked hand can pick up and fire, and a small shooting range.
+// A pistol on a table that a tracked hand can pick up and fire, and a small shooting range. Used by the main page
+// (docs/index.html) and by the movement page (docs/movement/shooter.mjs); everything is done in WORLD space.
 //   pick up: close the hand (middle, ring, pinky curled) within GRAB_R of the grip
 //   fire:    with the gun held, curl the index finger (straight -> bent past FIRE_ON degrees at the middle knuckle)
 //   drop:    open the hand (middle, ring, pinky extended); the gun falls to the table or the floor
-//   aim:     the red-dot sight is collimated like a real one: the dot shows in the sight window only where the ray from
-//            the eye PARALLEL TO THE BARREL crosses the glass, so raising the gun to eye level and looking through the
-//            window puts the dot on what the shot will hit
+//   hand:    while held the drawn hand is a canonical gripping pose in gun space (palm on the back strap, fingers around
+//            the front strap, thumb along the frame), turned to the tracked palm's orientation and put at the tracked
+//            palm centre; the index slides from the frame onto the trigger with the tracked bend (handPose)
+//   aim:     an impact dot marks where the barrel ray lands; the red-dot sight is collimated like a real one (the dot
+//            shows in the window where the ray from the eye parallel to the barrel crosses the glass)
 //   range:   five cans on the far edge of the table and three ring targets down the room; hits are counted, cans fly
-// The gun is a child of the holding hand's group while held and of worldGroup otherwise. Shots: muzzle flash + light,
-// slide and muzzle kick, a synthesized bang, a bullet mark where the ray from the muzzle hits the room or a target.
+// Layout: a `range` group at place.pos (the table-top centre) turned by place.yaw; in the group's frame the player is
+// on the +z side and the targets are toward -z (three.js "forward"). The gun is a child of the range group while at
+// rest and of the holding hand's group while held (world transform kept across the reparenting).
 import * as THREE from "three";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js";
 
@@ -15,18 +19,14 @@ const GRAB_R = 0.15;        // metres from the palm centre to the grip to pick t
 const FIRE_ON = 50, FIRE_OFF = 40;   // index middle-knuckle bend (degrees) that fires / re-arms the trigger (a press, like a normal gun)
 const FIRE_GAP = 0.12;      // seconds between shots
 const GRIP = new THREE.Vector3(0, 0.045, 0.062);          // grip centre, gun space (y up, barrel -z): the pick-up point
-const WEB = new THREE.Vector3(0, 0.095, 0.09);            // top of the back strap under the beavertail: where the web of the hand (thumb-index) sits
-const GRIP_UP = new THREE.Vector3(0, 0.96, -0.28).normalize();   // grip axis toward the slide (raked back)
 const BARREL = new THREE.Vector3(0, 0, -1);
 const MUZZLE = new THREE.Vector3(0, 0.124, -0.16);
 const SIGHT = new THREE.Vector3(0, 0.143, 0.005);          // centre of the red-dot window, gun space
 const SIGHT_R = 0.012;                                     // window radius: the dot is visible inside it
 const V = () => new THREE.Vector3();
 // The gripping hand, right hand, gun space (metres): palm on the back strap, middle/ring/pinky wrapped around the front
-// strap and curling to the left side, thumb along the left side of the frame, index resting along the frame above the
-// trigger guard. While the gun is held the drawn hand IS this pose (mirrored in x for a left hand), turned to the tracked
-// palm's orientation and put at the tracked palm centre; only the index chain comes from tracking. So the fingers never
-// pass through the gun and the gun points where the hand points.
+// strap under the trigger guard and curling to the left side, thumb along the left side of the frame, index resting
+// along the frame above the trigger guard. Mirrored in x for a left hand.
 const CANON_R = [
   [0.012, 0.005, 0.128],                                                          // 0 wrist (heel of the hand under the grip)
   [-0.004, 0.045, 0.118], [-0.022, 0.078, 0.095], [-0.028, 0.09, 0.06], [-0.026, 0.093, 0.03],   // thumb: base, knuckle, joint, tip (left side, pointing forward)
@@ -44,16 +44,18 @@ function palmBasis(pts, out) {   // orthonormal (along, across, cross) of a hand
 }
 const CB_R = palmBasis(CANON_R, [V(), V(), V()]), CB_L = palmBasis(CANON_L, [V(), V(), V()]);
 const CC_R = PALM_I.reduce((c, i) => c.add(CANON_R[i]), V()).multiplyScalar(0.2), CC_L = PALM_I.reduce((c, i) => c.add(CANON_L[i]), V()).multiplyScalar(0.2);
+export const fingersUp = pts => { const w = pts[0]; return [[8, 6], [12, 10], [16, 14], [20, 18]].map(([tip, pip]) => pts[tip].distanceTo(w) > pts[pip].distanceTo(w)); };
 
-export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun.glb", tableY = -0.14, tableZ = -0.3, hold = false }) {
+export async function makeGun({ scene, worldObjs = [], floorY = -0.28, place = { pos: new THREE.Vector3(0, -0.14, -0.3), yaw: Math.PI }, url = "gun.glb", hold = false }) {
+  const range = new THREE.Group(); range.position.copy(place.pos); range.rotation.y = place.yaw; scene.add(range);
+  const floorL = floorY - place.pos.y;   // the floor in the range group's frame
   // --- table --------------------------------------------------------------------------------------------------
-  const table = new THREE.Group();
   const wood = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.75 });
-  const top = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.04, 0.6), wood); top.position.set(0, tableY - 0.02, tableZ); top.receiveShadow = true; top.castShadow = true; table.add(top);
-  for (const [x, z] of [[-0.42, tableZ - 0.27], [0.42, tableZ - 0.27], [-0.42, tableZ + 0.27], [0.42, tableZ + 0.27]]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.04, tableY - 0.04 - floorY, 0.04), wood); leg.position.set(x, (tableY - 0.04 + floorY) / 2, z); leg.castShadow = true; table.add(leg);
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.04, 0.6), wood); top.position.set(0, -0.02, 0); top.receiveShadow = true; top.castShadow = true; range.add(top);
+  for (const [x, z] of [[-0.42, -0.27], [0.42, -0.27], [-0.42, 0.27], [0.42, 0.27]]) {
+    const h = -0.04 - floorL; if (h <= 0.02) continue;
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.04, h, 0.04), wood); leg.position.set(x, -0.04 - h / 2, z); leg.castShadow = true; range.add(leg);
   }
-  scene.add(table); worldObjs.push(table);
   const marks = new THREE.Group(); scene.add(marks);
 
   // --- the range: cans on the far edge of the table, ring targets down the room ---------------------------------
@@ -64,8 +66,8 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   for (let i = 0; i < 5; i++) {
     const m = new THREE.Mesh(canGeo, canMat); m.castShadow = true; m.name = "can";
     const band = new THREE.Mesh(new THREE.CylinderGeometry(CAN_R + 0.001, CAN_R + 0.001, 0.04, 20), lidMat); m.add(band);
-    const rest = new THREE.Vector3(-0.28 + i * 0.14, tableY + CAN_H / 2, tableZ + 0.24);
-    m.position.copy(rest); scene.add(m); cans.push({ m, rest, state: "up", vel: V(), spin: V(), downT: 0 });
+    const rest = new THREE.Vector3(-0.28 + i * 0.14, CAN_H / 2, -0.24);
+    m.position.copy(rest); range.add(m); cans.push({ m, rest, state: "up", vel: V(), spin: V(), downT: 0 });
   }
   const ringTex = (() => {
     const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
@@ -74,11 +76,11 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   })();
   const boards = [];
   for (const x of [-0.55, 0, 0.55]) {
-    const b = new THREE.Mesh(new THREE.CircleGeometry(0.16, 40), new THREE.MeshStandardMaterial({ map: ringTex, roughness: 0.9 })); b.name = "board";
-    b.position.set(x, 0.08, 1.7); b.rotation.y = Math.PI; b.castShadow = true; scene.add(b); boards.push(b);   // faces the player (-z)
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.08 - floorY - 0.16, 8), wood); pole.position.set(x, (0.08 - 0.16 + floorY) / 2, 1.7 + 0.005); scene.add(pole);
+    const b = new THREE.Mesh(new THREE.CircleGeometry(0.16, 40), new THREE.MeshStandardMaterial({ map: ringTex, roughness: 0.9, side: THREE.DoubleSide })); b.name = "board";
+    b.position.set(x, 0.22, -2.0); b.castShadow = true; range.add(b); boards.push(b);   // faces +z, the player
+    const h = 0.22 - 0.16 - floorL; if (h > 0.02) { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, h, 8), wood); pole.position.set(x, 0.22 - 0.16 - h / 2, -2.005); range.add(pole); }
   }
-  const targets = [...worldObjs.filter(o => o !== table), top, ...cans.map(c => c.m), ...boards];   // what bullets can hit
+  const targets = [...worldObjs, top, ...cans.map(c => c.m), ...boards];   // what bullets can hit
 
   // --- the pistol ---------------------------------------------------------------------------------------------
   const gltf = await new GLTFLoader().loadAsync(url);
@@ -86,8 +88,8 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   for (const nm of ["Bullet_low", "Catridge_low"]) { const o = gun.getObjectByName(nm); if (o) o.visible = false; }   // the model's loose display cartridge
   const slide = gun.getObjectByName("Slide_low"), slide0 = slide ? slide.position.clone() : null;
   const trig = gun.getObjectByName("Trigger_low"), trig0 = trig ? trig.quaternion.clone() : null, _tq = new THREE.Quaternion(), _tx = new THREE.Vector3(1, 0, 0);   // the trigger pivots at its top: swing it back with the index
-  const REST = { pos: new THREE.Vector3(0, tableY + 0.016, tableZ - 0.02), quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI) };   // standing on the magazine, barrel toward the phone
-  gun.position.copy(REST.pos); gun.quaternion.copy(REST.quat); worldGroup.add(gun); worldObjs.push(gun);
+  const REST = { pos: new THREE.Vector3(0, 0.016, 0.02), quat: new THREE.Quaternion() };   // standing on the magazine at the near edge, barrel toward the targets (-z)
+  gun.position.copy(REST.pos); gun.quaternion.copy(REST.quat); range.add(gun);
 
   // muzzle flash: additive sprite + a short light; the red dot: a small additive sprite placed on the sight glass
   const radial = (stops, size = 128) => { const c = document.createElement("canvas"); c.width = c.height = size; const g = c.getContext("2d"); const gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2); for (const [k, col] of stops) gr.addColorStop(k, col); g.fillStyle = gr; g.fillRect(0, 0, size, size); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; };
@@ -123,14 +125,16 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   }
 
   // --- state ---------------------------------------------------------------------------------------------------
-  const st = { mode: "rest", holder: null, armed: true, shots: 0, hits: 0, kick: 0, slideT: 1, flashT: 0, lastSeen: 0, cool: 0, vel: V(), forced: false, dotOn: false, fireT: 0 };
-  const ray = new THREE.Raycaster(); ray.far = 8;
-  const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _kq = new THREE.Quaternion(), _c = V(), _pu = V(), _pv = V(), _n = V(), _F = V(), _U = V(), _R = V(), _g = V(), _w = V(), _dir = V(), _a = V(), _b = V(), _e = V(), _ax = V();
-  const palmCentre = pts => { _c.set(0, 0, 0); for (const i of [0, 5, 9, 13, 17]) _c.add(pts[i]); return _c.multiplyScalar(0.2); };
+  const st = { mode: "rest", holder: null, armed: true, shots: 0, hits: 0, kick: 0, slideT: 1, flashT: 0, lastSeen: 0, cool: 0, vel: V(), forced: false, dotOn: false, fireT: 0, pull: 0 };
+  const ray = new THREE.Raycaster(); ray.far = 60;
+  const _m = new THREE.Matrix4(), _mi = new THREE.Matrix4(), _q = new THREE.Quaternion(), _kq = new THREE.Quaternion(), _c = V(), _R = V(), _g = V(), _w = V(), _dir = V(), _a = V(), _b = V(), _e = V(), _ax = V(), _one = new THREE.Vector3(1, 1, 1), _qi = new THREE.Quaternion();
+  const _tb = [V(), V(), V()], _mc = new THREE.Matrix4(), _mt = new THREE.Matrix4(), _hp = Array.from({ length: 21 }, V);
+  const palmCentre = pts => { _c.set(0, 0, 0); for (const i of PALM_I) _c.add(pts[i]); return _c.multiplyScalar(0.2); };
   const bendDeg = (a, b, c) => { _a.subVectors(b, a).normalize(); _b.subVectors(c, b).normalize(); return Math.acos(Math.max(-1, Math.min(1, _a.dot(_b)))) * 180 / Math.PI; };
   const closed = h => !h.ext[1] && !h.ext[2] && !h.ext[3], open = h => h.ext[1] && h.ext[2] && h.ext[3];
-  const _tb = [V(), V(), V()], _mc = new THREE.Matrix4(), _mt = new THREE.Matrix4(), _hp = Array.from({ length: 21 }, V);
-
+  const setWorld = (obj, P, Q) => {   // world position + rotation -> the object's local transform under its current parent
+    obj.parent.updateMatrixWorld(true); _m.compose(P, Q, _one); _mi.copy(obj.parent.matrixWorld).invert(); _m.premultiply(_mi); _m.decompose(obj.position, obj.quaternion, obj.scale);
+  };
   function gripFrame(h) {   // rotation (gun space -> world) and the tracked palm centre: the canonical hand's palm basis turned onto the tracked palm's basis
     const cb = h.right ? CB_R : CB_L; palmBasis(h.pts, _tb);
     _mc.makeBasis(cb[0], cb[1], cb[2]); _mt.makeBasis(_tb[0], _tb[1], _tb[2]);
@@ -140,19 +144,20 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   function placeInHand(h) {
     gripFrame(h);
     if (st.kick > 1e-4) { _kq.setFromAxisAngle(_R, -st.kick); _q.premultiply(_kq); }         // recoil: muzzle up about the side axis
-    gun.quaternion.copy(_q);
-    _g.copy(h.right ? CC_R : CC_L).applyQuaternion(_q); gun.position.copy(_c).sub(_g);       // the canonical palm centre lands on the tracked palm centre
+    _g.copy(h.right ? CC_R : CC_L).applyQuaternion(_q); _e.copy(_c).sub(_g);                  // the canonical palm centre lands on the tracked palm centre
+    setWorld(gun, _e, _q);
   }
   const pullT = h => Math.min(1, Math.max(0, (bendDeg(h.pts[5], h.pts[6], h.pts[7]) - PULL_FROM) / (PULL_TO - PULL_FROM)));   // 0 = index resting on the frame, 1 = on the trigger
-  function handPose(h) {   // the 21 world points the hand is drawn from while holding: the canonical grip; the index slides from the frame onto the trigger with the tracked bend
+  function handPose(h, frameInv) {   // the 21 points the hand is drawn from while holding (world, or in the frame frameInv maps into): the canonical grip; the index slides onto the trigger with the tracked bend
     gripFrame(h); const canon = h.right ? CANON_R : CANON_L, pull = h.right ? PULL_R : PULL_L, cc = h.right ? CC_R : CC_L, t = pullT(h);
     for (let i = 0; i < 21; i++) _hp[i].copy(canon[i]).sub(cc).applyQuaternion(_q).add(_c);
     for (let k = 0; k < 3; k++) _hp[6 + k].copy(canon[6 + k]).lerp(pull[k], t).sub(cc).applyQuaternion(_q).add(_c);
+    if (frameInv) for (const p of _hp) p.applyMatrix4(frameInv);
     return _hp;
   }
   function reparent(obj, parent) {   // keep the world transform
     obj.updateMatrixWorld(true); _m.copy(obj.matrixWorld); parent.updateMatrixWorld(true); obj.removeFromParent(); parent.add(obj);
-    _m.premultiply(parent.matrixWorld.clone().invert()); _m.decompose(obj.position, obj.quaternion, obj.scale);
+    _mi.copy(parent.matrixWorld).invert(); _m.premultiply(_mi); _m.decompose(obj.position, obj.quaternion, obj.scale);
   }
   function aimDot() {   // the impact point of the barrel ray, drawn as a dot that grows with distance so it stays visible
     gun.updateMatrixWorld(true); _w.copy(MUZZLE).applyMatrix4(gun.matrixWorld); _dir.copy(BARREL).transformDirection(gun.matrixWorld);
@@ -162,7 +167,7 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   }
   function redDot(camera) {   // collimated sight: the dot sits where the ray from the eye parallel to the barrel crosses the sight glass
     gun.updateMatrixWorld(true); _g.copy(SIGHT).applyMatrix4(gun.matrixWorld); _dir.copy(BARREL).transformDirection(gun.matrixWorld);
-    _e.copy(camera.position); const t = _a.subVectors(_g, _e).dot(_dir);
+    _e.setFromMatrixPosition(camera.matrixWorld); const t = _a.subVectors(_g, _e).dot(_dir);
     if (t <= 0.02) { st.dotOn = false; dot.visible = false; return; }                          // the window must be in front of the eye
     _w.copy(_e).addScaledVector(_dir, t);                                                      // on the glass plane, along the barrel from the eye
     const off = _w.distanceTo(_g), k = 1 - off / SIGHT_R;
@@ -178,8 +183,9 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
       pts.setXYZ(1, hit.point.x, hit.point.y, hit.point.z);
       let o = hit.object; while (o && o.name !== "can" && o.name !== "board") o = o.parent; st.lastHit = o ? o.name : hit.object.name || hit.object.type;
       const can = o && o.name === "can" ? cans.find(c => c.m === o) : null;
-      if (can && can.state === "up") {   // knock it over
-        can.state = "flying"; can.vel.copy(_dir).multiplyScalar(2.2); can.vel.y += 1.4; can.spin.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(9); st.hits++; clink();
+      if (can && can.state === "up") {   // knock it over (velocities in the range group's frame)
+        range.getWorldQuaternion(_qi).invert();
+        can.state = "flying"; can.vel.copy(_dir).applyQuaternion(_qi).multiplyScalar(2.2); can.vel.y += 1.4; can.spin.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(9); st.hits++; clink();
       } else if (o && o.name === "board") st.hits++;
       if (!can) {   // a bullet mark on what was hit
         const m = new THREE.Mesh(markGeo, markMat); const nrm = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : _dir.clone().negate();
@@ -188,12 +194,12 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
     } else { _a.copy(_w).addScaledVector(_dir, 6); pts.setXYZ(1, _a.x, _a.y, _a.z); }
     pts.needsUpdate = true; tracer.visible = true; tracer.material.opacity = 0.8;
   }
-  function stepCans(dt, now) {
+  function stepCans(dt, now) {   // in the range group's frame (y up)
     for (const c of cans) {
       if (c.state === "flying") {
         c.vel.y -= 9.8 * dt; c.m.position.addScaledVector(c.vel, dt);
         _q.setFromAxisAngle(_ax.copy(c.spin).normalize(), c.spin.length() * dt); c.m.quaternion.premultiply(_q);
-        const onTable = Math.abs(c.m.position.x) < 0.45 && Math.abs(c.m.position.z - tableZ) < 0.3, ground = (onTable ? tableY : floorY) + CAN_R;
+        const onTable = Math.abs(c.m.position.x) < 0.45 && Math.abs(c.m.position.z) < 0.3, ground = (onTable ? 0 : floorL) + CAN_R;
         if (c.m.position.y <= ground && c.vel.y < 0) {
           c.m.position.y = ground; c.state = "down"; c.downT = now;
           _a.set(c.vel.x, 0, c.vel.z); if (_a.lengthSq() < 1e-6) _a.set(0, 0, 1); _a.normalize();   // lie down along the direction it flew
@@ -203,16 +209,20 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
     }
   }
   function testShootAt(p) {   // tests only, gun at rest: point the barrel at a world point and fire (iterated: the muzzle moves with the rotation about the gun origin)
-    const P = new THREE.Vector3(...p); _a.copy(gun.position); _a.y += MUZZLE.y;
-    for (let k = 0; k < 25; k++) { _dir.subVectors(P, _a).normalize(); gun.quaternion.setFromUnitVectors(BARREL, _dir); gun.updateMatrixWorld(true); _a.copy(MUZZLE).applyMatrix4(gun.matrixWorld); }
+    const P = new THREE.Vector3(...p); gun.updateMatrixWorld(true); _a.setFromMatrixPosition(gun.matrixWorld); _a.y += MUZZLE.y;
+    for (let k = 0; k < 25; k++) { _dir.subVectors(P, _a).normalize(); _q.setFromUnitVectors(BARREL, _dir); _e.setFromMatrixPosition(gun.matrixWorld); setWorld(gun, _e, _q); gun.updateMatrixWorld(true); _a.copy(MUZZLE).applyMatrix4(gun.matrixWorld); }
     fire();
+  }
+  function drop() {
+    if (trig) trig.quaternion.copy(trig0);
+    reparent(gun, range); st.mode = "falling"; st.holder = null; st.cool = 0.8; st.vel.set(0, 0, 0);
   }
 
   return {
-    obj: gun, table, get state() { return st; }, fireNow: fire, testShootAt, handPose,
-    get sight() { gun.updateMatrixWorld(true); const g = SIGHT.clone().applyMatrix4(gun.matrixWorld), d = BARREL.clone().transformDirection(gun.matrixWorld); return { g: g.toArray(), d: d.toArray() }; }, get marks() { return marks.children.length; }, get cans() { return cans.map(c => c.state); },
+    obj: gun, range, get state() { return st; }, fireNow: fire, testShootAt, handPose, get marks() { return marks.children.length; }, get cans() { return cans.map(c => c.state); },
+    get sight() { gun.updateMatrixWorld(true); const g = SIGHT.clone().applyMatrix4(gun.matrixWorld), d = BARREL.clone().transformDirection(gun.matrixWorld); return { g: g.toArray(), d: d.toArray() }; },
     hud() { const sc = st.shots ? ` · ${st.hits}/${st.shots} hits` : ""; return st.mode === "held" ? `gun held${st.dotOn ? " · ON TARGET" : ""}${sc}` : `gun on the table${sc}`; },
-    update(dt, hands, now, camera) {   // hands: [{ key, group, pts (world Vector3[21]), right, ext: [index, middle, ring, pinky extended] }]
+    update(dt, hands, now, camera) {   // hands: [{ key, group, pts (WORLD Vector3[21]), right, ext: [index, middle, ring, pinky extended] }]
       // effects
       if (st.kick > 0) st.kick = Math.max(0, st.kick - st.kick * Math.min(1, dt * 16) - dt * 0.2);
       if (slide) { st.slideT = Math.min(1, st.slideT + dt / 0.09); const back = st.slideT < 0.4 ? st.slideT / 0.4 : 1 - (st.slideT - 0.4) / 0.6; slide.position.copy(slide0).z += 0.014 * Math.max(0, back); }
@@ -232,9 +242,9 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
         return;
       }
       dot.visible = aim.visible = false; st.dotOn = false;
-      if (st.mode === "falling") {
+      if (st.mode === "falling") {   // in the range group's frame
         st.vel.y -= 9.8 * dt; gun.position.addScaledVector(st.vel, dt);
-        const onTable = Math.abs(gun.position.x) < 0.45 && Math.abs(gun.position.z - tableZ) < 0.3, ground = (onTable ? tableY : floorY) + 0.016;
+        const onTable = Math.abs(gun.position.x) < 0.45 && Math.abs(gun.position.z) < 0.3, ground = (onTable ? 0 : floorL) + 0.016;
         if (gun.position.y <= ground) { gun.position.y = ground; gun.quaternion.copy(REST.quat); st.mode = "rest"; }
         return;
       }
@@ -244,12 +254,9 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
       for (const h of hands) {
         const near = palmCentre(h.pts).distanceTo(_g) < GRAB_R;
         if ((near && closed(h)) || (hold && !st.forced)) {   // armed at once unless the index is already curled (then it arms when the finger straightens)
-          st.forced = true; st.mode = "held"; st.holder = h.key; st.armed = bendDeg(h.pts[5], h.pts[6], h.pts[7]) < FIRE_ON; st.lastSeen = now; const i = worldObjs.indexOf(gun); if (i >= 0) worldObjs.splice(i, 1); reparent(gun, h.group); placeInHand(h); break; }
+          st.forced = true; st.mode = "held"; st.holder = h.key; st.armed = bendDeg(h.pts[5], h.pts[6], h.pts[7]) < FIRE_ON; st.lastSeen = now; reparent(gun, h.group); placeInHand(h); break;
+        }
       }
     },
   };
-  function drop() {
-    if (trig) trig.quaternion.copy(trig0);
-    reparent(gun, worldGroup); worldObjs.push(gun); st.mode = "falling"; st.holder = null; st.cool = 0.8; st.vel.set(0, 0, 0);
-  }
 }

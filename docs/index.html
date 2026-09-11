@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 39)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 40)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -49,7 +49,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 import { makeGun } from "./gun.mjs";
 
-const BUILD = 39;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 40;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -512,7 +512,7 @@ for (const z of [-3.2, 3.2]) {   // a wall behind each player
   const wall = new THREE.Mesh(new THREE.PlaneGeometry(8, 5), new THREE.MeshStandardMaterial({ color: 0x252c3c, roughness: 1, side: THREE.DoubleSide }));
   wall.position.set(0, FLOOR_Y + 2.5, z); wall.receiveShadow = true; scene.add(wall); worldObjs.push(wall);
 }
-const _pd = V(), _pu2 = V(), _lk = V();
+const _pd = V(), _pu2 = V(), _lk = V(), _wgi = new THREE.Matrix4();
 
 
 // --- skinned hand mesh driven by the 21 tracked points -----------------------------------------------
@@ -997,7 +997,7 @@ async function main() {
   if (POSE && !BENCH) makePoseTracker().then(t => { poseTracker = t; }, e => console.warn("wrist tracking unavailable:", e));
   let poseInflight = false, poseLast = null;
   SKIN = await skinPromise; window.SKIN = SKIN; if (SKIN) $("status").textContent = "Preparing the hand…";   // shader compile below can take seconds on some GPUs
-  const gun = GUN && !BENCH ? await makeGun({ scene, worldGroup, worldObjs, floorY: FLOOR_Y, hold: Q.get("grab") === "1" }).catch(e => { console.warn("gun unavailable:", e); return null; }) : null; window.gun = gun;
+  const gun = GUN && !BENCH ? await makeGun({ scene, worldObjs, floorY: FLOOR_Y, hold: Q.get("grab") === "1" }).catch(e => { console.warn("gun unavailable:", e); return null; }) : null; window.gun = gun;
 
   // one slot per hand, keyed by MediaPipe's handedness label
   const slots = { Right: null, Left: null };
@@ -1157,11 +1157,12 @@ async function main() {
     for (const s of [slots.Right, slots.Left]) {
       if (shown[s.key]) {
         const pts = shape(shown[s.key]), held = !!gun && gun.state.mode === "held" && gun.state.holder === s.key;
-        const tD = performance.now(); s.hand.draw(held ? gun.handPose({ pts, right: s.hand.right }) : pts, s.name, s.elbow, s.shoulder, held); dbg.tm.draw += performance.now() - tD; displayed.push(shown[s.key]);
+        if (held) { worldGroup.updateMatrixWorld(true); _wgi.copy(worldGroup.matrixWorld).invert(); }
+        const tD = performance.now(); s.hand.draw(held ? gun.handPose({ pts: pts.map(p => p.applyMatrix4(worldGroup.matrixWorld)), right: s.hand.right }, _wgi) : pts, s.name, s.elbow, s.shoulder, held); dbg.tm.draw += performance.now() - tD; displayed.push(shown[s.key]);
         const pc = palmFlat(shown[s.key]); if (s.lastPalm && pc.distanceTo(s.lastPalm) > 0.1) dbg.dispJumps++; s.lastPalm = pc;   // what the player actually sees jump
       } else { s.hand.hide(); s.lastPalm = null; }
     }
-    if (gun) gun.update(dt, [slots.Right, slots.Left].filter(s => shown[s.key]).map(s => ({ key: s.key, group: s.hand.group, pts: shape(shown[s.key]), right: s.hand.right, ext: s.ext })), now, camera);
+    if (gun) { worldGroup.updateMatrixWorld(true); gun.update(dt, [slots.Right, slots.Left].filter(s => shown[s.key]).map(s => ({ key: s.key, group: s.hand.group, pts: shape(shown[s.key]).map(p => p.applyMatrix4(worldGroup.matrixWorld)), right: s.hand.right, ext: s.ext })), now, camera); }   // world-space points
     renderOverlay(displayed);
     if (now - stat.t > 1000) {
       $("stats").textContent = `tracker: ${(stat.ms / (stat.n || 1)).toFixed(0)} ms | ${stat.n} fps | latency ${(stat.lat / (stat.n || 1)).toFixed(0)} ms | hands ${nHands}${poseTracker ? ` | pose/${poseTracker.where} ${(dbg.tm.pose / (dbg.tm.poseN || 1)).toFixed(0)} ms${poseLast && performance.now() - poseLast.t < 600 ? "" : " (none)"}${headPos && performance.now() - headT < 1500 ? ` | head ${headPos.length().toFixed(2)}m` : " | head -"}` : ""}\n${tracker.where} | ${BENCH ? "BENCH no render" : SKIN ? (FIT_EXACT ? "mesh exact" : "mesh rigged") : "capsules"} | ${NHANDS}h | mode ${MODES[mode]} | tilt ${tiltOn ? (pitch * 180 / Math.PI).toFixed(0) + "°" : "off"} | build ${BUILD}`;

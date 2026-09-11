@@ -6,8 +6,8 @@ Rock-paper-scissors with real hand tracking: the camera tracks every finger join
 
 | Version | Who | Live link | What it is |
 |---|---|---|---|
-| **Hand** (build 39) | — | https://d14life.github.io/rps-hand/ | The tracked 3D hand (owner's rigged arms model), first person + mirror view, solid-hand solver, and a pistol on a table you can pick up and shoot. Source: `docs/index.html`, `docs/gun.mjs`, `docs/arm_*.glb`. |
-| **Movement** (v60) | — | https://d14life.github.io/rps-hand/movement/?v=60 | Walking and turning in a 3D map with a camera thumb joystick and head look. Source: `docs/movement/`. |
+| **Hand** (build 40) | — | https://d14life.github.io/rps-hand/ | The tracked 3D hand (owner's rigged arms model), first person + mirror view, solid-hand solver, and a pistol on a table you can pick up and shoot. Source: `docs/index.html`, `docs/gun.mjs`, `docs/arm_*.glb`. |
+| **Movement** (v63) | — | https://d14life.github.io/rps-hand/movement/?v=63 | Walking and turning in Dust II with a camera thumb joystick and head look, plus the shooter: a table with the pistol, cans and ring targets at the spawn, a mirror, the tracked right hand picks the gun up and fires (`docs/movement/shooter.mjs` + `docs/gun.mjs`). Source: `docs/movement/`. |
 
 Both pages need a phone camera. The two are developed in the same repo but independently: hand builds are published
 on top of the latest `docs/movement`, movement versions are published without touching the hand files.
