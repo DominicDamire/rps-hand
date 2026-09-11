@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=76";
-import { BodyView } from "../body/BodyView.js?v=76";
-import { BodyPose } from "../body/pose.mjs?v=76";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=77";
+import { BodyView } from "../body/BodyView.js?v=77";
+import { BodyPose } from "../body/pose.mjs?v=77";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
@@ -53,43 +53,108 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
   const startFar = link => { far = new BodyPose(modeEl.value); wired = link; link.onBody = s => far.receive(s, performance.now());
     modeEl.addEventListener("change", () => far.recenter(modeEl.value)); calEl.addEventListener("click", () => far.recenter(modeEl.value)); };
 
-  // --- legs ----------------------------------------------------------------------------------------------------
-  // Standing still, the doll's own rest pose already has both feet flat on the floor, so the legs are simply left
-  // alone: nothing to drift, nothing to solve (owner: "the body and feet can just stay on the ground as long as the
-  // joystick has not been moved"). Walking advances a stride whose phase is driven by the distance actually covered,
-  // so the legs keep pace with the map rather than with a timer, and it eases back to standing when you stop.
-  const _v = new THREE.Vector3(), _t = new THREE.Vector3(), _h = new THREE.Vector3(), _w = new THREE.Vector3(), _e = new THREE.Vector3();
-  const STRIDE = 0.75;        // metres of travel per full two-step cycle
-  const THIGH_SWING = 0.42;   // radians
-  const KNEE_BEND = 0.55;
-  let phase = 0, gait = 0, lastPos = null;
+  // --- legs ------------------------------------------------------------------------------------------------------
+  // A real gait, not a sine on the hip angles. One foot is always planted on a fixed point of the floor; the other
+  // swings along an arc to the next contact, and both legs are solved to their foot with the same two-bone IK the arms
+  // use. That is the only way the feet stop treading air: the previous version rotated the thigh and knee on a sine
+  // and never referenced the floor at all, so for most of the cycle neither foot was near it.
+  // Standing still, both feet ease back under the hips and stay there (owner: "the feet can just stay on the ground
+  // as long as the joystick has not been moved").
+  const _v = new THREE.Vector3(), _t = new THREE.Vector3(), _hint = new THREE.Vector3(), _w = new THREE.Vector3(), _e = new THREE.Vector3();
+  const STEP_LEN = 0.42;      // metres of travel between footfalls
+  const STEP_TIME = 0.26;     // seconds a swing takes
+  const LIFT = 0.08;          // how high the swinging foot clears the floor
+  const SPREAD = 0.085;       // half the distance between the feet
+  const EYE_H = 1.65;         // the map holds the camera this far above the floor
+  const contact = [new THREE.Vector3(), new THREE.Vector3()];   // world, where each foot is standing
+  const swingFrom = new THREE.Vector3(), swingTo = new THREE.Vector3(), _foot = new THREE.Vector3();
+  let placed = false, swing = -1, swingT = 0, travelled = 0, gait = 0, lastPos = null, ankleH = 0.23, crouch = 0;
+  // Measured: at rest this doll's thigh-to-ankle gap is 0.819 m and its leg is 0.817 m - the knees are locked straight
+  // with no slack at all, so a stride of any length puts the foot out of reach and it floats. A person solves this by
+  // dropping their hips as they walk; so does this. The eyes are pinned a few centimetres lower while walking, which
+  // bends the knees and lets the planted foot stay on the floor. Invisible from the player's own eyes.
+  const CROUCH = 0.055;
 
-  function legs(dt, pos) {
-    if (!lastPos) { lastPos = pos.clone(); return; }
+  const restFoot = (out, i, pos, yaw) => {
+    const c = Math.cos(yaw), sn = Math.sin(yaw), side = i ? SPREAD : -SPREAD;
+    return out.set(pos.x + c * side, pos.y - EYE_H, pos.z - sn * side);
+  };
+
+  function legs(dt, pos, yaw) {
+    const floor = pos.y - EYE_H;
+    if (!placed) { for (const i of [0, 1]) restFoot(contact[i], i, pos, yaw); placed = true; lastPos = pos.clone(); ankleH = rig.rest.RFoot.world.y; }
     const moved = Math.hypot(pos.x - lastPos.x, pos.z - lastPos.z);
     lastPos.copy(pos);
-    const speed = moved / Math.max(1e-3, dt);
-    gait += (Math.min(1, speed / 1.2) - gait) * Math.min(1, dt * 6);   // how much of the walk to show
-    phase += (moved / STRIDE) * Math.PI * 2;
-    if (gait < 0.02) { gait = 0; return; }                             // standing: leave the rest pose exactly alone
-    for (const [S, sign] of [["L", 1], ["R", -1]]) {
-      const a = phase * sign;
-      const thigh = Math.sin(a) * THIGH_SWING * gait;
-      const knee = Math.max(0, -Math.sin(a - 0.6)) * KNEE_BEND * gait;
-      const T = rig.joints[`${S}Thigh`], K = rig.joints[`${S}Shin`], F = rig.joints[`${S}Foot`];
-      if (!T) continue;
-      // A positive rotation here swings the shin FORWARD, which is a knee bending backwards. It is negative, and
-      // clamped so it can never cross zero however the phase is tuned later.
-      T.rotation.x = -thigh;
-      K.rotation.x = -Math.min(KNEE_BEND, Math.max(0, knee));
-      if (F) F.rotation.x = knee * 0.45;
+    gait += (Math.min(1, (moved / Math.max(1e-3, dt)) / 1.2) - gait) * Math.min(1, dt * 6);
+    crouch += (gait * CROUCH - crouch) * Math.min(1, dt * 5);
+
+    if (gait < 0.03 && swing < 0) {                       // standing: settle both feet under the hips
+      for (const i of [0, 1]) contact[i].lerp(restFoot(_t, i, pos, yaw), Math.min(1, dt * 5));
+      travelled = 0;
+    } else {
+      travelled += moved;
+      // Step when the travel says so OR when the planted foot is about to go out of the leg's reach - without the
+      // second test the player walks away from their own foot, the IK clamps, and the foot floats above the floor.
+      const legLen = rig.rest.RShin.world.distanceTo(rig.rest.RThigh.world) + rig.rest.RFoot.world.distanceTo(rig.rest.RShin.world);
+      const hipY = pos.y - EYE_H + rig.rest.Hips.world.y;
+      const thighY = pos.y - EYE_H + rig.rest.RThigh.world.y - crouch;
+      const stretched = i => Math.hypot(contact[i].x - pos.x, contact[i].z - pos.z, thighY - (pos.y - EYE_H + ankleH)) > legLen * 0.95;
+      if (swing < 0 && (travelled >= STEP_LEN * (0.45 + 0.35 * gait) || stretched(0) || stretched(1))) {
+        swing = contact[0].distanceTo(pos) > contact[1].distanceTo(pos) ? 0 : 1;   // the foot furthest behind swings
+        swingFrom.copy(contact[swing]);
+        // land it ahead of the player, along the way they are actually travelling
+        restFoot(swingTo, swing, pos, yaw);
+        const dx = pos.x - swingFrom.x, dz = pos.z - swingFrom.z, len = Math.hypot(dx, dz) || 1;
+        swingTo.x += dx / len * STEP_LEN * 0.5; swingTo.z += dz / len * STEP_LEN * 0.5;   // land ahead, so the stance phase is centred under the hips
+        swingT = 0; travelled = 0;
+      }
+      if (swing >= 0) {
+        swingT += dt / STEP_TIME;
+        const t = Math.min(1, swingT);
+        contact[swing].lerpVectors(swingFrom, swingTo, t * t * (3 - 2 * t));
+        if (t >= 1) swing = -1;
+      }
     }
+
+    for (const [S, i] of [["L", 0], ["R", 1]]) {
+      _foot.copy(contact[i]); _foot.y = floor + ankleH;
+      if (swing === i && swingT < 1) _foot.y += Math.sin(Math.min(1, swingT) * Math.PI) * LIFT;
+      // the knee leads forward, and never the other way: that is what stops the leg inverting
+      _hint.copy(rig.joints[`${S}Thigh`].getWorldPosition(_t));
+      _hint.x -= Math.sin(yaw) * 0.6; _hint.z -= Math.cos(yaw) * 0.6; _hint.y -= 0.25;
+      for (const n of ["Hips", `${S}Thigh`]) rig.refresh(rig.joints[n]);
+      rig.reach(`${S}Thigh`, `${S}Shin`, `${S}Foot`, _foot, _hint);
+    }
+  }
+
+  const bodyCrouch = () => crouch;
+  const _crouched = new THREE.Vector3();
+
+  /** everything the walk test needs to see: heights, which foot swings, and how far each contact is from the hip */
+  function walkDebug(pos) {
+    const floor = pos.y - EYE_H;
+    const hip = rig.joints.Hips.getWorldPosition(new THREE.Vector3());
+    return {
+      h: ["L", "R"].map(S => +(rig.joints[`${S}Foot`].getWorldPosition(_t).y - floor - ankleH).toFixed(3)),
+      target: [0, 1].map(i => +(contact[i].y - floor).toFixed(3)),
+      fromThigh: [0, 1].map(i => +rig.joints[i ? "RThigh" : "LThigh"].getWorldPosition(_v).distanceTo(contact[i]).toFixed(3)),
+      crouch: +crouch.toFixed(3),
+      legLen: +(rig.joints.RShin.getWorldPosition(_t).distanceTo(rig.joints.RThigh.getWorldPosition(_v))
+              + rig.joints.RFoot.getWorldPosition(_t).distanceTo(rig.joints.RShin.getWorldPosition(_v))).toFixed(3),
+      swing, gait: +gait.toFixed(2), ankleH: +ankleH.toFixed(3),
+    };
+  }
+
+  /** how far each ankle is from the floor it should be standing on - used by the walk test */
+  function footHeights(pos) {
+    const floor = pos.y - EYE_H;
+    return ["L", "R"].map(S => +(rig.joints[`${S}Foot`].getWorldPosition(_t).y - floor - ankleH).toFixed(4));
   }
 
   let told = null, shownMode = null, neutral = null;
   const lean = new THREE.Vector3();
   return {
-    rig, get error() { return error; },
+    rig, get error() { return error; }, footHeights: () => footHeights(camera.position), walkDebug: () => walkDebug(camera.position), get gait() { return gait; },
     recenter() {
       (far || local?.pose)?.recenter(modeEl.value);
       phase = 0; gait = 0; lastPos = null; neutral = null; lean.set(0, 0, 0);
@@ -181,8 +246,22 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
       }
 
       // --- legs -------------------------------------------------------------------------------------------------
-      if (mode !== "head") legs(dt, camera.position);
-      rig.pinEyes(camera.position);   // after the lean, the head and the arms have moved things
+      // The eyes are pinned BEFORE the legs are solved: pinning afterwards dragged the planted foot down with
+      // the root and sank it 2 cm into the floor.
+      _crouched.copy(camera.position); _crouched.y -= bodyCrouch();   // the walk's hip drop, so the legs have slack
+      rig.pinEyes(_crouched);
+      if (mode !== "head") {
+        legs(dt, camera.position, heading);
+        // an arm that nothing is tracking swings with the opposite leg, which is what a person does
+        for (const S of ["L", "R"]) {
+          const driven = (handModel?.visible && (handModel.right ? "R" : "L") === S) || (handModelL?.visible && (handModelL.right ? "R" : "L") === S);
+          if (driven || gait < 0.03) continue;
+          const a = rig.joints[`${S}UpperArm`], f = rig.joints[`${S}Forearm`];
+          const sw = Math.sin(travelled / STEP_LEN * Math.PI + (S === "L" ? Math.PI : 0)) * 0.22 * gait;
+          if (a) { a.rotation.x = sw; rig.refresh(a); }
+          if (f) { f.rotation.x = -0.12 - Math.abs(sw) * 0.5; rig.refresh(f); }
+        }
+      }
       rig.root.updateMatrixWorld(true);   // the one full tree update this frame
       if (shownMode !== mode) {   // "head only" hides the body; the head itself is always on its own layer, so a
         shownMode = mode;         // first-person camera never sees it from the inside while the mirror still does
