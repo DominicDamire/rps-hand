@@ -45,7 +45,6 @@ const VIEWS = {
   three: [2.1, 1.3, 2.6, 0, 0.95, 0],
   face:  [0, 1.55, 1.0, 0, 1.5, 0],
   hand:  [0.55, 1.0, 0.7, 0.28, 0.95, 0],
-  handclose: [0.46, 0.99, 0.44, 0.27, 0.94, 0.02],   // close enough to see whether the parts stay in their sockets
 };
 
 const target = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff5f5f }));
@@ -64,11 +63,8 @@ function pose() {
   } else if (POSE === "head") {
     doll.setHead({ yaw: 0.7, pitch: -0.35 });
   } else if (POSE === "fist") {
-    // ?bend= degrees on every phalanx, so the angle at which rigid parts start to leave their sockets can be seen
-    const deg = +Q.get("bend");
-    const base = Number.isFinite(deg) && deg ? [deg, deg, deg * 0.7].map(d => d * Math.PI / 180) : [1.2, 1.4, 0.9];
     for (const S of "LR") for (const f of ["Index", "Middle", "Ring", "Pinky"])
-      for (const [j, a] of [[1, base[0]], [2, base[1]], [3, base[2]]]) {
+      for (const [j, a] of [[1, 1.2], [2, 1.4], [3, 0.9]]) {
         const n = `${S}${f}${j}`, o = doll.joints[n];
         if (o) { o.rotation.x = -a; o.updateMatrixWorld(true); }
       }

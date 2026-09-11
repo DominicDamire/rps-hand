@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=88";
-import { BodyView } from "../body/BodyView.js?v=88";
-import { BodyPose } from "../body/pose.mjs?v=88";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=86";
+import { BodyView } from "../body/BodyView.js?v=86";
+import { BodyPose } from "../body/pose.mjs?v=86";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
@@ -37,7 +37,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
   // pulls them out of their sockets and the hand reads as scattered sticks - the owner's screenshot showed exactly
   // that. The model's own finger pose is solid and looks like a hand, so that is what is drawn. ?fingers=1 turns the
   // per-phalanx driving back on for anyone who wants to work on it.
-  const DRIVE_FINGERS = Q.get("fingers") !== "0";
+  const DRIVE_FINGERS = Q.get("fingers") === "1";
   // Same for the walk: the model stands with its feet flat on the floor, and that is a better picture than a stride
   // built out of joint angles. ?walk=1 brings the gait back.
   const DRIVE_WALK = Q.get("walk") === "1";
@@ -185,16 +185,8 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
     return ["L", "R"].map(S => +(rig.joints[`${S}Foot`].getWorldPosition(_t).y - floor - ankleH).toFixed(4));
   }
 
-  // Which meshes belong to each arm, so an arm the camera cannot see can be taken off the screen rather than left
-  // frozen in mid-air (owner: "if the camera can[not] see the hand remove [it] from the user's view"). Built once.
-  const armParts = { L: [], R: [] };
-  const armBone = /^([LR])(UpperArm|Forearm|Hand|Thumb|Index|Middle|Ring|Pinky)/;
-  const buildArmParts = () => {
-    for (const m of rig.parts) { const g = armBone.exec(m.name); if (g) armParts[g[1]].push(m); }
-  };
   let told = null, shownMode = null, neutral = null;
   const lean = new THREE.Vector3();
-  const armShown = { L: null, R: null };
   return {
     rig, get error() { return error; }, footHeights: () => footHeights(camera.position), walkDebug: () => walkDebug(camera.position), get gait() { return gait; },
     recenter() {
@@ -322,22 +314,9 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
       rig.root.updateMatrixWorld(true);   // the one full tree update this frame
       if (shownMode !== mode) {   // "head only" hides the body; the head itself is always on its own layer, so a
         shownMode = mode;         // first-person camera never sees it from the inside while the mirror still does
-        armShown.L = armShown.R = null;   // that loop writes every part, so the arm cache is stale
         for (const m of rig.parts) {
           const isHead = m.name.startsWith("Head") || m.name.startsWith("Neck");
           m.visible = isHead || mode !== "head";
-        }
-      }
-      if (!armParts.L.length && !armParts.R.length) buildArmParts();
-      {
-        // an arm is drawn only while something is actually driving it
-        const live = { L: false, R: false };
-        if (handModel?.visible) live[handModel.right ? "R" : "L"] = true;
-        if (handModelL?.visible) live[handModelL.right ? "R" : "L"] = true;
-        if (tracked() && raw) { live.L = true; live.R = true; }
-        for (const S of ["L", "R"]) if (armShown[S] !== live[S]) {
-          armShown[S] = live[S];
-          for (const m of armParts[S]) m.visible = live[S];
         }
       }
       rig.root.updateMatrixWorld(true);
@@ -349,8 +328,6 @@ const UP = new THREE.Vector3(0, 1, 0);
 const LEAN_JOINTS = [["Waist", 0.5], ["Chest", 0.5]];
 const FINGERS = [["Thumb", 1, 2, 3, 4], ["Index", 5, 6, 7, 8], ["Middle", 9, 10, 11, 12], ["Ring", 13, 14, 15, 16], ["Pinky", 17, 18, 19, 20]];
 const FI = [[0, 1], [1, 2], [2, 3]];   // which two of (a, b, c, d) each phalanx runs between, hoisted out of the frame loop
-const BEND_MAX = [0.85, 0.95, 0.6];   // radians: how far each phalanx may turn before the parts show daylight
-const _fp = Array.from({ length: 21 }, () => new THREE.Vector3());
 const _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3(), _p3 = new THREE.Vector3(), _d1 = new THREE.Vector3(), _d2 = new THREE.Vector3(), _v2 = new THREE.Vector3();
 // --- the palm ---------------------------------------------------------------------------------------------------
 // The IK only decides where the wrist is. Without this the hand keeps whatever twist the forearm happened to end with,
@@ -423,22 +400,16 @@ function fingerRest(rig, S, name, k) {
   return restDirs.get(key);
 }
 function setFingers(rig, S, pts, mat) {
-  // A hinge, not a free rotation. Aiming each phalanx wherever the tracked one points twisted these rigid parts out
-  // of the sockets they sit in and the hand fell apart on screen. A finger only bends one way, so each joint turns
-  // about its own bend axis by the angle the tracked finger is actually bent, clamped to what the sockets can take.
   for (const [name, a, b, c, d] of FINGERS) {
-    const P = i => _fp[i].copy(pts[i]).applyMatrix4(mat);
-    const idx = [[a, b, c], [b, c, d], [c, d, d]];
     for (let k = 1; k <= 3; k++) {
       const j = rig.joints[`${S}${name}${k}`]; if (!j) continue;
-      const [i0, i1, i2] = idx[k - 1];
-      if (i1 === i2) { j.rotation.x = rig.joints[`${S}${name}2`] ? rig.joints[`${S}${name}2`].rotation.x * 0.7 : 0; rig.refresh(j); continue; }
-      _d1.subVectors(P(i1), P(i0)); _d2.subVectors(P(i2), P(i1));
-      if (_d1.lengthSq() < 1e-9 || _d2.lengthSq() < 1e-9) continue;
-      const bend = _d1.angleTo(_d2);
-      j.rotation.x = -Math.min(BEND_MAX[k - 1], bend);
-      rig.refresh(j);
+      rig.refresh(j);   // its parent (the hand, or the phalanx before) has just been turned
+      const i0 = FI[k - 1][0], i1 = FI[k - 1][1];
+      _p1.copy(pts[i0 === 0 ? a : i0 === 1 ? b : c]).applyMatrix4(mat); _p2.copy(pts[i1 === 1 ? b : i1 === 2 ? c : d]).applyMatrix4(mat);
+      _d1.subVectors(_p2, _p1);
+      const rest = fingerRest(rig, S, name, k);
+      if (!rest || _d1.lengthSq() < 1e-8) continue;
+      rig.aim(`${S}${name}${k}`, rest, _d1);
     }
   }
 }
-
