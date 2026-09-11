@@ -23,7 +23,7 @@ for side in ['R','L']:
  cmc=rest(side+'Thumb1');end=rest(side+'Thumb2')+y*.004
  inside=wrist+y*(cmc-wrist).dot(y);base=inside-y*.008
  axis=(end-base).normalized();wide=normal.cross(axis).normalized();depth=axis.cross(wide).normalized();length=(end-base).length
- rings=[(0,.014,.010),(.15,.024,.014),(.35,.025,.015),(.55,.021,.014),(.75,.016,.012),(.92,.010,.009),(1.06,.008,.008),(1.12,.001,.001)]
+ rings=[(0,.010,.006),(.15,.014,.007),(.35,.014,.008),(.55,.012,.008),(.75,.010,.007),(.92,.008,.007),(1.06,.007,.007),(1.12,.001,.001)]
  verts=[];faces=[];count=32
  for t,w,d in rings:
   for j in range(count):
@@ -33,7 +33,7 @@ for side in ['R','L']:
  faces.append(tuple(reversed(range(count))));faces.append(tuple((len(rings)-1)*count+j for j in range(count)))
  mesh=bpy.data.meshes.new(side+' thenar');mesh.from_pydata(verts,[],faces);mesh.update()
  mound=bpy.data.objects.new(side+' thenar',mesh);bpy.context.collection.objects.link(mound)
- heel=sphere(side+' filled thumb socket',cmc.lerp(inside,.35),(x,y,normal),(.022,.022,.017))
+ heel=sphere(side+' filled thumb socket',cmc.lerp(inside,.35),(x,y,normal),(.012,.015,.008))
  parts=[o for o in originals if o.type=='MESH' and o.name.startswith(side+'Hand__')]
  assert parts
  copies=[]
@@ -51,7 +51,7 @@ for side in ['R','L']:
  for v in obj.data.vertices:
   point=Ci.to_3x3()@(obj.matrix_world@v.co);positions.extend(round(a,6) for a in point-wrist)
   # Only the thumb-side surface follows the MCP; the heel remains anchored.
-  dist=(point-end).length;t=max(0,min(1,(.050-dist)/.035));weights.append(round(t*t*(3-2*t),5))
+  dist=(point-end).length;t=max(0,min(1,(.035-dist)/.023));weights.append(round(t*t*(3-2*t),5))
  indices=[int(i) for face in obj.data.loop_triangles for i in face.vertices]
  data[side]={'position':positions,'index':indices,'weight':weights,'bindMCP':list(end-wrist),'triangles':len(indices)//3}
  for poly in obj.data.polygons:poly.use_smooth=True

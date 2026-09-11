@@ -12,7 +12,7 @@ export function features(points){
 }
 export function matchPose(profile,feature,side){
  let best=null;
- for(const pose of profile.poses){if(pose.side!==side)continue;const distance=Math.sqrt(feature.reduce((s,v,i)=>s+(v-pose.features[i])**2,0)/60);if(distance<=profile.tolerance&&(!best||distance<best.distance))best={pose,distance};}
+ for(const pose of profile.poses){if(pose.side!==side)continue;const thumbDistance=Math.max(...[1,2,3,4].map(i=>Math.hypot(...[0,1,2].map(k=>feature[i*3+k]-pose.features[i*3+k]))));if(thumbDistance>profile.tolerance*1.5)continue;const distance=Math.sqrt(feature.reduce((s,v,i)=>s+(v-pose.features[i])**2,0)/60);if(distance<=profile.tolerance&&(!best||distance<best.distance))best={pose,distance};}
  return best;
 }
 export function clampAngles(angles,limits){return Object.fromEntries(JOINTS.map(n=>[n,angles[n].map((v,i)=>limits[n][i].enabled?Math.max(limits[n][i].min,Math.min(limits[n][i].max,v)):v)]));}
@@ -31,9 +31,10 @@ export function validateProfile(input){
   if(!Array.isArray(p.features)||p.features.length!==63||!p.features.every(x=>finite(x,-20,20)))throw Error('Invalid pose signature');
   const angles=blankAngles();for(const n of JOINTS){if(!Array.isArray(p.angles?.[n])||p.angles[n].length!==3||!p.angles[n].every(x=>finite(x,-180,180)))throw Error('Invalid angles: '+n);angles[n]=[...p.angles[n]];}
   let capture=null;if(p.capture!=null){if(typeof p.capture!=='string'||!/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(p.capture)||p.capture.length>700000)throw Error('Invalid saved image');capture=p.capture;}
+  if(p.thumbReference!=null&&!finite(p.thumbReference,0,1))throw Error('Invalid thumb reference');
   if(p.referenceCurl!=null&&(!Array.isArray(p.referenceCurl)||p.referenceCurl.length!==4||!p.referenceCurl.every(x=>finite(x,0,1))))throw Error('Invalid reference curl');
   if(p.solvedAngles!=null)for(const n of JOINTS)if(!Array.isArray(p.solvedAngles[n])||p.solvedAngles[n].length!==3||!p.solvedAngles[n].every(x=>finite(x,-180,180)))throw Error('Invalid solved pose');
-  out.poses.push({...(p.solvedAngles?{solvedAngles:structuredClone(p.solvedAngles)}:{}),...(p.referenceCurl?{referenceCurl:[...p.referenceCurl],referenceEnabled:p.referenceEnabled!==false}:{}),id:p.id,name:p.name.trim(),side:p.side,features:[...p.features],angles,capture});
+  out.poses.push({...(p.thumbReference!=null?{thumbReference:p.thumbReference}:{}),...(p.solvedAngles?{solvedAngles:structuredClone(p.solvedAngles)}:{}),...(p.referenceCurl?{referenceCurl:[...p.referenceCurl],referenceEnabled:p.referenceEnabled!==false}:{}),id:p.id,name:p.name.trim(),side:p.side,features:[...p.features],angles,capture});
  }
  return out;
 }

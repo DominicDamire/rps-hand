@@ -1,5 +1,16 @@
 # Hand Pose Lab
 
+## Lab v8
+
+- Camera projection preserves the input aspect ratio, anchors the wrist to its image position, and mirrors the complete rendered view once to match the preview. The dashed frame shows the camera's fitted image area.
+- Original slim thumb shells replace the rounded outer segments, shortened by 15%. The palm-side base is smaller; the internal CMC remains functional but its marker is hidden. Fingertip markers use the furthest mesh vertex.
+- Model skeleton lines connect the actual rig joints. Tracking uses landmark positions and directions between landmarks; drawing lines does not change tracking.
+- Finger closure uses rotation-invariant bend/reach measurements with release hysteresis. Thumb fist correction requires its own curl and proximity, controlled by Thumb fist proximity; four curled fingers alone do not trigger it.
+- Thumb contact supports index, middle, ring and pinky. Image tip distances enter contact at 8 source pixels and release beyond 12. A successfully fitted pair holds its joint pose until separation; the wrist remains free. The rotation speed cap remains active, while contact joints bypass the jitter deadband to finish closing. Remaining surface-target gap is displayed.
+- Existing fixed finger alignment, locked upper-joint sideways/twist values, noise threshold and rotation speed settings remain in place.
+
+Validation: 28 automated tests pass. Real-asset geometry checks fit all four thumb contacts to under 0.2 mm. A clean static hand photo verifies the preview/model mirror direction. Live phone tracking, exact personal proportions and metric camera depth are not guaranteed; 2D overlap can falsely suggest contact. Changes are lab-only. Private camera screenshots are excluded from the repository.
+
 Live: https://d14life.github.io/rps-hand/hand-lab/
 
 A separate desktop editor using the original v80 doll asset and fixed joint attachments. It does not modify the movement game or its saved settings.

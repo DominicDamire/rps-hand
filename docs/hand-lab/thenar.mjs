@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 // Blender unions the palm and mound. Thumb-side vertices follow the MCP.
 export async function buildThenar(rig){
- const response=await fetch(new URL('./palm-shape.json?v=7',import.meta.url));
+ const response=await fetch(new URL('./palm-shape.json?v=8-final',import.meta.url));
  if(!response.ok)throw Error('Could not load the continuous palm mesh');
  const data=await response.json(),records=[];
  for(const side of ['R','L']){
