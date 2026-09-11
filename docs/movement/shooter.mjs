@@ -6,12 +6,12 @@
 import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
 import { makeGun, fingersUp } from "../gun.mjs";
-import { setupPunch } from "./punch.mjs?v=70";
-import * as sfx from "./sound.mjs?v=70";
+import { setupPunch } from "./punch.mjs?v=71";
+import * as sfx from "./sound.mjs?v=71";
 
 const TABLE_H = 1.32;   // table top above the floor: the tracked hand sits at chest height in front of the eye (1.65 m)
 // ?mirror=N refreshes the reflection every Nth frame it is on screen (default 3, 1 = every frame)
-const TABLE_AHEAD = 0.55;   // in front of the spawn. With the eye at 1.65 m the gun is then 0.65 m away, inside the reach of a
+const TABLE_AHEAD = 0.45;   // in front of the spawn. With the eye at 1.65 m the gun is then 0.65 m away, inside the reach of a
 // half-extended arm (hand-model.mjs `reach`); at the old 0.75 m it was 0.83 m away and could not be grabbed at all.
 
 export function setupShooter({ scene, camera, dustMap, handModel, hud }) {

@@ -337,7 +337,7 @@ function makeRigSkin(variant, color) {
 // group sits at (0, -height, -dist) in the eye's frame, turned half a turn about the vertical axis. A proper rotation,
 // so the right hand stays a right hand and appears on the right.
 // Joint depths come from the world model + one translation (locate, as the main page); the picture fixes x/y exactly.
-export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5, eye: null, reach: 1.35, drop: 5, near: 0.25, far: 0.62 };
+export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5, eye: null, reach: 1.15, drop: 5, near: 0.28, far: 0.52 };
 // near/far: the hand is kept between these distances from the eye. Without a limit, holding the hand right up to the
 // phone threw it far away and tiny (the depth is inverted on purpose: toward the phone = away from you), and the owner
 // could not see his own hands. reach 1.35 and drop 5 deg keep them big and in frame while still reaching the table.
@@ -395,34 +395,23 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
         pts[i].lerp(_w, a);
       }
       const ex = view.eye ? view.eye[0] : 0, ey = view.eye ? view.eye[1] : view.height, D = view.eye ? view.eye[2] : view.dist;
-      let zMin = Infinity; for (const p of pts) zMin = Math.min(zMin, p.z);
-      const push = (MIN_AHEAD - D) - zMin; if (push > 0) for (const p of pts) p.z += push;   // never behind or inside the eye (phone frame: the eye at z = -D)
-      // Reach. The group sits at (ex, -ey, -D) in the eye's frame and is turned 180 deg, so a hand point (x, y, z) lands at
-      // (ex - x, y - ey, -z - D). Multiplying that whole offset from the eye by `reach` moves the hand further out along the
-      // same direction while its own shape stays exactly as tracked (we translate the group, we never scale it).
-      const g = Math.max(1, view.reach || 1);
-      _c.set((pts[0].x + pts[5].x + pts[17].x) / 3, (pts[0].y + pts[5].y + pts[17].y) / 3, (pts[0].z + pts[5].z + pts[17].z) / 3);   // palm centre
-      let tx = (g - 1) * (ex - _c.x), ty = (g - 1) * (_c.y - ey), tz = (g - 1) * (-_c.z - D);
-      let zMax = -Infinity; for (const p of pts) zMax = Math.max(zMax, -p.z - D + tz);   // the nearest point's depth in the eye's frame (forward is negative)
-      if (zMax > -MIN_AHEAD) tz -= zMax + MIN_AHEAD;
-      // Keep the hand inside the visible range: scale the whole offset from the eye, so its shape and direction are kept.
-      {
-        const ox = ex + tx, oy = -ey + ty, oz = -D + tz, r = Math.hypot(ox, oy, oz);
-        if (r > 1e-4) {
-          const want = Math.min(view.far || Infinity, Math.max(view.near || 0, r)), k = want / r;
-          let cx = ox * k, cy = oy * k, cz = oz * k;
-          // Keep the hand on screen (owner: "hands always in the user's view, the right one"): hold it inside a cone
-          // a little narrower than the camera's own, so it can never wander off the edge of the picture.
-          const ahead = Math.max(0.05, -cz), keep = view.keepIn ?? 0.78;
-          const ty2 = Math.tan((view.camFov ?? 65) * Math.PI / 360) * keep, tx2 = ty2 * (view.aspect ?? 1.6);
-          const mx = ty2 * ahead * (view.aspect ?? 1.6), my = ty2 * ahead;
-          cx = Math.max(-mx, Math.min(mx, cx)); cy = Math.max(-my, Math.min(my, cy));
-          tx = cx - ex; ty = cy + ey; tz = cz + D;
-        }
-      }
-      let py = -ey + ty, pz = -D + tz;
+      // Where the hand goes, so that it is ALWAYS in the picture (owner: "it always has to be in the view; I really have
+      // to stretch it out in front of the screen to be able to see it").
+      // The group is turned 180 degrees about y, so a tracked point (x, y, z) lands at (-x, y, -z) + group.position in
+      // the eye's frame. Placing it by its raw offset from the eye failed: that offset collapses to nothing when the
+      // hand is held back at about the eye-to-phone distance, which left the direction undefined and threw the hand
+      // somewhere out of frame. Instead the palm is put along the direction the PHONE sees it - always defined - at a
+      // forward distance taken from the tracked depth and then clamped to [near, far], and the direction itself is held
+      // inside a cone a little narrower than the camera's. The hand's own shape is never touched: the group moves.
+      _c.set((pts[0].x + pts[5].x + pts[17].x) / 3, (pts[0].y + pts[5].y + pts[17].y) / 3, (pts[0].z + pts[5].z + pts[17].z) / 3);
+      const zc = Math.max(0.05, -_c.z);                 // how far the palm is from the phone
+      const keep = view.keepIn ?? 0.8, tv = Math.tan((view.camFov ?? 65) * Math.PI / 360) * keep, th = tv * (view.aspect ?? 1.6);
+      const tanX = Math.max(-th, Math.min(th, _c.x / zc)), tanY = Math.max(-tv, Math.min(tv, _c.y / zc));
+      const ahead = Math.min(view.far ?? 0.6, Math.max(view.near ?? 0.3, (D + _c.z) * (view.reach || 1)));
+      let px = -tanX * ahead, py = tanY * ahead - ey, pz = -ahead;
       if (view.drop) { const a = -view.drop * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), y2 = py * c - pz * sn; pz = py * sn + pz * c; py = y2; }
-      offset[0] = -py; offset[1] = -pz; group.position.set(ex + tx, py, pz);
+      offset[0] = -py; offset[1] = -pz;
+      group.position.set(px + _c.x, py - _c.y, pz + _c.z);   // put the palm exactly at (px, py, pz)
       window.dbg = Object.assign(window.dbg || {}, { model: pts, offset }); drive();
     },
     setPoints(flat, o) {   // from the network: 63 numbers in the other player's phone frame + their [height, dist]
