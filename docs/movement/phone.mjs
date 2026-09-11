@@ -3,7 +3,7 @@
 // which is the whole point: the WebRTC video path (camlink.mjs) only completes when both devices can reach each other
 // directly, and every free TURN relay it could fall back on is dead (owner: it worked on one phone, not on his).
 // Extra: the phone does the inference, so the PC only draws, and the link carries about 0.5 KB per hand frame.
-import { connectLink, packHands } from "./link.mjs?v=68";
+import { connectLink, packHands } from "./link.mjs?v=69";
 
 const HFOV = Math.PI / 3;
 
@@ -20,11 +20,13 @@ export async function startPhone(code, video, onStatus = () => {}) {
 
   let wantBody = new URLSearchParams(location.search).get("body") === "1";   // off until the PC asks: with "head only" there is nothing to drive
   const dbg = window.rpshPhone = { face: null, body: null, get ready() { return ready; }, get fps() { return fps; }, get err() { return err; } };   // diagnostics for the owner's phone
-  const hand = new Worker(new URL("./tracker.mjs?v=68", import.meta.url), { type: "module" });
-  const head = new Worker(new URL("./head-tracker.mjs?v=68", import.meta.url), { type: "module" });
+  const hand = new Worker(new URL("./tracker.mjs?v=69", import.meta.url), { type: "module" });
+  const head = new Worker(new URL("./head-tracker.mjs?v=69", import.meta.url), { type: "module" });
   let bodyW = null;   // started a few seconds later: the hand and the face matter more and three models at once stall a phone
   const ready = { hand: false, head: false, body: false };
   const WIDTHS = [288, 384, 512]; let widthIdx = 0;   // the face detector misses some faces at one size and finds them at another
+  const THUMB_EVERY = 140, THUMB_W = 160;   // a small live picture for the PC's preview panel: about 7 a second
+  let lastThumb = -Infinity, thumbCanvas = null, thumbBusy = false;
   const HEAD_EVERY = 100, BODY_EVERY = 260;   // ms between face and body frames; the hand is sent as fast as it comes back
   let handBusy = false, headBusy = false, bodyBusy = false, lastVideo = -1, lastHeadVideo = -1, lastHeadAt = -Infinity, lastBody = -Infinity;
   let frames = 0, fps = 0, since = performance.now(), sent = 0, err = null, ts = 0, stopped = false;
@@ -53,7 +55,7 @@ export async function startPhone(code, video, onStatus = () => {}) {
     if (!on) { bodyW?.terminate(); bodyW = null; ready.body = false; bodyBusy = false; return; }
     if (bodyW) return;
     try {
-      bodyW = new Worker(new URL("../body/worker.mjs?v=68", import.meta.url), { type: "module" });
+      bodyW = new Worker(new URL("../body/worker.mjs?v=69", import.meta.url), { type: "module" });
       bodyW.onerror = () => { bodyW = null; };
       bodyW.onmessage = ({ data }) => {
         if (data.type === "ready") { ready.body = true; return; }
@@ -94,6 +96,14 @@ export async function startPhone(code, video, onStatus = () => {}) {
       if (ready.head && !headBusy && now - lastHeadAt >= HEAD_EVERY && video.currentTime !== lastHeadVideo) {
         headBusy = true; lastHeadAt = now; lastHeadVideo = video.currentTime;
         const frame = await grab(Math.min(WIDTHS[widthIdx], video.videoWidth)); ts = Math.max(ts + 1, Math.floor(now)); head.postMessage({ frame, ts, hfov: HFOV }, [frame]);
+      }
+      if (!thumbBusy && now - lastThumb >= THUMB_EVERY) {
+        thumbBusy = true; lastThumb = now;
+        const H = Math.round(THUMB_W * video.videoHeight / video.videoWidth);
+        thumbCanvas ??= document.createElement("canvas");
+        if (thumbCanvas.width !== THUMB_W) { thumbCanvas.width = THUMB_W; thumbCanvas.height = H; }
+        thumbCanvas.getContext("2d").drawImage(video, 0, 0, THUMB_W, H);
+        thumbCanvas.toBlob(async b => { thumbBusy = false; if (b && b.size < 60000) link.send("v", new Uint8Array(await b.arrayBuffer())); }, "image/jpeg", 0.45);
       }
       if (ready.body && bodyW && !bodyBusy && now - lastBody >= BODY_EVERY) {
         bodyBusy = true; lastBody = now; const frame = await grab(Math.min(384, video.videoWidth)); bodyW.postMessage({ frame, ts: now });

@@ -1,19 +1,19 @@
-import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=68';
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=68';
-import {setupThumbstick} from './thumbstick.mjs?v=68';
+import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=69';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=69';
+import {setupThumbstick} from './thumbstick.mjs?v=69';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=68';
-import {DustMap} from './map.mjs?v=68';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=69';
+import {DustMap} from './map.mjs?v=69';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=68';
-import {phoneCamera} from './camlink.mjs?v=68';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=68';
-import {makeHandModel,view as handView} from './hand-model.mjs?v=68';
-import {createNet} from './net.mjs?v=68';
-import {setupShooter} from './shooter.mjs?v=68';
-import {setupBody} from './body.mjs?v=68';
-import {startRemote,shimVideoSize} from './remote.mjs?v=68';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
+import {setupUI} from './ui.mjs?v=69';
+import {phoneCamera} from './camlink.mjs?v=69';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=69';
+import {makeHandModel,view as handView} from './hand-model.mjs?v=69';
+import {createNet} from './net.mjs?v=69';
+import {setupShooter} from './shooter.mjs?v=69';
+import {setupBody} from './body.mjs?v=69';
+import {startRemote,shimVideoSize} from './remote.mjs?v=69';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
 const $=id=>document.getElementById(id);const CAM=new URLSearchParams(location.search).has('cam');   // ?cam: the phone streams its camera here
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
@@ -44,7 +44,7 @@ scene.background=new THREE.Color('#abc9d9');scene.fog=new THREE.Fog('#abc9d9',90
 const dustMap=new DustMap(scene);const shooter=setupShooter({scene,camera,dustMap,handModel});window.shooter=shooter;window.dustMap=dustMap;const bodyRig=setupBody({scene,camera,handModel,video:$('cam'),getRemote:()=>phoneLink});window.bodyRig=bodyRig;window.headLook=headLook;
 dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · auto-step on';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
 function resize(){renderer.setPixelRatio(Math.min(1,Math.sqrt(900000/(innerWidth*innerHeight))));renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}addEventListener('resize',resize);resize();
-let head=null,lastHeadVideo=-1,lastFrameTime=0,lastHUD=-Infinity,phoneLink=null;const hf={n:0,t:performance.now()},dbg=window.dbg=window.dbg||{};let headSeen=false;
+let head=null,lastHeadVideo=-1,lastFrameTime=0,lastHUD=-Infinity,phoneLink=null;const hf={n:0,t:performance.now()},dbg=window.dbg=window.dbg||{};let headSeen=false;const LABELS=new URLSearchParams(location.search).get('labels')==='1';
 let walkReason='START CAMERA';
 let worker=null,stream=null,running=false,busy=false,lastVideo=-1,lastResult=0,demo=false,demoRun=null;
 function status(text,active=false){$('status').textContent=text;$('lamp').classList.toggle('on',active);}
@@ -64,7 +64,7 @@ async function start(){
    stream=useCam?(stream?.active?stream:await phoneCamera(t=>status(t),takeCam)):await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
    $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
   }
-  worker=phoneLink?phoneLink.handWorker:new Worker(new URL('./tracker.mjs?v=68',import.meta.url),{type:'module'});   // the shim answers 'ready' as soon as the phone speaks
+  worker=phoneLink?phoneLink.handWorker:new Worker(new URL('./tracker.mjs?v=69',import.meta.url),{type:'module'});   // the shim answers 'ready' as soon as the phone speaks
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;{const t=performance.now();hf.n++;if(t-hf.t>=1000){dbg.handFps=Math.round(hf.n*1000/(t-hf.t));hf.n=0;hf.t=t;}}   // hand tracker rate, shown in the HUDif(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -90,11 +90,11 @@ async function start(){
       trackingLog.push({time:lastResult,captureTime:data.time,point:sample?.point??null,rest:sample?.rest??false,centre:held.centre,raw:held.raw,x:held.x,z:held.z,reason:held.reason});while(trackingLog.length>450||trackingLog.length&&lastResult-trackingLog[0].time>15000)trackingLog.shift();
       const active=!!held.direction;walkReason=handIndex<0?'SHOW YOUR LEFT HAND':held.reason;
       $('gestureStats').textContent=`${fingerMode.toUpperCase()} X ${held.x.toFixed(2)} · Y ${(-held.z).toFixed(2)} · raw X ${held.raw.x.toFixed(2)} Y ${(-held.raw.z).toFixed(2)} · hand ${dbg.handFps||0} fps · tracker ${Math.round(data.inferenceMs||0)} ms · hands ${n}${n===1?' (show both: left steers, right is the model)':''}`;
-      trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,active,{tip:fingerMode==='index'?8:4,centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,active,x:held.x,z:held.z,reason:held.reason},{joy:handIndex>=0?data.landmarks[handIndex]:null,model:modelIndex>=0?data.landmarks[modelIndex]:null,head:headSeen});
+      trackingUI.draw(handIndex>=0?[data.landmarks[handIndex]]:[],$('cam').videoWidth,$('cam').videoHeight,active,{tip:fingerMode==='index'?8:4,centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,active,x:held.x,z:held.z,reason:held.reason},{joy:handIndex>=0?data.landmarks[handIndex]:null,model:modelIndex>=0?data.landmarks[modelIndex]:null,head:headSeen,labels:LABELS});
       status(active?fingerMode.toUpperCase()+' · '+held.direction:walkReason,active);
     }
   };
-  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:66,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=68',import.meta.url),worker:phoneLink?phoneLink.headWorker:null});window.head=head;head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
+  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:66,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=69',import.meta.url),worker:phoneLink?phoneLink.headWorker:null});window.head=head;head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
  }catch(e){stop();status('Camera not started');$('error').textContent=e.name==='NotAllowedError'?'Camera access was declined. Allow camera access in your browser, then retry.':e.message;}
  finally{$('start').disabled=false;}
 }
@@ -119,7 +119,7 @@ $('joystickSize').oninput=()=>{held.setSize(+$('joystickSize').value);$('joystic
 $('gain').oninput=()=>held.speed=+$('gain').value;
 const VIEW=['viewFov','phoneFov','handDist','handHeight','handTilt'];
 try{const saved=JSON.parse(localStorage.getItem('move.view2')||'{}');for(const id of VIEW)if(saved[id]!=null)$(id).value=saved[id];}catch{}
-function applyView(){camera.fov=+$('viewFov').value;camera.updateProjectionMatrix();handView.phoneFov=+$('phoneFov').value;handView.dist=+$('handDist').value;handView.height=+$('handHeight').value;handView.tilt=+$('handTilt').value;
+function applyView(){camera.fov=+$('viewFov').value;camera.updateProjectionMatrix();handView.camFov=camera.fov;handView.aspect=camera.aspect;handView.phoneFov=+$('phoneFov').value;handView.dist=+$('handDist').value;handView.height=+$('handHeight').value;handView.tilt=+$('handTilt').value;
  $('viewFovValue').textContent=camera.fov+'°';$('phoneFovValue').textContent=handView.phoneFov+'°';$('handDistValue').textContent=handView.dist.toFixed(2)+' m';$('handHeightValue').textContent=handView.height.toFixed(2)+' m';$('handTiltValue').textContent=handView.tilt+'°';
  try{localStorage.setItem('move.view2',JSON.stringify(Object.fromEntries(VIEW.map(id=>[id,$(id).value]))));}catch{}}
 for(const id of VIEW)$(id).oninput=applyView;applyView();

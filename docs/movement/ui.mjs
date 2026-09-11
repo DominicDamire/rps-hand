@@ -17,7 +17,7 @@ export function setupUI(){
  const zoomView=(hands,w,h,joystick)=>{
   const crop=handViewport(w,h,hands?.[0],joystick),box=$('previewImage');
   box.style.aspectRatio='4/3';$('cam').style.visibility=hands?.length||joystick?.centre?'visible':'hidden';const zoom=box.clientWidth/crop.width;
-  for(const el of [$('cam'),canvas]){el.style.width=w*zoom+'px';el.style.height=h*zoom+'px';el.style.left=-crop.x*zoom+'px';el.style.top=-crop.y*zoom+'px';}
+  for(const el of [$('cam'),$('camImg'),canvas]){if(!el)continue;el.style.width=w*zoom+'px';el.style.height=h*zoom+'px';el.style.left=-crop.x*zoom+'px';el.style.top=-crop.y*zoom+'px';}
   const speed=Math.hypot(joystick?.x||0,joystick?.z||0);
   const _r=crop;$('handZoomState').textContent=!joystick?.centre?(joystick?.reason==='OPEN PALM · RESET'?'Open palm · reset':'Show selected finger'):joystick.active?(speed>1.01?'BOOST ':'MOVE ')+Math.round(speed*100)+'%':joystick.reason==='RETURN FINGER TO CENTRE'?'Finger to green centre':joystick.reason?.includes('TRACKING')||!hands?.length?'Show hand to resume':'Centre / fist = stop';
   return _r;
@@ -35,7 +35,7 @@ export function setupUI(){
    for(let i=0;i<21;i++){ctx.fillStyle=i===tip?'#ffdf75':'#e5fff3';ctx.beginPath();ctx.arc(...point(hand[i]),i===tip?w/65:w/160,0,Math.PI*2);ctx.fill();}
    const [x,y]=point(hand[tip]);ctx.strokeStyle=active?'#ffdf75':'#ffffff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,w/38,0,Math.PI*2);ctx.stroke();
   }
-  if(roles){   // the other hand (the 3D one) is not in `hands`, so outline it faintly and name both
+  if(roles&&roles.labels){   // ?labels=1: name each hand. Off by default - the owner wants only the joystick in the panel
    const shown=hands??[];
    if(roles.model&&roles.model.length===21&&!shown.includes(roles.model)){
     ctx.lineWidth=Math.max(1.5,w/420);ctx.strokeStyle='#5aa9ffcc';

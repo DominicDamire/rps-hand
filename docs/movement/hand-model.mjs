@@ -337,7 +337,10 @@ function makeRigSkin(variant, color) {
 // group sits at (0, -height, -dist) in the eye's frame, turned half a turn about the vertical axis. A proper rotation,
 // so the right hand stays a right hand and appears on the right.
 // Joint depths come from the world model + one translation (locate, as the main page); the picture fixes x/y exactly.
-export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5, eye: null, reach: 1.7, drop: 9 };
+export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5, eye: null, reach: 1.35, drop: 5, near: 0.25, far: 0.62 };
+// near/far: the hand is kept between these distances from the eye. Without a limit, holding the hand right up to the
+// phone threw it far away and tiny (the depth is inverted on purpose: toward the phone = away from you), and the owner
+// could not see his own hands. reach 1.35 and drop 5 deg keep them big and in frame while still reaching the table.
 // drop: degrees the whole hand is swung DOWN about the eye, so it rests low in the frame the way a shooter's viewmodel
 // does instead of sitting in the middle of the screen (owner sent CS:GO screenshots: "that is how much view the hand
 // should take"). It is an angle, not a distance, so the hand keeps the same place in the frame however far out it is.   // reach: the hand's distance from the eye is multiplied by this (the shape is not stretched, the whole hand moves), so a
@@ -402,6 +405,21 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
       let tx = (g - 1) * (ex - _c.x), ty = (g - 1) * (_c.y - ey), tz = (g - 1) * (-_c.z - D);
       let zMax = -Infinity; for (const p of pts) zMax = Math.max(zMax, -p.z - D + tz);   // the nearest point's depth in the eye's frame (forward is negative)
       if (zMax > -MIN_AHEAD) tz -= zMax + MIN_AHEAD;
+      // Keep the hand inside the visible range: scale the whole offset from the eye, so its shape and direction are kept.
+      {
+        const ox = ex + tx, oy = -ey + ty, oz = -D + tz, r = Math.hypot(ox, oy, oz);
+        if (r > 1e-4) {
+          const want = Math.min(view.far || Infinity, Math.max(view.near || 0, r)), k = want / r;
+          let cx = ox * k, cy = oy * k, cz = oz * k;
+          // Keep the hand on screen (owner: "hands always in the user's view, the right one"): hold it inside a cone
+          // a little narrower than the camera's own, so it can never wander off the edge of the picture.
+          const ahead = Math.max(0.05, -cz), keep = view.keepIn ?? 0.78;
+          const ty2 = Math.tan((view.camFov ?? 65) * Math.PI / 360) * keep, tx2 = ty2 * (view.aspect ?? 1.6);
+          const mx = ty2 * ahead * (view.aspect ?? 1.6), my = ty2 * ahead;
+          cx = Math.max(-mx, Math.min(mx, cx)); cy = Math.max(-my, Math.min(my, cy));
+          tx = cx - ex; ty = cy + ey; tz = cz + D;
+        }
+      }
       let py = -ey + ty, pz = -D + tz;
       if (view.drop) { const a = -view.drop * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), y2 = py * c - pz * sn; pz = py * sn + pz * c; py = y2; }
       offset[0] = -py; offset[1] = -pz; group.position.set(ex + tx, py, pz);

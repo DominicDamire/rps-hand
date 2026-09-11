@@ -2,7 +2,7 @@
 // and this turns them back into exactly the worker messages app.mjs and HeadView already expect, so the rest of the page
 // does not know the difference. Nothing here needs a peer-to-peer connection, so it works on mobile data and across
 // networks, unlike the WebRTC video path in camlink.mjs (kept for one shared Wi-Fi: open the page with &video=1).
-import { connectLink, unpackHands, linkCode } from "./link.mjs?v=68";
+import { connectLink, unpackHands, linkCode } from "./link.mjs?v=69";
 
 function shim() {   // looks enough like a Worker for app.mjs / HeadView
   let fn = null, pending = null;   // the phone can say "ready" before the page attaches its handler: replay it
@@ -56,6 +56,14 @@ export async function startRemote({ onStatus = () => {}, fresh = false } = {}) {
       } else if (kind === "f") {
         const d = JSON.parse(payload.toString());
         head.deliver({ type: "pose", ts: Math.floor(stamp()), pose: d.p || null, found: !!d.f, width: d.w || 288 });
+      } else if (kind === "v") {   // the phone's live picture: the PC has no camera of its own in this mode
+        const img = document.getElementById("camImg");
+        if (img) {
+          const blob = new Blob([payload instanceof Uint8Array ? payload : new Uint8Array(payload)], { type: "image/jpeg" });
+          const url = URL.createObjectURL(blob);
+          const old = img.dataset.url; img.dataset.url = url; img.src = url; img.style.visibility = "visible";
+          if (old) setTimeout(() => URL.revokeObjectURL(old), 250);
+        }
       } else if (kind === "b") {
         const d = JSON.parse(payload.toString()); live?.onBody?.(d.p || null);
       } else if (kind === "p") {
