@@ -1,22 +1,22 @@
-import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=63';
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=63';
-import {setupThumbstick} from './thumbstick.mjs?v=63';
+import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=64';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=64';
+import {setupThumbstick} from './thumbstick.mjs?v=64';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=63';
-import {DustMap} from './map.mjs?v=63';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=64';
+import {DustMap} from './map.mjs?v=64';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=63';
-import {phoneCamera} from './camlink.mjs?v=63';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=63';
-import {makeHandModel,view as handView} from './hand-model.mjs?v=63';
-import {createNet} from './net.mjs?v=63';
-import {setupShooter} from './shooter.mjs?v=63';   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
+import {setupUI} from './ui.mjs?v=64';
+import {phoneCamera} from './camlink.mjs?v=64';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=64';
+import {makeHandModel,view as handView} from './hand-model.mjs?v=64';
+import {createNet} from './net.mjs?v=64';
+import {setupShooter} from './shooter.mjs?v=64';   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
 const $=id=>document.getElementById(id);const CAM=new URLSearchParams(location.search).has('cam');   // ?cam: the phone streams its camera here
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
 $('saveTracking').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:63,frames:trackingLog},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='thumb-tracking-v63.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-const held=new ThumbJoystick();let inputMode='poses',fingerMode='index',trackedHand=null,resting=false;
+const held=new ThumbJoystick();let inputMode='poses',fingerMode='index',trackedHand=null,resting=false,singleRole='stick',singleChir=0;   // with ONE hand in view: 'stick' (the joystick takes it) or 'model' (the 3D hand / gun takes it), from the thumb's side of the palm
 const scheduler=new TrackingScheduler();const swipe=new SwipeController();const headLook=new HeadLook();let lookDemo=0;
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:false});renderer.setPixelRatio(Math.min(1,Math.sqrt(900000/(innerWidth*innerHeight))));
 const scene=new THREE.Scene();scene.background=new THREE.Color('#25394a');scene.fog=new THREE.FogExp2('#25394a',.018);
@@ -38,7 +38,7 @@ $('online').onclick=()=>{ensureNet();if(net.opp)return;const l=$('lobby');l.hidd
 $('closeLobby').onclick=()=>$('lobby').hidden=true;$('refresh').onclick=()=>{$('rooms').textContent='searching…';ensureNet().listRooms();};
 $('quick').onclick=()=>{$('rooms').textContent='looking for a player…';ensureNet().quickMatch();};$('create').onclick=()=>ensureNet().createRoom();
 scene.background=new THREE.Color('#abc9d9');scene.fog=new THREE.Fog('#abc9d9',90,180);
-const dustMap=new DustMap(scene);const shooter=setupShooter({scene,camera,dustMap,handModel});window.shooter=shooter;
+const dustMap=new DustMap(scene);const shooter=setupShooter({scene,camera,dustMap,handModel});window.shooter=shooter;window.dustMap=dustMap;
 dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · auto-step on';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
 function resize(){renderer.setPixelRatio(Math.min(1,Math.sqrt(900000/(innerWidth*innerHeight))));renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}addEventListener('resize',resize);resize();
 let head=null,lastHeadVideo=-1,lastFrameTime=0,lastHUD=-Infinity;let walkReason='START CAMERA';
@@ -55,14 +55,19 @@ async function start(){
   const takeCam=s=>{stream=s;$('cam').srcObject=s;$('cam').play().catch(()=>{});};
   stream=useCam?(stream?.active?stream:await phoneCamera(t=>status(t),takeCam)):await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=63',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=64',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
     lastResult=performance.now();if(lastResult-data.time>450){held.receive(null,lastResult);apply(null,lastResult);handModel.hide();trackingUI.draw([],$('cam').videoWidth,$('cam').videoHeight,false,{tip:fingerMode==='index'?8:4,centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,reason:held.reason});walkReason='TRACKING TOO OLD · '+Math.round(lastResult-data.time)+' ms';status(walkReason);return;}
     const n=data.landmarks?.length||0;
     let handIndex=inputMode==='index'?selectLeftHand(data):n===1?0:n===2?(data.landmarks[0][0].x>data.landmarks[1][0].x?0:1):-1;   // two hands: the physical left (image right, unmirrored) is the joystick, the other one the model
-    const modelIndex=n===2&&handIndex>=0?1-handIndex:-1;
+    let modelIndex=n===2&&handIndex>=0?1-handIndex:-1;
+    if(n===1){const w=data.worldLandmarks[0],ax=w[5].x-w[0].x,ay=w[5].y-w[0].y,az=w[5].z-w[0].z,bx=w[17].x-w[0].x,by=w[17].y-w[0].y,bz=w[17].z-w[0].z,tx=w[4].x-w[0].x,ty=w[4].y-w[0].y,tz=w[4].z-w[0].z;
+      singleChir+=.25*(Math.sign(tx*(ay*bz-az*by)+ty*(az*bx-ax*bz)+tz*(ax*by-ay*bx))-singleChir);   // one hand alone: the thumb's side of the palm says which hand it is (+ = physical right; the same test as hand-model.mjs - the tracker's label said "Right" for the owner's right fist)
+      if(singleChir>.3)singleRole='model';else if(singleChir<-.3)singleRole='stick';if(inputMode==='touch')singleRole='model';   // the physical RIGHT hand is the 3D hand that takes the gun, the physical left stays the joystick; the screen thumbstick never needs a tracked hand
+      if(singleRole==='model'){modelIndex=0;handIndex=-1;}}
+    window.dbg=Object.assign(window.dbg||{},{hands:n,label:data.handedness?.map(h=>h[0]?(h[0].categoryName+':'+h[0].score.toFixed(2)):'?'),handIndex,modelIndex,wl:window.dbgWL&&n?data.worldLandmarks[0].map(p=>[p.x,p.y,p.z]):undefined});
     if(resting){held.receive(null,lastResult);swipe.reset();handModel.hide();walkReason='RESTING';return;}
     const label=handIndex>=0?data.handedness?.[handIndex]?.[0]?.categoryName:null;
     trackedHand=label;
@@ -80,7 +85,7 @@ async function start(){
       status(active?fingerMode.toUpperCase()+' · '+held.direction:walkReason,active);
     }
   };
-  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:33,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=63',import.meta.url)});head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
+  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:33,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=64',import.meta.url)});head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
  }catch(e){stop();status('Camera not started');$('error').textContent=e.name==='NotAllowedError'?'Camera access was declined. Allow camera access in your browser, then retry.':e.message;}
  finally{$('start').disabled=false;}
 }

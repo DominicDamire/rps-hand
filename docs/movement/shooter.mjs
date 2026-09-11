@@ -28,18 +28,18 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
     const tableZ = spawn.z - 0.75, tableFloor = dustMap.floor(spawn.x, tableZ, floor + 1) ?? floor;
     gun = await makeGun({ scene, worldObjs: dustMap.meshes, floorY: tableFloor, url: new URL("../gun.glb", import.meta.url).href,
       place: { pos: new THREE.Vector3(spawn.x, tableFloor + TABLE_H, tableZ), yaw: 0 }, hold: Q.has("grab") });
-    const mw = 1.1, mh = 2.0;
-    mirror = new Reflector(new THREE.PlaneGeometry(mw, mh), { clipBias: 0.003, textureWidth: 512, textureHeight: 1024, color: 0xb8c4cc });
-    const mx = spawn.x - 1.1, mz = spawn.z - 1.5, mfloor = dustMap.floor(mx, mz, floor + 1) ?? floor;
-    mirror.position.set(mx, mfloor + mh / 2, mz); mirror.lookAt(spawn.x, mfloor + mh / 2, spawn.z + 0.5); scene.add(mirror);
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(mw + 0.08, mh + 0.08, 0.03), new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.6 }));
-    frame.position.copy(mirror.position); frame.quaternion.copy(mirror.quaternion); frame.translateZ(-0.02); scene.add(frame);
+    const mw = 8, mh = 4;   // a wall-sized mirror (owner: "much bigger, like 15 times" - about 15x the old 1.1 x 2.0 m area), 6.4 m to the front-left, facing the spawn: the whole body fits with room to walk
+    mirror = new Reflector(new THREE.PlaneGeometry(mw, mh), { clipBias: 0.003, textureWidth: 1024, textureHeight: 512, color: 0xb8c4cc });
+    const mx = spawn.x - 4.5, mz = spawn.z - 4.5, mfloor = dustMap.floor(mx, mz, floor + 1) ?? floor;   // measured (probe_map.py): flat floor there, nearest wall 19 m away, no ceiling
+    mirror.position.set(mx, mfloor + mh / 2, mz); mirror.lookAt(spawn.x, mfloor + mh / 2, spawn.z); scene.add(mirror);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(mw + 0.3, mh + 0.3, 0.08), new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.6 }));   // a 15 cm border: visible from 6 m
+    frame.position.copy(mirror.position); frame.quaternion.copy(mirror.quaternion); frame.translateZ(-0.045); scene.add(frame);
   }
   const ready = dustMap.ready ? build() : new Promise(res => { const t = setInterval(() => { if (dustMap.ready) { clearInterval(t); res(build()); } }, 200); });
   ready.catch(e => { error = e; console.warn("shooter unavailable:", e); });
 
   return {
-    ready, get gun() { return gun; },
+    ready, get gun() { return gun; }, get mirror() { return mirror; },
     update(dt, now) {
       body.position.copy(camera.position); body.rotation.set(0, camera.rotation.y, 0);
       if (!gun) return;
