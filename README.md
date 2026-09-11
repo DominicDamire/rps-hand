@@ -1,3 +1,7 @@
+# Movement v90 · fixed hand attachments
+
+[Play v90](https://d14life.github.io/rps-hand/movement/?v=90) · [Blender verification](https://d14life.github.io/rps-hand/movement/blender-check/) · [V90 details](docs/movement/V90.md)
+
 # Movement v89 · restored v80 model and joints
 
 [Play v89](https://d14life.github.io/rps-hand/movement/?v=89-v80) · [Hand movement test](https://d14life.github.io/rps-hand/movement/hand-check.html?v=89-v80) · [Implementation and validation](docs/movement/V89.md)
