@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=79";
-import { BodyView } from "../body/BodyView.js?v=79";
-import { BodyPose } from "../body/pose.mjs?v=79";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=80";
+import { BodyView } from "../body/BodyView.js?v=80";
+import { BodyPose } from "../body/pose.mjs?v=80";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
@@ -184,7 +184,11 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
     recenter() {
       (far || local?.pose)?.recenter(modeEl.value);
       phase = 0; gait = 0; lastPos = null; neutral = null; lean.set(0, 0, 0);
-      handScaled.clear(); restPalm.clear(); restDirs.clear();   // one bad first frame is no longer permanent
+      handScaled.clear(); restPalm.clear(); restDirs.clear(); knuckled.clear();   // one bad first frame is no longer permanent
+      for (const S of ["L", "R"]) for (const [n] of FINGERS) {
+        const j = rig.joints?.[`${S}${n}1`];
+        if (j) { j.position.copy(rig.rest[`${S}${n}1`].world).sub(rig.rest[`${S}Hand`].world); j.scale.setScalar(1); }
+      }
       for (const S of ["L", "R"]) rig.joints?.[`${S}Hand`]?.scale.setScalar(1);
     },
     wants() { return tracked(); }, get told() { return told; }, set told(v) { told = v; },
@@ -261,6 +265,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
         armTo(S, _w);
         fitHand(rig, S, src, handModel.group.matrixWorld);
         setPalm(rig, S, src, handModel.group.matrixWorld);
+        fitKnuckles(rig, S, src, handModel.group.matrixWorld);
         setFingers(rig, S, src, handModel.group.matrixWorld);
       }
       // the steering hand: same treatment, it is a tracked hand like the other (owner: "make the left hand appear too")
@@ -272,6 +277,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
           armTo(SL, _w);
           fitHand(rig, SL, srcL, handModelL.group.matrixWorld);
           setPalm(rig, SL, srcL, handModelL.group.matrixWorld);
+          fitKnuckles(rig, SL, srcL, handModelL.group.matrixWorld);
           setFingers(rig, SL, srcL, handModelL.group.matrixWorld);
         }
       }
@@ -345,8 +351,41 @@ function fitHand(rig, S, pts, mat) {
   if (!(real > 0.05 && real < 0.35) || !(mine > 0.02)) return;
   const k = Math.max(0.8, Math.min(1.8, real / mine));
   rig.joints[`${S}Hand`].scale.setScalar(k);
+  // Then each finger to its own: the doll's are not in a person's proportions - its little finger is much shorter than
+  // yours - so one scale for the whole hand still left the outer fingers several centimetres from the tracked ones.
+  const scaled = [];
+  for (const [name, a2, b2, c2, d2] of FINGERS) {
+    const j1 = rig.joints[`${S}${name}1`], j3 = rig.joints[`${S}${name}3`];
+    if (!j1 || !j3) continue;
+    // joint 1 to joint 3 on the doll against knuckle to last-joint on the hand: the same span on both, no fudge
+    const yours = _p1.copy(pts[a2]).applyMatrix4(mat).distanceTo(_p2.copy(pts[c2]).applyMatrix4(mat));
+    const p1 = j1.getWorldPosition(new THREE.Vector3()), p3 = j3.getWorldPosition(new THREE.Vector3());
+    const ours = p1.distanceTo(p3) / Math.max(0.2, j1.scale.x);
+    if (!(yours > 0.01 && ours > 0.005)) continue;
+    const f = Math.max(0.6, Math.min(2.2, yours / ours));
+    j1.scale.setScalar(f); scaled.push(`${name} x${f.toFixed(2)}`);
+  }
   handScaled.add(S);
-  console.info(`doll: ${S} hand scaled x${k.toFixed(2)} (yours ${real.toFixed(3)} m, the doll's ${mine.toFixed(3)} m)`);
+  console.info(`doll: ${S} hand x${k.toFixed(2)} (yours ${real.toFixed(3)} m, the doll's ${mine.toFixed(3)} m); fingers ${scaled.join(", ")}`);
+}
+
+// Where the knuckles sit across the palm is the doll's own geometry, and it is not yours: after scaling the hand and
+// every finger, the knuckle joints themselves were still 4 cm from the tracked ones, and everything below them
+// inherits that. Each knuckle is moved onto the tracked one, once, in the hand's own space. Calibrate undoes it.
+const knuckled = new Set();
+function fitKnuckles(rig, S, pts, mat) {
+  if (knuckled.has(S)) return;
+  const hand = rig.joints[`${S}Hand`]; if (!hand) return;
+  rig.refresh(hand);
+  _mB.copy(hand.matrixWorld).invert();
+  let moved = 0;
+  for (const [name, a] of FINGERS) {
+    const j = rig.joints[`${S}${name}1`]; if (!j) continue;
+    _p1.copy(pts[a]).applyMatrix4(mat).applyMatrix4(_mB);
+    if (!Number.isFinite(_p1.x) || _p1.length() > 0.5) continue;   // a nonsense frame must not stick
+    j.position.copy(_p1); rig.refresh(j); moved++;
+  }
+  if (moved === 5) knuckled.add(S);
 }
 
 function setPalm(rig, S, pts, mat) {

@@ -132,6 +132,9 @@ def smallest(fam, side=""):
 def highest(fam, side=""):
     return max(group(fam, side), key=lambda i: i["c"].z)["c"]
 
+def highest_island(fam, side=""):
+    return max(group(fam, side), key=lambda i: i["c"].z)
+
 def side_island(fam, side):
     """the island of an unsided family that sits on one side (the chest's shoulder sockets)"""
     g = [i for i in group(fam) if (i["c"].x > 0.01 if side == "R" else i["c"].x < -0.01)]
@@ -164,8 +167,13 @@ def build_bones():
     add("Hips", "Root", centroid("hip"))
     add("Waist", "Hips", mid(centroid("hip"), centroid("waist")))
     add("Chest", "Waist", mid(centroid("waist"), centroid("chest")))
-    add("Neck", "Chest", highest("chest"))
-    add("Head", "Neck", mid(highest("chest"), centroid("head")))
+    # The neck is a post with a ball on top, sunk into the skull: the head turns on the BALL, not on the post's middle.
+    # Using the centroid put the pivot 6 cm below the socket and drove the post up through the underside of the skull.
+    neck = highest_island("chest")
+    span = neck["hi"].z - neck["lo"].z
+    ball = min(neck["hi"].x - neck["lo"].x, neck["hi"].y - neck["lo"].y) / 2
+    add("Neck", "Chest", Vector((neck["c"].x, neck["c"].y, neck["lo"].z + span * 0.2)))   # where it leaves the chest
+    add("Head", "Neck", Vector((neck["c"].x, neck["c"].y, neck["hi"].z - ball)))          # the ball inside the skull
     for S in ("L", "R"):
         add(f"{S}Clavicle", "Chest", side_island("chest", S))
         add(f"{S}UpperArm", f"{S}Clavicle", centroid("shoulder", S))   # the shoulder cap IS the ball the arm turns on
