@@ -383,8 +383,11 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
     const right = model.right, on = right ? skinR : skinL, off = right ? skinL : skinR;
     const src = model.override ? model.override() : pts;   // shooter.mjs: the gripping pose while the gun is held
     off.mesh.visible = false; on.update(src, right, undefined, undefined, !!model.override);
+    // doll-body.mjs draws the hand with the doll's own parts instead; this model stays the source of the 21 points
+    // (the gun grip, the punching and the doll's fingers all read them), it simply is not drawn.
+    if (model.drawMesh === false) on.mesh.visible = false;
   }
-  const model = { group, ready, points: pts, offset, override: null, get visible() { return shown; }, get right() { return chir * CHIR_RIGHT >= 0; },
+  const model = { group, ready, points: pts, offset, override: null, drawMesh: true, get visible() { return shown; }, get right() { return chir * CHIR_RIGHT >= 0; },
     update(image, world, W, H) {   // from the tracker: picture + world landmarks -> the phone's GL frame
       const [Tz, xu, yv] = locate(world, image, W, H); if (!Number.isFinite(Tz) || Tz <= 0.05) return;
       q.setFromAxisAngle(ax, view.tilt * Math.PI / 180);
