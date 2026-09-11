@@ -228,6 +228,27 @@ for i in large:
 total = sum(i["tris"] for i in islands)
 log("triangles after decimation:", total)
 
+# ---------------------------------------------------------------- one mesh per joint
+# Parts that hang off the same joint move together for ever, so they may as well be one mesh. 95 draw calls become 48,
+# which matters because this doll is drawn twice - once for the player and once in the mirror's reflection - beside
+# three MediaPipe trackers that are competing for the same GPU.
+from collections import defaultdict
+byb = defaultdict(list)
+for i in islands: byb[i["bone"]].append(i)
+merged = []
+for bone, grp in byb.items():
+    if len(grp) == 1: merged.append(grp[0]); continue
+    objs = [g["o"] for g in grp]
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in objs: o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    bpy.ops.object.join()
+    grp[0]["tris"] = tris(objs[0])
+    grp[0]["fam"] = "+".join(sorted(set(g["fam"] for g in grp)))[:40]
+    merged.append(grp[0])
+log(f"merged {len(islands)} parts into {len(merged)} meshes, one per joint")
+islands = merged
+
 # ---------------------------------------------------------------- one matte material
 mat = bpy.data.materials.new("doll")
 mat.use_nodes = True
