@@ -1,16 +1,24 @@
+import {FIST,alignment,closure,referencePose,Settler,depthEstimate,positionAt} from './motion.mjs?v=4';
 import {receivePhone} from './phone-link.mjs?v=2';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
-import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile,lockedAxis,constrainJoint,constrainAngles,directionAngles} from './profile.mjs?v=3';
+import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile,lockedAxis,constrainJoint,constrainAngles,directionAngles} from './profile.mjs?v=4';
 const $=id=>document.getElementById(id),clone=x=>JSON.parse(JSON.stringify(x)),RAD=Math.PI/180,KEY='hand-pose-lab-v1';
 let profile=emptyProfile();try{const saved=localStorage.getItem(KEY);if(saved)profile=validateProfile(JSON.parse(saved));}catch{$('notice').textContent='Saved profile could not be read. Import your JSON backup to recover it.';}
 let closePhone=null;
 let side='R',selected='Index1',editing=false,latest=null,editBase=null,frozenFeature=null,frozenCapture=null,savedId=null,angles=blankAngles(),epoch=0,stream=null,worker=null,workerReady=null,request=null,inflight=false,lastVideo=-1,sampleSource=null;
+let neutralSplay=profile.calibration.neutralSplay;
+let curls=[0,0,0,0],posePreview=false,depthScale=profile.calibration.depthScale,lastDepth=null,lastTracking=0;
+const filters=Object.fromEntries(JOINTS.map(n=>[n,new Settler()])),positionFilter=new Settler(),curlFilter=new Settler();
+let smoothPalmQ=null,previousPalmQ=null,heldPalmQ=null,palmQuiet=0;
 const palmQ=new THREE.Quaternion(),frozenPalm=new THREE.Quaternion(),basisCache={},jointDots={};
 const notice=t=>$('notice').textContent=t;
 const scene=new THREE.Scene();scene.background=new THREE.Color('#182331');
-const camera=new THREE.PerspectiveCamera(38,1,.001,10);
+const camera=new THREE.PerspectiveCamera(60,1,.01,20);
+const room=new THREE.Group();scene.add(room);const floor=new THREE.GridHelper(6,30,0x64859c,0x35495c);floor.position.set(0,-.35,-2);room.add(floor);
+for(const [x,z] of [[-.5,-1.2],[.5,-1.6],[-.8,-2.5]]){const mesh=new THREE.Mesh(new THREE.BoxGeometry(.2,.2,.2),new THREE.MeshStandardMaterial({color:0x49687d}));mesh.position.set(x,-.25,z);room.add(mesh);}
+
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:true,preserveDrawingBuffer:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
 const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.minDistance=.12;controls.maxDistance=1.4;
 scene.add(new THREE.HemisphereLight(0xffffff,0x526980,2));const lamp=new THREE.DirectionalLight(0xffffff,2);lamp.position.set(1,2,1);scene.add(lamp);
@@ -23,10 +31,7 @@ function frameBasis(wrist,index,middle,pinky){const y=middle.clone().sub(wrist).
 function restBasis(S){const r=rig.rest;return frameBasis(r[S+'Hand'].world,r[S+'Index1'].world,r[S+'Middle1'].world,r[S+'Pinky1'].world);}
 function jointBasis(n){const key=side+n;if(basisCache[key])return basisCache[key];const r=rig.rest,k=+n.slice(-1),finger=n.slice(0,-1),here=r[key].world;
  const z=(k<3?r[side+finger+(k+1)].world.clone().sub(here):here.clone().sub(r[side+finger+(k-1)].world)).normalize();
- const first=r[side+finger+'2'].world.clone().sub(r[side+finger+'1'].world).normalize(),second=r[side+finger+'3'].world.clone().sub(r[side+finger+'2'].world).normalize();
- const lateral=r[side+'Index1'].world.clone().sub(r[side+'Pinky1'].world),x=new THREE.Vector3().crossVectors(first,second);
- if(x.lengthSq()<1e-10)x.copy(lateral).addScaledVector(first,-lateral.dot(first));
- if(x.dot(lateral)<0)x.negate();x.normalize();const y=new THREE.Vector3().crossVectors(z,x).normalize();
+ const x=r[side+'Index1'].world.clone().sub(r[side+'Pinky1'].world);x.addScaledVector(z,-x.dot(z)).normalize();const y=new THREE.Vector3().crossVectors(z,x).normalize();
  return basisCache[key]=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x,y,z));
 }
 function solveRaw(world){const pts=world.map(p=>new THREE.Vector3(p.x,-p.y,-p.z));
@@ -38,21 +43,23 @@ function solveRaw(world){const pts=world.map(p=>new THREE.Vector3(p.x,-p.y,-p.z)
   dir.applyQuaternion(j.parent.getWorldQuaternion(new THREE.Quaternion()).invert()).normalize();
   const qb=jointBasis(n);dir.applyQuaternion(qb.clone().invert());
   result[n]=constrainJoint(n,directionAngles(n,dir.toArray(),angles[n][0]),profile.limits[side][n]);
-  j.quaternion.copy(qb).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...result[n].map(v=>v*RAD),'XYZ'))).multiply(qb.clone().invert());rig.refresh(j);
+  j.quaternion.copy(qb).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...result[n].map((v,i)=>(v+($('reference').checked?alignment(n)[i]:0))*RAD),'XYZ'))).multiply(qb.clone().invert());rig.refresh(j);
 
  }
  return result;
 }
-function applyAngles(){if(!rig.loaded)return;angles=constrainAngles(angles,profile.limits[side]);rig.joints[side+'Hand'].quaternion.copy(editing?frozenPalm:$('follow').checked?palmQ:new THREE.Quaternion());
- for(const n of JOINTS){const qb=jointBasis(n),v=angles[n];rig.joints[side+n].quaternion.copy(qb).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...v.map(x=>x*RAD),'XYZ'))).multiply(qb.clone().invert());}
+function stabilizePalm(dt){const tolerance=(+$('stability').value)*RAD;if(!smoothPalmQ){smoothPalmQ=palmQ.clone();previousPalmQ=palmQ.clone();return;}if(heldPalmQ&&palmQ.angleTo(heldPalmQ)<=tolerance*2.5){palmQ.copy(heldPalmQ);return;}heldPalmQ=null;palmQuiet=tolerance>0&&palmQ.angleTo(previousPalmQ)<tolerance?palmQuiet+dt:0;previousPalmQ.copy(palmQ);smoothPalmQ.slerp(palmQ,1-Math.exp(-dt/(smoothPalmQ.angleTo(palmQ)>.12?.025:.08)));if(palmQuiet>.3)heldPalmQ=smoothPalmQ.clone();palmQ.copy(smoothPalmQ);}
+function modelAngles(n){if(posePreview)return FIST[n];const v=angles[n].map((x,i)=>x+($('reference').checked?alignment(n)[i]:0));if(n.startsWith('Thumb')&&$('reference').checked){const t=Math.min(...curls);return v.map((x,i)=>x*(1-t)+FIST[n][i]*t);}return v;}
+function applyAngles(){if(!rig.loaded)return;angles=constrainAngles(angles,profile.limits[side]);rig.joints[side+'Hand'].quaternion.copy(editing?frozenPalm:($('follow').checked||$('spatial').checked)?palmQ:new THREE.Quaternion());
+ for(const n of JOINTS){const qb=jointBasis(n),v=modelAngles(n);rig.joints[side+n].quaternion.copy(qb).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...v.map(x=>x*RAD),'XYZ'))).multiply(qb.clone().invert());}
  rig.root.updateMatrixWorld(true);
 }
-function configureSide(){for(const m of rig.parts)m.visible=m.name.startsWith(side)&&/^(R|L)(Hand|Thumb|Index|Middle|Ring|Pinky)/.test(m.name);angles=blankAngles();palmQ.identity();frozenPalm.identity();applyAngles();resetView();renderControls();}
-function resetView(){if(!rig.loaded)return;const r=rig.rest,w=r[side+'Hand'].world,m=r[side+'Middle1'].world,b=restBasis(side),normal=new THREE.Vector3().setFromMatrixColumn(b,2);
+function configureSide(){for(const f of Object.values(filters))f.reset();positionFilter.reset();curlFilter.reset();smoothPalmQ=previousPalmQ=heldPalmQ=null;palmQuiet=0;for(const m of rig.parts)m.visible=m.name.startsWith(side)&&/^(R|L)(Hand|Thumb|Index|Middle|Ring|Pinky)/.test(m.name);angles=blankAngles();palmQ.identity();frozenPalm.identity();applyAngles();resetView();renderControls();}
+function resetView(){if(!rig.loaded)return;room.visible=$('spatial').checked;controls.enabled=!$('spatial').checked;if($('spatial').checked){camera.fov=60;camera.up.set(0,1,0);camera.position.set(0,0,0);controls.target.set(0,0,-1);camera.lookAt(controls.target);camera.updateProjectionMatrix();if(!latest&&!editing){palmQ.setFromRotationMatrix(restBasis(side).invert());rig.joints[side+'Hand'].quaternion.copy(palmQ);rig.root.position.copy(rig.rest[side+'Hand'].world).negate().add(new THREE.Vector3(0,-.1,-.5));}return;}rig.root.position.set(0,0,0);camera.fov=38;camera.updateProjectionMatrix();const r=rig.rest,w=r[side+'Hand'].world,m=r[side+'Middle1'].world,b=restBasis(side),normal=new THREE.Vector3().setFromMatrixColumn(b,2);
  const q=rig.joints[side+'Hand'].getWorldQuaternion(new THREE.Quaternion()),along=m.clone().sub(w).applyQuaternion(q);normal.applyQuaternion(q);controls.target.copy(w).addScaledVector(along,.7);camera.up.copy(along).normalize();camera.position.copy(controls.target).addScaledVector(normal,.42);controls.update();}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(profile));return true;}catch{notice('Browser storage is full or unavailable. Your work is still open — export JSON now.');return false;}}
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),20000);}
-function updateMode(){for(const id of ['save','undo','zero','saveLimits','clearLimits','resume'])$(id).disabled=!editing;$('edit').disabled=editing||!latest;$('side').disabled=editing;$('detected').disabled=editing;$('follow').disabled=editing;
+function updateMode(){for(const id of ['save','undo','zero','saveLimits','clearLimits','resume'])$(id).disabled=!editing;$('edit').disabled=editing||!latest;$('side').disabled=editing;$('detected').disabled=editing;$('follow').disabled=editing||$('spatial').checked;
  $('mode').textContent=editing?'FROZEN / EDITING':stream?'LIVE CAMERA':latest?'IMAGE PREVIEW':'LIVE PREVIEW';$('editHelp').textContent=editing?'Edit the selected joint. Saved corrections affect the fingers, not the wrist.':'Freeze a pose to edit. Values below show the current rotations.';renderControls();}
 function drawPreview(source,landmarks){const c=$('preview');c.width=source.width||source.naturalWidth;c.height=source.height||source.naturalHeight;const ctx=c.getContext('2d');ctx.save();ctx.translate(c.width,0);ctx.scale(-1,1);ctx.drawImage(source,0,0,c.width,c.height);ctx.restore();
  if(!landmarks)return;ctx.lineWidth=2;ctx.strokeStyle='#86edbb';ctx.fillStyle='#f0ffee';const point=i=>[(1-landmarks[i].x)*c.width,landmarks[i].y*c.height];
@@ -65,15 +72,19 @@ async function detect(source){if(inflight||editing)return;inflight=true;const to
  try{await ensureWorker();if(token!==epoch||editing)return;const frame=document.createElement('canvas'),w=source.videoWidth||source.naturalWidth||source.width,h=source.videoHeight||source.naturalHeight||source.height;if(!w||!h)return;
  frame.width=480;frame.height=Math.round(h/w*480);frame.getContext('2d').drawImage(source,0,0,frame.width,frame.height);const bitmap=await createImageBitmap(frame);if(token!==epoch||editing){bitmap.close();return;}
  const data=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{request=null;reject(Error('Tracker response timed out'));},10000);request={resolve:d=>{clearTimeout(timer);resolve(d);},reject:e=>{clearTimeout(timer);reject(e);}};worker.postMessage({type:'frame',bitmap,time:performance.now()},[bitmap]);});
- if(token!==epoch||editing)return;const desired=$('detected').value,idx=desired==='first'?0:data.handedness?.findIndex(h=>h[0]?.categoryName===desired);
+ if(token!==epoch||editing)return;const desired=$('detected').value;let idx=desired==='first'?0:data.handedness?.findIndex(h=>h[0]?.categoryName===desired);
+ if(desired==='first'&&latest&&data.landmarks?.length>1){let best=Infinity;data.landmarks.forEach((points,i)=>{const d=Math.hypot(points[0].x-latest.landmarks[0].x,points[0].y-latest.landmarks[0].y);if(d<best){best=d;idx=i;}});}
+
  const lm=data.landmarks?.[idx],world=data.worldLandmarks?.[idx];drawPreview(frame,lm);
  if(!world||world.length!==21){latest=null;$('captureState').textContent='No selected hand detected. Keep the hand in view.';$('matchState').textContent='No pose matched';updateMode();return;}
+ posePreview=false;const now=performance.now(),dt=lastTracking?Math.min(.1,(now-lastTracking)/1000):.033;lastTracking=now;curls=curlFilter.step(closure(world.map(p=>[p.x,p.y,p.z])).map(v=>v*90),dt,+$('stability').value).map(v=>v/90);
  const feature=features(world.map(p=>[p.x,p.y,p.z])),raw=solveRaw(world),match=$('usePoses').checked?matchPose(profile,feature,side):null;
- angles=clone(match?match.pose.angles:raw);latest={feature,raw,landmarks:lm,world};applyAngles();
+ const target=match?match.pose.angles:$('reference').checked?referencePose(Object.fromEntries(JOINTS.map(n=>[n,[raw[n][0],Math.abs(raw[n][1]-(neutralSplay[side][n]||0))<2?0:raw[n][1]-(neutralSplay[side][n]||0),raw[n][2]]])),curls):raw;stabilizePalm(dt);angles=Object.fromEntries(JOINTS.map(n=>[n,filters[n].step(target[n],dt,+$('stability').value)]));
+ latest={feature,raw,landmarks:lm,world};lastDepth=depthEstimate(lm,world,frame.width/frame.height);if($('spatial').checked&&lastDepth){const depth=THREE.MathUtils.clamp(lastDepth*depthScale,.15,1.8),pos=positionFilter.step(positionAt(lm,depth,camera.aspect),dt,.002);rig.root.position.fromArray(pos).sub(rig.rest[side+'Hand'].world);$('spatialState').textContent='Estimated distance '+(-pos[2]).toFixed(2)+' m · X '+pos[0].toFixed(2)+' / Y '+pos[1].toFixed(2)+' m · '+(Object.values(filters).some(f=>f.anchor)?'pose settling / held':'moving');}applyAngles();
  $('matchState').textContent=match?'Matched “'+match.pose.name+'” · distance '+match.distance.toFixed(3):'No saved match — tracker pose';$('captureState').textContent=(stream?'Live camera':'Image input')+' · '+data.landmarks.length+' hand(s) · '+Math.round(data.inferenceMs)+' ms inference';updateMode();
  }catch(e){notice(e.message);}finally{inflight=false;}
 }
-function stopCamera(){epoch++;closePhone?.();closePhone=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
+function stopCamera(){epoch++;lastTracking=0;smoothPalmQ=previousPalmQ=heldPalmQ=null;palmQuiet=0;for(const f of Object.values(filters))f.reset();positionFilter.reset();curlFilter.reset();posePreview=false;closePhone?.();closePhone=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
 async function startCamera(){try{stopCamera();editing=false;sampleSource=null;latest=null;notice('Opening camera…');const id=$('cameraSelect').value;stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(id?{deviceId:{exact:id}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}}});$('video').srcObject=stream;await $('video').play();lastVideo=-1;await listCameras();await ensureWorker();notice('Make a pose, then click Freeze & edit.');updateMode();}catch(e){stopCamera();notice('Camera could not start: '+e.message);}}
 async function listCameras(){const current=$('cameraSelect').value,devices=await navigator.mediaDevices.enumerateDevices();$('cameraSelect').replaceChildren(new Option('Default camera',''));for(const d of devices.filter(d=>d.kind==='videoinput'))$('cameraSelect').add(new Option(d.label||'Camera '+($('cameraSelect').options.length),d.deviceId));$('cameraSelect').value=current;}
 $('phone').onclick=()=>{stopCamera();editing=false;sampleSource=null;latest=null;updateMode();try{closePhone=receivePhone(async incoming=>{stream=incoming;$('video').srcObject=incoming;lastVideo=-1;try{await $('video').play();if(stream!==incoming)return;await ensureWorker();notice('Phone camera connected. Hold a pose, then Freeze & edit.');updateMode();}catch(e){stopCamera();notice('Could not start phone video: '+e.message);}},notice,message=>{stopCamera();notice(message);});}catch(e){notice(e.message);}};
@@ -82,24 +93,30 @@ async function loadImage(url){stopCamera();editing=false;latest=null;updateMode(
 $('sample').onclick=()=>loadImage(new URL('../test/count5.png',import.meta.url).href).catch(e=>notice(e.message));
 $('imageInput').onchange=async e=>{const file=e.target.files[0];if(!file)return;const url=URL.createObjectURL(file);try{await loadImage(url);}catch(e){notice(e.message);}finally{URL.revokeObjectURL(url);e.target.value='';}};
 $('edit').onclick=()=>{if(!latest||editing)return;epoch++;editing=true;editBase=clone(angles);frozenFeature=[...latest.feature];frozenCapture=$('preview').toDataURL('image/jpeg',.82);frozenPalm.copy(rig.joints[side+'Hand'].quaternion);savedId=null;$('poseName').value='';notice('Pose frozen. Tracking is paused; edit any joint, name the pose, then save.');updateMode();};
-$('resume').onclick=()=>{epoch++;editing=false;savedId=null;updateMode();notice('Live matching uses your saved examples and enabled limits.');if(sampleSource&&!stream)detect(sampleSource);};
+$('resume').onclick=()=>{epoch++;posePreview=false;for(const f of Object.values(filters))f.reset();editing=false;savedId=null;updateMode();notice('Live matching uses your saved examples and enabled limits.');if(sampleSource&&!stream)detect(sampleSource);};
 $('undo').onclick=()=>{angles=clone(editBase);applyAngles();renderControls();notice('Restored the pose captured when editing began.');};
 $('side').onchange=()=>{side=$('side').value;latest=null;configureSide();updateMode();if(sampleSource)detect(sampleSource);};
+$('spatial').onchange=()=>{resetView();updateMode();if(!editing&&sampleSource)detect(sampleSource);};
+$('reference').onchange=()=>{for(const f of Object.values(filters))f.reset();applyAngles();if(!editing&&sampleSource)detect(sampleSource);};
+$('stability').oninput=()=>{$('stabilityValue').textContent=$('stability').value+'°';for(const f of Object.values(filters))f.reset();};
+$('calibrateDepth').onclick=()=>{const d=+$('distance').value;if(!lastDepth||!latest)return notice('Show your hand to the camera first.');if(d<.15||d>1.5)return notice('Enter a distance between 0.15 and 1.5 metres.');depthScale=d/lastDepth;profile.calibration.depthScale=depthScale;persist();positionFilter.reset();notice('Depth calibrated at '+d.toFixed(2)+' m.');if(!editing&&sampleSource)detect(sampleSource);};
+$('calibrateStraight').onclick=()=>{if(!latest||editing)return notice('In live mode, hold your fingers straight and together, then click this button.');for(const n of JOINTS)neutralSplay[side][n]=latest.raw[n][1];profile.calibration.neutralSplay=neutralSplay;persist();for(const f of Object.values(filters))f.reset();notice('Straight-finger sideways neutral captured for this hand.');if(sampleSource)detect(sampleSource);};
+$('referencePreview').onclick=()=>{epoch++;editing=true;posePreview=true;curls=[1,1,1,1];angles=blankAngles();for(const n of JOINTS)angles[n][0]=FIST[n][0];frozenPalm.identity();if($('spatial').checked){const q=new THREE.Quaternion().setFromRotationMatrix(restBasis(side)).invert();frozenPalm.copy(q);rig.root.position.copy(rig.rest[side+'Hand'].world).negate().add(new THREE.Vector3(0,-.07,-.27));}editBase=clone(angles);frozenFeature=null;savedId=null;applyAngles();updateMode();$('save').disabled=true;$('undo').disabled=true;$('zero').disabled=true;notice('Screenshot reference preview. Resume tracking to capture your own input.');};
 $('follow').onchange=()=>{applyAngles();};$('viewReset').onclick=resetView;
 $('usePoses').onchange=()=>{if(!editing&&sampleSource)detect(sampleSource);};
 $('tolerance').value=profile.tolerance;$('toleranceValue').textContent=profile.tolerance.toFixed(2);$('tolerance').oninput=()=>{profile.tolerance=+$('tolerance').value;$('toleranceValue').textContent=profile.tolerance.toFixed(2);persist();if(!editing&&sampleSource)detect(sampleSource);};
 function renderLibrary(){const list=$('library');list.replaceChildren();$('poseCount').textContent=profile.poses.length;
  if(!profile.poses.length){const p=document.createElement('p');p.className='empty';p.textContent='No examples yet. Freeze a pose and save your correction.';list.append(p);}
  for(const pose of profile.poses){const row=document.createElement('div');row.className='saved';const button=document.createElement('button');button.textContent=pose.name+' · '+(pose.side==='R'?'Right':'Left');button.onclick=()=>loadPose(pose);const del=document.createElement('button');del.textContent='×';del.setAttribute('aria-label','Delete '+pose.name);del.onclick=()=>{profile.poses=profile.poses.filter(p=>p.id!==pose.id);if(savedId===pose.id)savedId=null;persist();renderLibrary();};row.append(button,del);list.append(row);}}
-function loadPose(pose){epoch++;editing=true;side=pose.side;$('side').value=side;configureSide();savedId=pose.id;angles=clone(pose.angles);editBase=clone(angles);frozenFeature=[...pose.features];frozenCapture=pose.capture;frozenPalm.identity();$('poseName').value=pose.name;applyAngles();
+function loadPose(pose){epoch++;posePreview=false;curls=[0,0,0,0];editing=true;side=pose.side;$('side').value=side;configureSide();savedId=pose.id;curls=pose.referenceCurl||[0,0,0,0];if(pose.referenceEnabled!=null)$('reference').checked=pose.referenceEnabled;angles=clone(pose.angles);editBase=clone(angles);frozenFeature=[...pose.features];frozenCapture=pose.capture;frozenPalm.identity();if($('spatial').checked){frozenPalm.setFromRotationMatrix(restBasis(side).invert());rig.root.position.copy(rig.rest[side+'Hand'].world).negate().add(new THREE.Vector3(0,-.07,-.35));}$('poseName').value=pose.name;applyAngles();
  if(pose.capture){const img=new Image();img.onload=()=>{$('preview').getContext('2d').clearRect(0,0,$('preview').width,$('preview').height);$('preview').getContext('2d').drawImage(img,0,0,$('preview').width,$('preview').height);};img.src=pose.capture;}
  notice('Editing saved pose “'+pose.name+'”. Save updates this example.');updateMode();}
 $('save').onclick=()=>{const name=$('poseName').value.trim();if(!editing||!frozenFeature)return notice('Freeze a tracked pose first.');if(!name)return notice('Give this pose a name, such as Fist.');if(!savedId&&profile.poses.length>=100)return notice('This profile already has 100 examples. Export it and remove an example first.');
- const pose={id:savedId||crypto.randomUUID(),name,side,features:[...frozenFeature],angles:clone(angles),capture:frozenCapture};const at=profile.poses.findIndex(p=>p.id===pose.id);if(at>=0)profile.poses[at]=pose;else profile.poses.push(pose);savedId=pose.id;if(persist())notice('Saved “'+name+'”. Resume live to test recognition, or export JSON.');renderLibrary();};
+ const pose={id:savedId||crypto.randomUUID(),name,side,features:[...frozenFeature],angles:clone(angles),referenceCurl:[...curls],referenceEnabled:$('reference').checked,capture:frozenCapture};const at=profile.poses.findIndex(p=>p.id===pose.id);if(at>=0)profile.poses[at]=pose;else profile.poses.push(pose);savedId=pose.id;if(persist())notice('Saved “'+name+'”. Resume live to test recognition, or export JSON.');renderLibrary();};
 function renderControls(){if(!rig.loaded)return;
  $('jointName').textContent=selected.replace(/\d$/,'')+' · '+jointLabel(selected);for(const n of JOINTS){const b=$('joint-'+n);b.setAttribute('aria-pressed',String(n===selected));b.querySelector('small').textContent=angles[n].map(v=>Math.round(v)).join(' / ');}
- for(let i=0;i<3;i++){const v=angles[selected][i];$('angle'+i).value=v;$('number'+i).value=v.toFixed(1);$('angle'+i).disabled=$('number'+i).disabled=!editing||lockedAxis(selected,i);
- const locked=lockedAxis(selected,i),l=locked?{enabled:true,min:0,max:0}:profile.limits[side][selected][i];$('enabled'+i).checked=l.enabled;$('min'+i).value=l.min;$('max'+i).value=l.max;for(const id of ['enabled','min','max'])$(id+i).disabled=!editing||locked;}
+ for(let i=0;i<3;i++){const v=posePreview?FIST[selected][i]:angles[selected][i];$('angle'+i).value=v;$('number'+i).value=v.toFixed(1);$('angle'+i).disabled=$('number'+i).disabled=!editing||posePreview||lockedAxis(selected,i);
+ const locked=lockedAxis(selected,i),l=locked?{enabled:true,min:0,max:0}:profile.limits[side][selected][i];$('enabled'+i).checked=l.enabled;$('min'+i).value=l.min;$('max'+i).value=l.max;for(const id of ['enabled','min','max'])$(id+i).disabled=!editing||posePreview||locked;}
 }
 function jointLabel(n){const k=+n.slice(-1);return n.startsWith('Thumb')?['CMC','MCP','IP'][k-1]:['MCP','PIP','DIP'][k-1];}
 for(const f of FINGERS){const label=document.createElement('div');label.className='finger';label.textContent=f;$('joints').append(label);for(let k=1;k<=3;k++){const n=f+k,b=document.createElement('button');b.id='joint-'+n;b.setAttribute('aria-label','Select '+f+' '+jointLabel(n));b.innerHTML=jointLabel(n)+'<small>0 / 0 / 0</small>';b.onclick=()=>{selected=n;renderControls();};$('joints').append(b);}}
@@ -110,7 +127,7 @@ for(let i=0;i<3;i++){const axis=['X · Bend','Y · Sideways','Z · Twist'][i],ro
 }
 $('zero').onclick=()=>{angles[selected]=[0,0,0];applyAngles();renderControls();};$('saveLimits').onclick=()=>{if(persist())notice('Your joint limits are saved and will apply in live mode.');$('limitState').textContent='Limits saved for '+(side==='R'?'right':'left')+' hand.';};$('clearLimits').onclick=()=>{profile.limits[side][selected]=[0,1,2].map(()=>({enabled:false,min:-180,max:180}));renderControls();$('limitState').textContent='Selected limits cleared. Save my limits to keep this.';};
 $('export').onclick=()=>{const json=JSON.stringify(profile,null,2);$('jsonText').value=json;$('jsonDetails').open=true;download(new Blob([json],{type:'application/json'}),'hand-poses.json');notice('Exported your poses and limits. Keep this JSON as a backup.');};
-function importText(text){if(text.length>20000000)throw Error('Profile is too large');const incoming=validateProfile(JSON.parse(text));profile=incoming;$('tolerance').value=profile.tolerance;$('toleranceValue').textContent=profile.tolerance.toFixed(2);savedId=null;persist();applyAngles();renderLibrary();renderControls();notice('Imported '+profile.poses.length+' pose examples and joint limits.');if(!editing&&sampleSource)detect(sampleSource);}
+function importText(text){if(text.length>20000000)throw Error('Profile is too large');const incoming=validateProfile(JSON.parse(text));profile=incoming;neutralSplay=profile.calibration.neutralSplay;depthScale=profile.calibration.depthScale;positionFilter.reset();$('tolerance').value=profile.tolerance;$('toleranceValue').textContent=profile.tolerance.toFixed(2);savedId=null;persist();applyAngles();renderLibrary();renderControls();notice('Imported '+profile.poses.length+' pose examples and joint limits.');if(!editing&&sampleSource)detect(sampleSource);}
 $('import').onchange=async e=>{try{if(e.target.files[0])importText(await e.target.files[0].text());}catch(err){notice('Import rejected: '+err.message);}finally{e.target.value='';}};
 $('importPaste').onclick=()=>{try{importText($('jsonText').value);}catch(e){notice('Import rejected: '+e.message);}};
 $('png').onclick=()=>{renderer.render(scene,camera);const c=document.createElement('canvas');c.width=1400;c.height=850;const ctx=c.getContext('2d');ctx.fillStyle='#10151d';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#edf6ff';ctx.font='bold 25px system-ui';ctx.fillText('Hand Pose Lab — '+($('poseName').value||'Live comparison'),28,42);ctx.font='16px system-ui';ctx.fillText(editing?'Frozen input and corrected model':'Latest tracked frame and model',28,74);const fit=(img,x,y,w,h)=>{const a=img.width/img.height;let iw=w,ih=w/a;if(ih>h){ih=h;iw=h*a;}ctx.drawImage(img,x+(w-iw)/2,y+(h-ih)/2,iw,ih);};fit($('preview'),24,100,510,710);fit($('scene'),560,100,810,710);c.toBlob(blob=>{if(blob)download(blob,'hand-pose-comparison.png');});};
@@ -119,7 +136,7 @@ await rig.ready;
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
 configureSide();renderLibrary();updateMode();resize();notice('Ready. Connect your camera, make a pose, then Freeze & edit.');
 let lastPaint=0;function loop(now){requestAnimationFrame(loop);if(stream&&!editing&&$('video').readyState>=2&&!inflight&&$('video').currentTime!==lastVideo){lastVideo=$('video').currentTime;detect($('video'));}
- if(now-lastPaint<16)return;lastPaint=now;controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked;
+ if(now-lastPaint<16)return;lastPaint=now;if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked;
  for(const n of JOINTS){const dot=jointDots[n];dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  const j=rig.joints[side+selected];gizmo.position.setFromMatrixPosition(j.matrixWorld);gizmo.quaternion.copy(j.parent.getWorldQuaternion(new THREE.Quaternion())).multiply(jointBasis(selected));renderer.render(scene,camera);
 }requestAnimationFrame(loop);addEventListener('pagehide',()=>{stopCamera();worker?.terminate();});

@@ -2,7 +2,7 @@ export const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export const JOINTS=FINGERS.flatMap(n=>[1,2,3].map(i=>n+i));
 export const blankAngles=()=>Object.fromEntries(JOINTS.map(n=>[n,[0,0,0]]));
 export const blankLimits=()=>Object.fromEntries(JOINTS.map(n=>[n,[0,1,2].map(()=>({enabled:false,min:-180,max:180}))]));
-export const emptyProfile=()=>({schema:'hand-pose-lab',version:1,rig:'ball-joint-doll-v80',axes:'anatomical-local-XYZ',tolerance:.18,limits:{R:blankLimits(),L:blankLimits()},poses:[]});
+export const emptyProfile=()=>({schema:'hand-pose-lab',version:1,rig:'ball-joint-doll-v80',axes:'anatomical-local-XYZ',tolerance:.18,calibration:{depthScale:1,neutralSplay:{R:{},L:{}}},limits:{R:blankLimits(),L:blankLimits()},poses:[]});
 const sub=(a,b)=>a.map((v,i)=>v-b[i]),dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),unit=v=>{const n=Math.hypot(...v);if(n<1e-7)throw Error('Palm landmarks are degenerate');return v.map(x=>x/n);};
 export function features(points){
  if(!Array.isArray(points)||points.length!==21||points.some(p=>!Array.isArray(p)||p.length!==3||p.some(x=>!Number.isFinite(x))))throw Error('Expected 21 finite world landmarks');
@@ -19,6 +19,7 @@ export function clampAngles(angles,limits){return Object.fromEntries(JOINTS.map(
 export function validateProfile(input){
  if(input?.schema!=='hand-pose-lab'||input.version!==1||input.rig!=='ball-joint-doll-v80'||input.axes!=='anatomical-local-XYZ')throw Error('This is not a compatible Hand Pose Lab profile');
  const out=emptyProfile();const finite=(v,min,max)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max;
+ if(input.calibration!=null){if(!finite(input.calibration.depthScale,.01,100))throw Error('Invalid depth calibration');out.calibration.depthScale=input.calibration.depthScale;for(const side of ['R','L'])for(const n of JOINTS){const v=input.calibration.neutralSplay?.[side]?.[n];if(v!=null){if(!finite(v,-180,180))throw Error('Invalid neutral alignment');out.calibration.neutralSplay[side][n]=v;}}}
  if(!finite(input.tolerance,.03,.4))throw Error('Invalid match tolerance');out.tolerance=input.tolerance;
  for(const side of ['R','L'])for(const n of JOINTS)for(let a=0;a<3;a++){
   const l=input.limits?.[side]?.[n]?.[a];if(!l||typeof l.enabled!=='boolean'||!finite(l.min,-180,180)||!finite(l.max,-180,180)||l.min>l.max)throw Error('Invalid joint limits: '+side+n);
@@ -30,7 +31,8 @@ export function validateProfile(input){
   if(!Array.isArray(p.features)||p.features.length!==63||!p.features.every(x=>finite(x,-20,20)))throw Error('Invalid pose signature');
   const angles=blankAngles();for(const n of JOINTS){if(!Array.isArray(p.angles?.[n])||p.angles[n].length!==3||!p.angles[n].every(x=>finite(x,-180,180)))throw Error('Invalid angles: '+n);angles[n]=[...p.angles[n]];}
   let capture=null;if(p.capture!=null){if(typeof p.capture!=='string'||!/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(p.capture)||p.capture.length>700000)throw Error('Invalid saved image');capture=p.capture;}
-  out.poses.push({id:p.id,name:p.name.trim(),side:p.side,features:[...p.features],angles,capture});
+  if(p.referenceCurl!=null&&(!Array.isArray(p.referenceCurl)||p.referenceCurl.length!==4||!p.referenceCurl.every(x=>finite(x,0,1))))throw Error('Invalid reference curl');
+  out.poses.push({...(p.referenceCurl?{referenceCurl:[...p.referenceCurl],referenceEnabled:p.referenceEnabled!==false}:{}),id:p.id,name:p.name.trim(),side:p.side,features:[...p.features],angles,capture});
  }
  return out;
 }
