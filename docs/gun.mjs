@@ -14,7 +14,8 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/
 const GRAB_R = 0.15;        // metres from the palm centre to the grip to pick the gun up
 const FIRE_ON = 50, FIRE_OFF = 40;   // index middle-knuckle bend (degrees) that fires / re-arms the trigger (a press, like a normal gun)
 const FIRE_GAP = 0.12;      // seconds between shots
-const GRIP = new THREE.Vector3(0, 0.045, 0.062);          // grip centre, gun space (y up, barrel -z)
+const GRIP = new THREE.Vector3(0, 0.045, 0.062);          // grip centre, gun space (y up, barrel -z): the pick-up point
+const WEB = new THREE.Vector3(0, 0.095, 0.09);            // top of the back strap under the beavertail: where the web of the hand (thumb-index) sits
 const GRIP_UP = new THREE.Vector3(0, 0.96, -0.28).normalize();   // grip axis toward the slide (raked back)
 const BARREL = new THREE.Vector3(0, 0, -1);
 const MUZZLE = new THREE.Vector3(0, 0.124, -0.16);
@@ -105,7 +106,7 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
   const bendDeg = (a, b, c) => { _a.subVectors(b, a).normalize(); _b.subVectors(c, b).normalize(); return Math.acos(Math.max(-1, Math.min(1, _a.dot(_b)))) * 180 / Math.PI; };
   const closed = h => !h.ext[1] && !h.ext[2] && !h.ext[3], open = h => h.ext[1] && h.ext[2] && h.ext[3];
   const GRIP_ANGLE = (+new URLSearchParams(location.search).get("ga") || 12) * Math.PI / 180;   // barrel = the palm axis tilted this much toward the palm normal (the finger-gun hand: palm facing sideways, arm straight; 50 deg pointed the gun 70 deg left of the hand)
-  const GRIP_OFF = 0.032;                  // grip centre this far in front of the palm plane
+  const WEB_OFF = 0.008;                   // the web skin sits this far to the palm side of the thumb-base / index-knuckle midpoint
 
   function gripFrame(h) {   // world frame of the held gun from the hand's points: barrel F, grip-up U, side R, grip centre C
     const p = h.pts; _pu.subVectors(p[9], p[0]).normalize(); _pv.subVectors(p[17], p[5]).normalize();
@@ -113,7 +114,7 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
     _U.copy(_pv).negate();                                                                    // pinky -> index: up the grip toward the slide
     _F.copy(_pu).multiplyScalar(Math.cos(GRIP_ANGLE)).addScaledVector(_n, Math.sin(GRIP_ANGLE)); _F.addScaledVector(_U, -_F.dot(_U)).normalize();
     _R.crossVectors(_F, _U).normalize(); _U.crossVectors(_R, _F).normalize();
-    _c.copy(palmCentre(p)).addScaledVector(_n, GRIP_OFF);
+    _c.copy(p[2]).add(p[5]).multiplyScalar(0.5).addScaledVector(_n, WEB_OFF);              // the web of the hand
   }
   const GB = new THREE.Matrix4().makeBasis(BARREL, GRIP_UP, new THREE.Vector3().crossVectors(BARREL, GRIP_UP).normalize()).invert();   // gun basis -> identity
   function placeInHand(h) {
@@ -122,7 +123,7 @@ export async function makeGun({ scene, worldGroup, worldObjs, floorY, url = "gun
     _q.setFromRotationMatrix(_m);
     if (st.kick > 1e-4) { _kq.setFromAxisAngle(_R, -st.kick); _q.premultiply(_kq); }         // recoil: muzzle up about the side axis
     gun.quaternion.copy(_q);
-    _g.copy(GRIP).applyQuaternion(_q); gun.position.copy(_c).sub(_g);                        // the grip centre lands in the hand
+    _g.copy(WEB).applyQuaternion(_q); gun.position.copy(_c).sub(_g);                         // the beavertail lands in the web of the hand
   }
   function reparent(obj, parent) {   // keep the world transform
     obj.updateMatrixWorld(true); _m.copy(obj.matrixWorld); parent.updateMatrixWorld(true); obj.removeFromParent(); parent.add(obj);

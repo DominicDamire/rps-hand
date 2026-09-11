@@ -32,7 +32,7 @@
   <div class="pane">
     <video id="cam" autoplay muted playsinline></video>
     <canvas id="ov"></canvas>
-    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 37)</div></div>
+    <div class="hud" id="top"><div id="hand">HANDS: -</div><div id="move">MOVE: ?</div><div id="stats">tracker: loading (build 38)</div></div>
     <div id="status">Loading hand tracker…</div>
   </div>
   <div class="pane">
@@ -49,7 +49,7 @@ import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/
 import { RoomEnvironment } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/environments/RoomEnvironment.js";
 import { makeGun } from "./gun.mjs";
 
-const BUILD = 37;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
+const BUILD = 38;   // shown in the HUD so a cached page is obvious (GitHub Pages caches for 10 min)
 const $ = id => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
 // Assumed horizontal field of view of the phone camera (?fov=70 to override). Lateral motion does not depend on
@@ -447,7 +447,7 @@ function headFromPose(pose) {   // pose: { img: [{x, y, v}...9], world } from th
   const Z = Math.min(1.5, Math.max(0.15, IPD / sep));                                                      // distance from the phone
   _hm.addVectors(_hl, _hr).multiplyScalar(0.5 * Z);
   if (tiltOn) { const c = Math.cos(pitch), sn = Math.sin(pitch), y = _hm.y, z = _hm.z; _hm.y = c * y - sn * z; _hm.z = sn * y + c * z; }
-  headPos = headPos ? headPos.lerp(_hm, 0.3) : _hm.clone(); headT = performance.now();
+  headPos = headPos ? headPos.lerp(_hm, 0.5) : _hm.clone(); headT = performance.now();
 }
 const worldGroup = new THREE.Group(); scene.add(worldGroup);   // everything that must mirror in the selfie view
 let frameW = 640, frameH = 480;   // camera frame size, set once the video is known
