@@ -219,7 +219,7 @@ export async function makeGun({ scene, worldObjs = [], floorY = -0.28, place = {
   }
 
   return {
-    obj: gun, range, get state() { return st; }, fireNow: fire, testShootAt, handPose, get marks() { return marks.children.length; }, get cans() { return cans.map(c => c.state); },
+    obj: gun, range, table: top, get state() { return st; }, fireNow: fire, testShootAt, handPose, get marks() { return marks.children.length; }, get cans() { return cans.map(c => c.state); },
     get sight() { gun.updateMatrixWorld(true); const g = SIGHT.clone().applyMatrix4(gun.matrixWorld), d = BARREL.clone().transformDirection(gun.matrixWorld); return { g: g.toArray(), d: d.toArray() }; },
     hud() { const sc = st.shots ? ` · ${st.hits}/${st.shots} hits` : ""; return st.mode === "held" ? `gun held${st.dotOn ? " · ON TARGET" : ""}${sc}` : `gun on the table${sc}`; },
     update(dt, hands, now, camera) {   // hands: [{ key, group, pts (WORLD Vector3[21]), right, ext: [index, middle, ring, pinky extended] }]

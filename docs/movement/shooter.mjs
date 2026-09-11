@@ -6,6 +6,8 @@
 import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
 import { makeGun, fingersUp } from "../gun.mjs";
+import { setupPunch } from "./punch.mjs?v=67";
+import * as sfx from "./sound.mjs?v=67";
 
 const TABLE_H = 1.32;   // table top above the floor: the tracked hand sits at chest height in front of the eye (1.65 m)
 const TABLE_AHEAD = 0.55;   // in front of the spawn. With the eye at 1.65 m the gun is then 0.65 m away, inside the reach of a
@@ -14,7 +16,7 @@ const TABLE_AHEAD = 0.55;   // in front of the spawn. With the eye at 1.65 m the
 export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
   const Q = new URLSearchParams(location.search);
   if (Q.get("gun") === "0") return null;
-  let gun = null, mirror = null, error = null;
+  let gun = null, mirror = null, error = null, bag = null, wasMode = "rest";
   if (!hud) { const d = document.createElement("div"); d.id = "gunHud"; d.style.cssText = "position:fixed;top:64px;left:50%;transform:translateX(-50%);padding:6px 12px;background:#101b25cc;border-radius:8px;font:12px monospace;color:#ffdf75;pointer-events:none;z-index:5"; document.body.appendChild(d); hud = t => { d.textContent = t; }; }
   // (the player's body used to be a capsule here; body.mjs now draws the tracked upper-body rig)
   const _inv = new THREE.Matrix4(), _fwd = new THREE.Vector3(), pts = Array.from({ length: 21 }, () => new THREE.Vector3());
@@ -25,6 +27,7 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
     const tableZ = spawn.z - TABLE_AHEAD, tableFloor = dustMap.floor(spawn.x, tableZ, floor + 1) ?? floor;
     gun = await makeGun({ scene, worldObjs: dustMap.meshes, floorY: tableFloor, url: new URL("../gun.glb", import.meta.url).href,
       place: { pos: new THREE.Vector3(spawn.x, tableFloor + TABLE_H, tableZ), yaw: 0 }, hold: Q.has("grab") });
+    bag = setupPunch({ scene, camera, handModel, floorY: tableFloor, at: new THREE.Vector3(spawn.x + 0.85, 0, spawn.z - 0.15), getGun: () => gun });   // a heavy bag beside the table, within arm's reach
     const mw = 8, mh = 4;   // a wall-sized mirror (owner: "much bigger, like 15 times" - about 15x the old 1.1 x 2.0 m area), 6.4 m to the front-left, facing the spawn: the whole body fits with room to walk
     mirror = new Reflector(new THREE.PlaneGeometry(mw, mh), { clipBias: 0.003, textureWidth: 1024, textureHeight: 512, color: 0xb8c4cc });
     const mx = spawn.x - 4.5, mz = spawn.z - 4.5, mfloor = dustMap.floor(mx, mz, floor + 1) ?? floor;   // measured (probe_map.py): flat floor there, nearest wall 19 m away, no ceiling
@@ -36,7 +39,7 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
   ready.catch(e => { error = e; console.warn("shooter unavailable:", e); });
 
   return {
-    ready, get gun() { return gun; }, get mirror() { return mirror; },
+    ready, get gun() { return gun; }, get mirror() { return mirror; }, get bag() { return bag; },
     update(dt, now) {
       if (!gun) return;
       const shown = handModel.visible;
@@ -46,6 +49,8 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
         hand.right = handModel.right; const ext = fingersUp(pts); for (let i = 0; i < 4; i++) hand.ext[i] = ext[i];
       }
       gun.update(dt, shown ? [hand] : [], now, camera);
+      if (gun.state.mode !== wasMode) { if (gun.state.mode === "held") sfx.grab(); else if (wasMode === "held") sfx.tap(0.6); wasMode = gun.state.mode; }
+      bag?.update(dt, now);
       const held = gun.state.mode === "held" && gun.state.holder === "R";
       handModel.override = held ? () => { _inv.copy(handModel.group.matrixWorld).invert(); return gun.handPose(hand, _inv); } : null;   // the gripping pose, in the hand group's frame
       if (hud) hud(gun.hud());
