@@ -1,9 +1,8 @@
 const RAD=Math.PI/180;
 export class HeadLook {
- constructor(){this.heading=0;this.gain=1.5;this.lookGain=2.5;this.deadzoneDegrees=14;this.smooth=.025;this.mode='hybrid';this.resetLook();}
- // The class keeps its original response, which its own tests pin. The page asks for a calmer one at startup
- // (app.mjs: lookGain from the slider, smooth 0.12), because 2.5x through a 25 ms filter swung the view too far and
- // jittered with the tracker - the owner's "the head movement is too much".
+ constructor(){this.heading=0;this.gain=1.5;this.lookGain=1.6;this.deadzoneDegrees=14;this.smooth=.12;this.mode='hybrid';this.resetLook();}
+ // lookGain 2.5 and a 25 ms filter made the view swing far and jitter with the tracker (owner: "the head movement is too
+ // much"). 1.6x with a 120 ms filter follows the head without the noise; both are sliders on the page.
  resetLook(){this.speed=0;this.look=0;this.pitch=0;this.pending=0;this.direction=0;this.turning=false;this.previous=null;this.samples=[];this.armed=true;this.neutralTime=0;this.progress=0;this.state='LOOK ONLY';}
  update(yaw,dt,valid=true,sampleTime=null){
   dt=Math.max(0,Math.min(.1,Number.isFinite(dt)?dt:0));this.speed=0;

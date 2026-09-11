@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=80";
-import { BodyView } from "../body/BodyView.js?v=80";
-import { BodyPose } from "../body/pose.mjs?v=80";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=76";
+import { BodyView } from "../body/BodyView.js?v=76";
+import { BodyPose } from "../body/pose.mjs?v=76";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
@@ -53,142 +53,47 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
   const startFar = link => { far = new BodyPose(modeEl.value); wired = link; link.onBody = s => far.receive(s, performance.now());
     modeEl.addEventListener("change", () => far.recenter(modeEl.value)); calEl.addEventListener("click", () => far.recenter(modeEl.value)); };
 
-  // --- legs ------------------------------------------------------------------------------------------------------
-  // A real gait, not a sine on the hip angles. One foot is always planted on a fixed point of the floor; the other
-  // swings along an arc to the next contact, and both legs are solved to their foot with the same two-bone IK the arms
-  // use. That is the only way the feet stop treading air: the previous version rotated the thigh and knee on a sine
-  // and never referenced the floor at all, so for most of the cycle neither foot was near it.
-  // Standing still, both feet ease back under the hips and stay there (owner: "the feet can just stay on the ground
-  // as long as the joystick has not been moved").
-  const _v = new THREE.Vector3(), _t = new THREE.Vector3(), _hint = new THREE.Vector3(), _w = new THREE.Vector3(), _e = new THREE.Vector3();
-  const STEP_LEN = 0.42;      // metres of travel between footfalls
-  const STEP_TIME = 0.26;     // seconds a swing takes
-  const LIFT = 0.08;          // how high the swinging foot clears the floor
-  const SPREAD = 0.085;       // half the distance between the feet
-  const EYE_H = 1.65;         // the map holds the camera this far above the floor
-  const contact = [new THREE.Vector3(), new THREE.Vector3()];   // world, where each foot is standing
-  const swingFrom = new THREE.Vector3(), swingTo = new THREE.Vector3(), _foot = new THREE.Vector3();
-  let placed = false, swing = -1, swingT = 0, travelled = 0, gait = 0, lastPos = null, ankleH = 0.23, crouch = 0;
-  // Measured: at rest this doll's thigh-to-ankle gap is 0.819 m and its leg is 0.817 m - the knees are locked straight
-  // with no slack at all, so a stride of any length puts the foot out of reach and it floats. A person solves this by
-  // dropping their hips as they walk; so does this. The eyes are pinned a few centimetres lower while walking, which
-  // bends the knees and lets the planted foot stay on the floor. Invisible from the player's own eyes.
-  const CROUCH = 0.14;   // the most the hips may drop; the walk only uses what the planted foot actually needs
+  // --- legs ----------------------------------------------------------------------------------------------------
+  // Standing still, the doll's own rest pose already has both feet flat on the floor, so the legs are simply left
+  // alone: nothing to drift, nothing to solve (owner: "the body and feet can just stay on the ground as long as the
+  // joystick has not been moved"). Walking advances a stride whose phase is driven by the distance actually covered,
+  // so the legs keep pace with the map rather than with a timer, and it eases back to standing when you stop.
+  const _v = new THREE.Vector3(), _t = new THREE.Vector3(), _h = new THREE.Vector3(), _w = new THREE.Vector3(), _e = new THREE.Vector3();
+  const STRIDE = 0.75;        // metres of travel per full two-step cycle
+  const THIGH_SWING = 0.42;   // radians
+  const KNEE_BEND = 0.55;
+  let phase = 0, gait = 0, lastPos = null;
 
-  const restFoot = (out, i, pos, yaw) => {
-    const c = Math.cos(yaw), sn = Math.sin(yaw), side = i ? SPREAD : -SPREAD;
-    return out.set(pos.x + c * side, pos.y - EYE_H, pos.z - sn * side);
-  };
-
-  function legs(dt, pos, yaw) {
-    const floor = pos.y - EYE_H;
-    if (!placed) { for (const i of [0, 1]) restFoot(contact[i], i, pos, yaw); placed = true; lastPos = pos.clone(); ankleH = rig.rest.RFoot.world.y; }
+  function legs(dt, pos) {
+    if (!lastPos) { lastPos = pos.clone(); return; }
     const moved = Math.hypot(pos.x - lastPos.x, pos.z - lastPos.z);
     lastPos.copy(pos);
-    gait += (Math.min(1, (moved / Math.max(1e-3, dt)) / 1.2) - gait) * Math.min(1, dt * 6);
-    // Crouch exactly as much as the planted foot needs, rather than a fixed amount scaled by speed. The leg is dead
-    // straight at rest, so the moment a contact is further from the thigh than the leg is long the IK clamps and the
-    // foot lifts off the floor. Measuring the shortfall and dropping the hips by it keeps the stance foot down.
-    let need = 0;
-    for (const i of [0, 1]) {
-      if (i === swing) continue;
-      const S = i ? "R" : "L";
-      _t.setFromMatrixPosition(rig.joints[`${S}Thigh`].matrixWorld);
-      const flat = Math.hypot(contact[i].x - _t.x, contact[i].z - _t.z);
-      const legLen = rig.rest[`${S}Shin`].world.distanceTo(rig.rest[`${S}Thigh`].world)
-                   + rig.rest[`${S}Foot`].world.distanceTo(rig.rest[`${S}Shin`].world);
-      const drop = (_t.y + crouch) - (pos.y - EYE_H + ankleH);           // vertical gap without the crouch
-      const reach = Math.sqrt(Math.max(0, (legLen * 0.985) ** 2 - flat * flat));
-      need = Math.max(need, drop - reach);
+    const speed = moved / Math.max(1e-3, dt);
+    gait += (Math.min(1, speed / 1.2) - gait) * Math.min(1, dt * 6);   // how much of the walk to show
+    phase += (moved / STRIDE) * Math.PI * 2;
+    if (gait < 0.02) { gait = 0; return; }                             // standing: leave the rest pose exactly alone
+    for (const [S, sign] of [["L", 1], ["R", -1]]) {
+      const a = phase * sign;
+      const thigh = Math.sin(a) * THIGH_SWING * gait;
+      const knee = Math.max(0, -Math.sin(a - 0.6)) * KNEE_BEND * gait;
+      const T = rig.joints[`${S}Thigh`], K = rig.joints[`${S}Shin`], F = rig.joints[`${S}Foot`];
+      if (!T) continue;
+      // A positive rotation here swings the shin FORWARD, which is a knee bending backwards. It is negative, and
+      // clamped so it can never cross zero however the phase is tuned later.
+      T.rotation.x = -thigh;
+      K.rotation.x = -Math.min(KNEE_BEND, Math.max(0, knee));
+      if (F) F.rotation.x = knee * 0.45;
     }
-    const want = Math.max(0, Math.min(CROUCH, need));
-    // drop at once when the foot needs it - easing into it left the stance foot briefly in the air right after a
-    // handover - and come back up gently, which is what reads as a walk rather than a bounce
-    crouch = want > crouch ? want : crouch + (want - crouch) * Math.min(1, dt * 6);
-
-    if (gait < 0.03 && swing < 0) {                       // standing: settle both feet under the hips
-      for (const i of [0, 1]) contact[i].lerp(restFoot(_t, i, pos, yaw), Math.min(1, dt * 5));
-      travelled = 0;
-    } else {
-      travelled += moved;
-      // Step when the travel says so OR when the planted foot is about to go out of the leg's reach - without the
-      // second test the player walks away from their own foot, the IK clamps, and the foot floats above the floor.
-      const legLen = rig.rest.RShin.world.distanceTo(rig.rest.RThigh.world) + rig.rest.RFoot.world.distanceTo(rig.rest.RShin.world);
-      const hipY = pos.y - EYE_H + rig.rest.Hips.world.y;
-      const thighY = pos.y - EYE_H + rig.rest.RThigh.world.y - crouch;
-      const stretched = i => Math.hypot(contact[i].x - pos.x, contact[i].z - pos.z, thighY - (pos.y - EYE_H + ankleH)) > legLen * 0.95;
-      if (swing < 0 && (travelled >= STEP_LEN * (0.45 + 0.35 * gait) || stretched(0) || stretched(1))) {
-        swing = contact[0].distanceTo(pos) > contact[1].distanceTo(pos) ? 0 : 1;   // the foot furthest behind swings
-        swingFrom.copy(contact[swing]);
-        // land it ahead of the player, along the way they are actually travelling
-        restFoot(swingTo, swing, pos, yaw);
-        const dx = pos.x - swingFrom.x, dz = pos.z - swingFrom.z, len = Math.hypot(dx, dz) || 1;
-        swingTo.x += dx / len * STEP_LEN * 0.5; swingTo.z += dz / len * STEP_LEN * 0.5;   // land ahead, so the stance phase is centred under the hips
-        swingT = 0; travelled = 0;
-      }
-      if (swing >= 0) {
-        swingT += dt / STEP_TIME;
-        const t = Math.min(1, swingT);
-        contact[swing].lerpVectors(swingFrom, swingTo, t * t * (3 - 2 * t));
-        if (t >= 1) swing = -1;
-      }
-    }
-
-    // The hip drop is applied to the two thigh joints, not to the root. Dropping the root moved the shoulders away
-    // from the hands the arms were reaching for - the tracked wrist ended up 10 cm out - and the eyes off the camera.
-    // Lowering only where the legs hang from gives them their slack and leaves the spine, the arms and the head alone.
-    for (const S of ["L", "R"]) {
-      const t = rig.joints[`${S}Thigh`];
-      t.position.y = rig.rest[`${S}Thigh`].world.y - rig.rest.Hips.world.y - crouch;
-    }
-    rig.refresh(rig.joints.Hips);
-    for (const [S, i] of [["L", 0], ["R", 1]]) {
-      _foot.copy(contact[i]); _foot.y = floor + ankleH;
-      if (swing === i && swingT < 1) _foot.y += Math.sin(Math.min(1, swingT) * Math.PI) * LIFT;
-      // the knee leads forward, and never the other way: that is what stops the leg inverting
-      _hint.copy(rig.joints[`${S}Thigh`].getWorldPosition(_t));
-      _hint.x -= Math.sin(yaw) * 0.6; _hint.z -= Math.cos(yaw) * 0.6; _hint.y -= 0.25;
-      for (const n of ["Hips", `${S}Thigh`]) rig.refresh(rig.joints[n]);
-      rig.reach(`${S}Thigh`, `${S}Shin`, `${S}Foot`, _foot, _hint);
-    }
-  }
-
-  const bodyCrouch = () => crouch;
-  const _crouched = new THREE.Vector3();
-
-  /** everything the walk test needs to see: heights, which foot swings, and how far each contact is from the hip */
-  function walkDebug(pos) {
-    const floor = pos.y - EYE_H;
-    const hip = rig.joints.Hips.getWorldPosition(new THREE.Vector3());
-    return {
-      h: ["L", "R"].map(S => +(rig.joints[`${S}Foot`].getWorldPosition(_t).y - floor - ankleH).toFixed(3)),
-      target: [0, 1].map(i => +(contact[i].y - floor).toFixed(3)),
-      fromThigh: [0, 1].map(i => +rig.joints[i ? "RThigh" : "LThigh"].getWorldPosition(_v).distanceTo(contact[i]).toFixed(3)),
-      crouch: +crouch.toFixed(3),
-      legLen: +(rig.joints.RShin.getWorldPosition(_t).distanceTo(rig.joints.RThigh.getWorldPosition(_v))
-              + rig.joints.RFoot.getWorldPosition(_t).distanceTo(rig.joints.RShin.getWorldPosition(_v))).toFixed(3),
-      swing, gait: +gait.toFixed(2), ankleH: +ankleH.toFixed(3),
-    };
-  }
-
-  /** how far each ankle is from the floor it should be standing on - used by the walk test */
-  function footHeights(pos) {
-    const floor = pos.y - EYE_H;
-    return ["L", "R"].map(S => +(rig.joints[`${S}Foot`].getWorldPosition(_t).y - floor - ankleH).toFixed(4));
   }
 
   let told = null, shownMode = null, neutral = null;
   const lean = new THREE.Vector3();
   return {
-    rig, get error() { return error; }, footHeights: () => footHeights(camera.position), walkDebug: () => walkDebug(camera.position), get gait() { return gait; },
+    rig, get error() { return error; },
     recenter() {
       (far || local?.pose)?.recenter(modeEl.value);
       phase = 0; gait = 0; lastPos = null; neutral = null; lean.set(0, 0, 0);
-      handScaled.clear(); restPalm.clear(); restDirs.clear(); knuckled.clear();   // one bad first frame is no longer permanent
-      for (const S of ["L", "R"]) for (const [n] of FINGERS) {
-        const j = rig.joints?.[`${S}${n}1`];
-        if (j) { j.position.copy(rig.rest[`${S}${n}1`].world).sub(rig.rest[`${S}Hand`].world); j.scale.setScalar(1); }
-      }
+      handScaled.clear(); restPalm.clear(); restDirs.clear();   // one bad first frame is no longer permanent
       for (const S of ["L", "R"]) rig.joints?.[`${S}Hand`]?.scale.setScalar(1);
     },
     wants() { return tracked(); }, get told() { return told; }, set told(v) { told = v; },
@@ -235,37 +140,19 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
         : raw ? `Body · ${mode}` : "Body tracker: hold a relaxed pose";
 
       // --- arms -------------------------------------------------------------------------------------------------
-      // The eyes are pinned BEFORE the arms and legs are solved. Pinning afterwards moved the root out from under
-      // limbs that had already been solved to world targets: it dragged the planted foot 2 cm into the floor, and once
-      // head roll started moving the head it put the hand 14 cm off the tracked wrist.
-      rig.pinEyes(camera.position);
-      // The shoulder: a clavicle that never moved left the cap behind while the arm swung away, opening the socket.
-      // It lifts with the arm, and the elbow hint is forced behind and below the shoulder so the elbow can never lead
-      // forwards and turn the joint inside out.
-      const armTo = (S, wrist) => {
-        for (const n of ["Hips", "Waist", "Chest"]) rig.refresh(rig.joints[n]);
-        const clav = rig.joints[`${S}Clavicle`], sh = rig.joints[`${S}UpperArm`];
-        // The clavicle is deliberately left alone. Lifting it with the arm was meant to close the shoulder socket, but
-        // measured both ways it moves the shoulder further from the hand - the shoulder-to-wrist distance went from
-        // 0.52 m to 0.58 m against an arm that reaches 0.517 - and the hand ended up 8-10 cm off the tracked wrist.
-        // Accuracy at the hand matters more than a seam at the shoulder, and a cosmetic gap is the model's to fix.
-        if (clav && sh) { rig.refresh(clav); rig.refresh(sh); _t.setFromMatrixPosition(sh.matrixWorld); }
-        // elbow hint: out to the side, down, and behind the shoulder in body space
-        _hint.set(S === "R" ? 0.32 : -0.32, -0.34, 0.2).applyAxisAngle(UP, heading).add(_t);
-        rig.reach(`${S}UpperArm`, `${S}Forearm`, `${S}Hand`, wrist, _hint);
-        rig.refresh(rig.joints[`${S}Hand`]);
-      };
-
       // the right wrist comes from our own hand model when it is visible: it is the most accurate thing we have
       if (handModel?.visible) {
         handModel.group.updateMatrixWorld(true);
         const src = handModel.override ? handModel.override() : handModel.points;
         _w.copy(src[0]).applyMatrix4(handModel.group.matrixWorld);
         const S = handModel.right ? "R" : "L";
-        armTo(S, _w);
+        _e.copy(_w).add(_v.set(handModel.right ? 0.22 : -0.22, -0.2, 0.12).applyAxisAngle(UP, heading));
+        // the arm sits under the chest, which the lean just moved: bring the chain up to date first
+        for (const n of ["Hips", "Waist", "Chest", `${S}Clavicle`]) rig.refresh(rig.joints[n]);
+        rig.reach(`${S}UpperArm`, `${S}Forearm`, `${S}Hand`, _w, _e);
+        rig.refresh(rig.joints[`${S}Hand`]);
         fitHand(rig, S, src, handModel.group.matrixWorld);
         setPalm(rig, S, src, handModel.group.matrixWorld);
-        fitKnuckles(rig, S, src, handModel.group.matrixWorld);
         setFingers(rig, S, src, handModel.group.matrixWorld);
       }
       // the steering hand: same treatment, it is a tracked hand like the other (owner: "make the left hand appear too")
@@ -274,10 +161,12 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
         const srcL = handModelL.points, SL = handModelL.right ? "R" : "L";
         if (!(handModel?.visible && (handModel.right ? "R" : "L") === SL)) {   // never two hands on one arm
           _w.copy(srcL[0]).applyMatrix4(handModelL.group.matrixWorld);
-          armTo(SL, _w);
+          _e.copy(_w).add(_v.set(SL === "R" ? 0.22 : -0.22, -0.2, 0.12).applyAxisAngle(UP, heading));
+          for (const n of ["Hips", "Waist", "Chest", `${SL}Clavicle`]) rig.refresh(rig.joints[n]);
+          rig.reach(`${SL}UpperArm`, `${SL}Forearm`, `${SL}Hand`, _w, _e);
+          rig.refresh(rig.joints[`${SL}Hand`]);
           fitHand(rig, SL, srcL, handModelL.group.matrixWorld);
           setPalm(rig, SL, srcL, handModelL.group.matrixWorld);
-          fitKnuckles(rig, SL, srcL, handModelL.group.matrixWorld);
           setFingers(rig, SL, srcL, handModelL.group.matrixWorld);
         }
       }
@@ -286,22 +175,14 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
         const wj = raw[S === "L" ? "leftWrist" : "rightWrist"], ej = raw[S === "L" ? "leftElbow" : "rightElbow"];
         if (!wj || !ej) continue;
         _w.fromArray(wj).applyAxisAngle(UP, heading).add(camera.position);
-        armTo(S, _w);
+        _e.fromArray(ej).applyAxisAngle(UP, heading).add(camera.position);
+        for (const n of ["Hips", "Waist", "Chest", `${S}Clavicle`]) rig.refresh(rig.joints[n]);
+        rig.reach(`${S}UpperArm`, `${S}Forearm`, `${S}Hand`, _w, _e);
       }
 
       // --- legs -------------------------------------------------------------------------------------------------
-      if (mode !== "head") {
-        legs(dt, camera.position, heading);
-        // an arm that nothing is tracking swings with the opposite leg, which is what a person does
-        for (const S of ["L", "R"]) {
-          const driven = (handModel?.visible && (handModel.right ? "R" : "L") === S) || (handModelL?.visible && (handModelL.right ? "R" : "L") === S);
-          if (driven || gait < 0.03) continue;
-          const a = rig.joints[`${S}UpperArm`], f = rig.joints[`${S}Forearm`];
-          const sw = Math.sin(travelled / STEP_LEN * Math.PI + (S === "L" ? Math.PI : 0)) * 0.22 * gait;
-          if (a) { a.rotation.x = sw; rig.refresh(a); }
-          if (f) { f.rotation.x = -0.12 - Math.abs(sw) * 0.5; rig.refresh(f); }
-        }
-      }
+      if (mode !== "head") legs(dt, camera.position);
+      rig.pinEyes(camera.position);   // after the lean, the head and the arms have moved things
       rig.root.updateMatrixWorld(true);   // the one full tree update this frame
       if (shownMode !== mode) {   // "head only" hides the body; the head itself is always on its own layer, so a
         shownMode = mode;         // first-person camera never sees it from the inside while the mirror still does
@@ -351,41 +232,8 @@ function fitHand(rig, S, pts, mat) {
   if (!(real > 0.05 && real < 0.35) || !(mine > 0.02)) return;
   const k = Math.max(0.8, Math.min(1.8, real / mine));
   rig.joints[`${S}Hand`].scale.setScalar(k);
-  // Then each finger to its own: the doll's are not in a person's proportions - its little finger is much shorter than
-  // yours - so one scale for the whole hand still left the outer fingers several centimetres from the tracked ones.
-  const scaled = [];
-  for (const [name, a2, b2, c2, d2] of FINGERS) {
-    const j1 = rig.joints[`${S}${name}1`], j3 = rig.joints[`${S}${name}3`];
-    if (!j1 || !j3) continue;
-    // joint 1 to joint 3 on the doll against knuckle to last-joint on the hand: the same span on both, no fudge
-    const yours = _p1.copy(pts[a2]).applyMatrix4(mat).distanceTo(_p2.copy(pts[c2]).applyMatrix4(mat));
-    const p1 = j1.getWorldPosition(new THREE.Vector3()), p3 = j3.getWorldPosition(new THREE.Vector3());
-    const ours = p1.distanceTo(p3) / Math.max(0.2, j1.scale.x);
-    if (!(yours > 0.01 && ours > 0.005)) continue;
-    const f = Math.max(0.6, Math.min(2.2, yours / ours));
-    j1.scale.setScalar(f); scaled.push(`${name} x${f.toFixed(2)}`);
-  }
   handScaled.add(S);
-  console.info(`doll: ${S} hand x${k.toFixed(2)} (yours ${real.toFixed(3)} m, the doll's ${mine.toFixed(3)} m); fingers ${scaled.join(", ")}`);
-}
-
-// Where the knuckles sit across the palm is the doll's own geometry, and it is not yours: after scaling the hand and
-// every finger, the knuckle joints themselves were still 4 cm from the tracked ones, and everything below them
-// inherits that. Each knuckle is moved onto the tracked one, once, in the hand's own space. Calibrate undoes it.
-const knuckled = new Set();
-function fitKnuckles(rig, S, pts, mat) {
-  if (knuckled.has(S)) return;
-  const hand = rig.joints[`${S}Hand`]; if (!hand) return;
-  rig.refresh(hand);
-  _mB.copy(hand.matrixWorld).invert();
-  let moved = 0;
-  for (const [name, a] of FINGERS) {
-    const j = rig.joints[`${S}${name}1`]; if (!j) continue;
-    _p1.copy(pts[a]).applyMatrix4(mat).applyMatrix4(_mB);
-    if (!Number.isFinite(_p1.x) || _p1.length() > 0.5) continue;   // a nonsense frame must not stick
-    j.position.copy(_p1); rig.refresh(j); moved++;
-  }
-  if (moved === 5) knuckled.add(S);
+  console.info(`doll: ${S} hand scaled x${k.toFixed(2)} (yours ${real.toFixed(3)} m, the doll's ${mine.toFixed(3)} m)`);
 }
 
 function setPalm(rig, S, pts, mat) {

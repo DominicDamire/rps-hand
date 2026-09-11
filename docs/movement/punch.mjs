@@ -6,7 +6,7 @@
 // through them, so a surface finally stops the hand. Footsteps play while you walk.
 // Only the tracked right hand exists in 3D (the left one is the joystick), so that is the hand that can punch.
 import * as THREE from "three";
-import * as sfx from "./sound.mjs?v=80";
+import * as sfx from "./sound.mjs?v=76";
 import { fingersUp } from "../gun.mjs";
 
 const BAG_R = 0.17, BAG_TOP = 1.75, BAG_BOTTOM = 0.75, BASE_R = 0.33;   // metres above the floor: the top reaches head height, so a punch thrown level lands on it

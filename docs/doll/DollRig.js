@@ -148,10 +148,7 @@ export class DollRig {
     if (!this.eyeInHead) return;
     // the spine chain is what moved: Root -> Hips -> Waist -> Chest -> Neck -> Head
     for (const n of ["Hips", "Waist", "Chest", "Neck", "Head"]) this.refresh(this.joints[n]);
-    // Use the head's POSITION but the body's orientation, not the head's. Rotating a head does not move a person's
-    // body, yet pinning the rotated eye to a fixed camera translated the whole doll: a 0.35 rad head roll pushed the
-    // shoulder 7 cm away from the hand it was reaching for, and the wrist ended up 10 cm off the tracked one.
-    _eye.copy(this.eyeInHead).applyQuaternion(this.root.quaternion).add(_lp.setFromMatrixPosition(this.joints.Head.matrixWorld));
+    _eye.copy(this.eyeInHead).applyMatrix4(this.joints.Head.matrixWorld);
     this.root.position.add(_a.copy(pos).sub(_eye));
     this.root.updateMatrix(); this.root.matrixWorld.multiplyMatrices(this.root.parent.matrixWorld, this.root.matrix);
   }

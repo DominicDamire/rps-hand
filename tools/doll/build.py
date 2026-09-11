@@ -132,9 +132,6 @@ def smallest(fam, side=""):
 def highest(fam, side=""):
     return max(group(fam, side), key=lambda i: i["c"].z)["c"]
 
-def highest_island(fam, side=""):
-    return max(group(fam, side), key=lambda i: i["c"].z)
-
 def side_island(fam, side):
     """the island of an unsided family that sits on one side (the chest's shoulder sockets)"""
     g = [i for i in group(fam) if (i["c"].x > 0.01 if side == "R" else i["c"].x < -0.01)]
@@ -142,22 +139,6 @@ def side_island(fam, side):
     return max(g, key=lambda i: i["tris"])["c"]
 
 def mid(a, b): return (a + b) / 2
-
-def corners(i):
-    lo, hi = i["lo"], i["hi"]
-    return [Vector((x, y, z)) for x in (lo.x, hi.x) for y in (lo.y, hi.y) for z in (lo.z, hi.z)]
-
-def joint_between(famA, famB, side=""):
-    """The pivot between two parts of one chain: where their shells actually meet along the chain's own axis.
-    The midpoint of their centroids is not it - on a finger that is a centimetre out, which is most of a phalanx, and
-    the segments visibly fly apart as they curl."""
-    a, b = centroid(famA, side), centroid(famB, side)
-    axis = (b - a)
-    if axis.length < 1e-6: return mid(a, b)
-    axis.normalize()
-    endA = max((c - a).dot(axis) for i in group(famA, side) for c in corners(i))
-    startB = min((c - a).dot(axis) for i in group(famB, side) for c in corners(i))
-    return a + axis * ((endA + startB) / 2)
 
 # ---------------------------------------------------------------- the skeleton: every pivot measured from the parts
 def build_bones():
@@ -167,13 +148,8 @@ def build_bones():
     add("Hips", "Root", centroid("hip"))
     add("Waist", "Hips", mid(centroid("hip"), centroid("waist")))
     add("Chest", "Waist", mid(centroid("waist"), centroid("chest")))
-    # The neck is a post with a ball on top, sunk into the skull: the head turns on the BALL, not on the post's middle.
-    # Using the centroid put the pivot 6 cm below the socket and drove the post up through the underside of the skull.
-    neck = highest_island("chest")
-    span = neck["hi"].z - neck["lo"].z
-    ball = min(neck["hi"].x - neck["lo"].x, neck["hi"].y - neck["lo"].y) / 2
-    add("Neck", "Chest", Vector((neck["c"].x, neck["c"].y, neck["lo"].z + span * 0.2)))   # where it leaves the chest
-    add("Head", "Neck", Vector((neck["c"].x, neck["c"].y, neck["hi"].z - ball)))          # the ball inside the skull
+    add("Neck", "Chest", highest("chest"))
+    add("Head", "Neck", mid(highest("chest"), centroid("head")))
     for S in ("L", "R"):
         add(f"{S}Clavicle", "Chest", side_island("chest", S))
         add(f"{S}UpperArm", f"{S}Clavicle", centroid("shoulder", S))   # the shoulder cap IS the ball the arm turns on
@@ -184,10 +160,9 @@ def build_bones():
                                          ("Middle", "middleRoot", "middleMid", "middleTip", "middleKnot"),
                                          ("Ring", "ringRoot", "ringMid", "ringTip", "ringKnot"),
                                          ("Pinky", "pinkyRoot", "pinkyMid", "pinkyTip", "pinkyKnot")):
-            add(f"{S}{f}1", f"{S}Hand", centroid(knot, S))          # the knuckle ball the doll actually has
-            add(f"{S}{f}2", f"{S}{f}1", joint_between(root, midp, S))
-            add(f"{S}{f}3", f"{S}{f}2", joint_between(midp, tip, S))
-        # the hip shell is not sided, so the thigh pivot stays the midpoint of the two centroids
+            add(f"{S}{f}1", f"{S}Hand", centroid(knot, S))
+            add(f"{S}{f}2", f"{S}{f}1", mid(centroid(root, S), centroid(midp, S)))
+            add(f"{S}{f}3", f"{S}{f}2", mid(centroid(midp, S), centroid(tip, S)))
         add(f"{S}Thigh", "Hips", mid(centroid("hip"), biggest("tight", S)))
         add(f"{S}Shin", f"{S}Thigh", centroid("knee", S))
         add(f"{S}Foot", f"{S}Shin", smallest("foot", S))
