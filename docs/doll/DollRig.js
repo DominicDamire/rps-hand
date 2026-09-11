@@ -14,6 +14,8 @@ export const HEAD_LAYER = 1;   // the head parts live here so a first-person cam
 
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4();
+const _lp = new THREE.Vector3(), _lp2 = new THREE.Vector3(), _qy = new THREE.Quaternion(), _eye = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
 const ID = new THREE.Quaternion();
 
 export class DollRig {
@@ -55,6 +57,7 @@ export class DollRig {
     }
     for (const [name, o] of Object.entries(this.joints)) this.rest[name].localQ = o.quaternion.clone();
     this.eye = new THREE.Vector3().fromArray(rep.eye);
+    this.eyeInHead = this.joints.Head.worldToLocal(this.eye.clone());   // so the eyes can be pinned after posing
     this.loaded = true;
     return this;
   }
@@ -85,8 +88,11 @@ export class DollRig {
     if (!U || !L || !T) return;
     this.root.updateMatrixWorld(true);
     const s = U.getWorldPosition(new THREE.Vector3());
-    const l1 = this.rest[lower].world.distanceTo(this.rest[upper].world);
-    const l2 = this.rest[tip].world.distanceTo(this.rest[lower].world);
+    // Measured live, not from the rest positions in the report: a scale on any of these nodes (the arms carry one, to
+    // make up the doll's short reach) changes the real segment lengths, and solving with the unscaled ones made the
+    // hand overshoot by up to 4.7 cm, by a different amount at every distance.
+    const l1 = L.getWorldPosition(_lp).distanceTo(s);
+    const l2 = T.getWorldPosition(_lp2).distanceTo(L.getWorldPosition(_lp));
     _v.copy(target).sub(s);
     const d = Math.min(l1 + l2 - 1e-4, Math.max(Math.abs(l1 - l2) + 1e-4, _v.length()));
     if (d < 1e-5) return;
@@ -122,12 +128,24 @@ export class DollRig {
     this.root.updateMatrixWorld(true);
   }
 
-  /** head and neck from the tracked physical angles (radians) */
-  setHead({ pitch = 0, yaw = 0, roll = 0 } = {}) {
-    _q.setFromEuler(new THREE.Euler(pitch * 0.45, yaw * 0.45, roll * 0.45, "YXZ"));
+  /** head and neck from the tracked physical angles (radians), on top of the body's heading */
+  setHead({ pitch = 0, yaw = 0, roll = 0, facing = 0 } = {}) {
+    // setWorldQuat sets a WORLD rotation, so without the heading in it the head kept pointing at a fixed compass
+    // direction and unscrewed from the neck as soon as the body turned.
+    _qy.setFromAxisAngle(UP, facing);
+    _q.setFromEuler(new THREE.Euler(pitch * 0.45, yaw * 0.45, roll * 0.45, "YXZ")).premultiply(_qy);
     this.setWorldQuat("Neck", _q);
-    _q2.setFromEuler(new THREE.Euler(pitch, yaw, roll, "YXZ"));
+    _q2.setFromEuler(new THREE.Euler(pitch, yaw, roll, "YXZ")).premultiply(_qy);
     this.setWorldQuat("Head", _q2);
+  }
+
+  /** nudge the root so the eyes sit exactly on `pos` after everything else has been posed */
+  pinEyes(pos) {
+    if (!this.eyeInHead) return;
+    this.root.updateMatrixWorld(true);
+    _eye.copy(this.eyeInHead); this.joints.Head.localToWorld(_eye);
+    this.root.position.add(_a.copy(pos).sub(_eye));
+    this.root.updateMatrixWorld(true);
   }
 
   dispose() { this.root.parent?.remove(this.root); }

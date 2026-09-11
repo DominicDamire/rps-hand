@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=73";
-import { BodyView } from "../body/BodyView.js?v=73";
-import { BodyPose } from "../body/pose.mjs?v=73";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=74";
+import { BodyView } from "../body/BodyView.js?v=74";
+import { BodyPose } from "../body/pose.mjs?v=74";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
@@ -78,7 +78,11 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
       const knee = Math.max(0, -Math.sin(a - 0.6)) * KNEE_BEND * gait;
       const T = rig.joints[`${S}Thigh`], K = rig.joints[`${S}Shin`], F = rig.joints[`${S}Foot`];
       if (!T) continue;
-      T.rotation.x = -thigh; K.rotation.x = knee; if (F) F.rotation.x = -knee * 0.45;
+      // A positive rotation here swings the shin FORWARD, which is a knee bending backwards. It is negative, and
+      // clamped so it can never cross zero however the phase is tuned later.
+      T.rotation.x = -thigh;
+      K.rotation.x = -Math.min(KNEE_BEND, Math.max(0, knee));
+      if (F) F.rotation.x = knee * 0.45;
     }
   }
 
@@ -86,7 +90,12 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
   const lean = new THREE.Vector3();
   return {
     rig, get error() { return error; },
-    recenter() { (far || local?.pose)?.recenter(modeEl.value); phase = 0; gait = 0; lastPos = null; },
+    recenter() {
+      (far || local?.pose)?.recenter(modeEl.value);
+      phase = 0; gait = 0; lastPos = null; neutral = null; lean.set(0, 0, 0);
+      handScaled.clear(); restPalm.clear(); restDirs.clear();   // one bad first frame is no longer permanent
+      for (const S of ["L", "R"]) rig.joints?.[`${S}Hand`]?.scale.setScalar(1);
+    },
     wants() { return tracked(); }, get told() { return told; }, set told(v) { told = v; },
 
     update(dt, now, { head, heading = 0 } = {}) {
@@ -94,24 +103,27 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
       if (!rig.loaded) return;
       const mode = modeEl.value;
       rig.root.visible = mode !== "off";
+      // the doll's hand replaces the old mesh only while the doll is actually drawing one
+      if (handModel) handModel.drawMesh = (mode === "off" || mode === "head");
       if (mode === "off") return;
       const link = getRemote();
       if (tracked()) { if (link && wired !== link) startFar(link); else if (!link && !local && !far && !error) startLocal(); }
 
-      if (handModel && handModel.drawMesh !== false) handModel.drawMesh = false;   // the doll's own hand replaces it
-      rig.reset();
+      // Every channel below is set absolutely, so there is nothing to clear: dropping the per-frame reset means a
+      // tracker that misses a frame leaves the limb where it was instead of the whole body snapping to rest.
       rig.placeEyes(camera.position, heading);
 
       // --- head and the lean under it ---------------------------------------------------------------------------
       const p = head?.pose;
-      if (p) rig.setHead({ pitch: p.physicalPitch || 0, yaw: p.physicalYaw || 0, roll: p.physicalRoll || 0 });
+      if (p) rig.setHead({ pitch: p.physicalPitch || 0, yaw: p.physicalYaw || 0, roll: p.physicalRoll || 0, facing: heading });
       // The doll's eyes are pinned to the camera, so the way to show the head moving through space is to lean the body
       // under it (owner: "the head can move in 3D plane space"). The face tracker gives where the head is in the
       // picture and how far away it is; the offset from where it started becomes a lean at the waist and the chest.
       const L = head?.latest;
       if (L && L.span > 0) {
+        const asp = (video?.videoWidth / video?.videoHeight) || 4 / 3;
         const f = 1 / (2 * Math.tan(60 * Math.PI / 360)), d = Math.min(2, Math.max(0.18, f * 0.09 / L.span));
-        _v.set((L.centerX - 0.5) * d / f, -(L.centerY - 0.5) * d / f, d);
+        _v.set((L.centerX - 0.5) * d / f, -(L.centerY - 0.5) * d / (f * asp), d);
         if (!neutral) neutral = _v.clone();
         lean.lerp(_t.set(_v.x - neutral.x, _v.y - neutral.y, _v.z - neutral.z), Math.min(1, dt * 8));
       }
@@ -151,6 +163,7 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
 
       // --- legs -------------------------------------------------------------------------------------------------
       if (mode !== "head") legs(dt, camera.position);
+      rig.pinEyes(camera.position);   // after the lean, the head and the arms have moved things
       if (shownMode !== mode) {   // "head only" hides the body; the head itself is always on its own layer, so a
         shownMode = mode;         // first-person camera never sees it from the inside while the mirror still does
         for (const m of rig.parts) {
