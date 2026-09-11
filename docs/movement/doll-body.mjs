@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=77";
-import { BodyView } from "../body/BodyView.js?v=77";
-import { BodyPose } from "../body/pose.mjs?v=77";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=78";
+import { BodyView } from "../body/BodyView.js?v=78";
+import { BodyPose } from "../body/pose.mjs?v=78";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
@@ -205,17 +205,33 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
         : raw ? `Body · ${mode}` : "Body tracker: hold a relaxed pose";
 
       // --- arms -------------------------------------------------------------------------------------------------
+      // The shoulder: a clavicle that never moved left the cap behind while the arm swung away, opening the socket.
+      // It lifts with the arm, and the elbow hint is forced behind and below the shoulder so the elbow can never lead
+      // forwards and turn the joint inside out.
+      const armTo = (S, wrist) => {
+        for (const n of ["Hips", "Waist", "Chest"]) rig.refresh(rig.joints[n]);
+        const clav = rig.joints[`${S}Clavicle`], sh = rig.joints[`${S}UpperArm`];
+        if (clav && sh) {
+          rig.refresh(clav); rig.refresh(sh);
+          _t.setFromMatrixPosition(sh.matrixWorld);
+          const up = Math.max(0, (wrist.y - _t.y) / 0.45);              // how far above the shoulder the hand is
+          clav.rotation.z = (S === "R" ? -1 : 1) * Math.min(0.35, up * 0.3);
+          rig.refresh(clav); rig.refresh(sh);
+          _t.setFromMatrixPosition(sh.matrixWorld);
+        }
+        // elbow hint: out to the side, down, and behind the shoulder in body space
+        _hint.set(S === "R" ? 0.32 : -0.32, -0.34, 0.2).applyAxisAngle(UP, heading).add(_t);
+        rig.reach(`${S}UpperArm`, `${S}Forearm`, `${S}Hand`, wrist, _hint);
+        rig.refresh(rig.joints[`${S}Hand`]);
+      };
+
       // the right wrist comes from our own hand model when it is visible: it is the most accurate thing we have
       if (handModel?.visible) {
         handModel.group.updateMatrixWorld(true);
         const src = handModel.override ? handModel.override() : handModel.points;
         _w.copy(src[0]).applyMatrix4(handModel.group.matrixWorld);
         const S = handModel.right ? "R" : "L";
-        _e.copy(_w).add(_v.set(handModel.right ? 0.22 : -0.22, -0.2, 0.12).applyAxisAngle(UP, heading));
-        // the arm sits under the chest, which the lean just moved: bring the chain up to date first
-        for (const n of ["Hips", "Waist", "Chest", `${S}Clavicle`]) rig.refresh(rig.joints[n]);
-        rig.reach(`${S}UpperArm`, `${S}Forearm`, `${S}Hand`, _w, _e);
-        rig.refresh(rig.joints[`${S}Hand`]);
+        armTo(S, _w);
         fitHand(rig, S, src, handModel.group.matrixWorld);
         setPalm(rig, S, src, handModel.group.matrixWorld);
         setFingers(rig, S, src, handModel.group.matrixWorld);
@@ -226,10 +242,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
         const srcL = handModelL.points, SL = handModelL.right ? "R" : "L";
         if (!(handModel?.visible && (handModel.right ? "R" : "L") === SL)) {   // never two hands on one arm
           _w.copy(srcL[0]).applyMatrix4(handModelL.group.matrixWorld);
-          _e.copy(_w).add(_v.set(SL === "R" ? 0.22 : -0.22, -0.2, 0.12).applyAxisAngle(UP, heading));
-          for (const n of ["Hips", "Waist", "Chest", `${SL}Clavicle`]) rig.refresh(rig.joints[n]);
-          rig.reach(`${SL}UpperArm`, `${SL}Forearm`, `${SL}Hand`, _w, _e);
-          rig.refresh(rig.joints[`${SL}Hand`]);
+          armTo(SL, _w);
           fitHand(rig, SL, srcL, handModelL.group.matrixWorld);
           setPalm(rig, SL, srcL, handModelL.group.matrixWorld);
           setFingers(rig, SL, srcL, handModelL.group.matrixWorld);
@@ -240,9 +253,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
         const wj = raw[S === "L" ? "leftWrist" : "rightWrist"], ej = raw[S === "L" ? "leftElbow" : "rightElbow"];
         if (!wj || !ej) continue;
         _w.fromArray(wj).applyAxisAngle(UP, heading).add(camera.position);
-        _e.fromArray(ej).applyAxisAngle(UP, heading).add(camera.position);
-        for (const n of ["Hips", "Waist", "Chest", `${S}Clavicle`]) rig.refresh(rig.joints[n]);
-        rig.reach(`${S}UpperArm`, `${S}Forearm`, `${S}Hand`, _w, _e);
+        armTo(S, _w);
       }
 
       // --- legs -------------------------------------------------------------------------------------------------
