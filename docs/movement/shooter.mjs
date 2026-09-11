@@ -2,7 +2,7 @@
 // the spawn, a mirror to the front-left, and a body under the camera so the mirror shows a person. The tracked right
 // hand (hand-model.mjs, a child of the camera) picks the gun up, aims and fires through docs/gun.mjs; while the gun
 // is held the hand is drawn in the gripping pose (hand-model's `override`). Added for the owner
-// ("take v62, add a table, a gun, a shooting range and a mirror"); docs/movement otherwise stays as it was.
+// ("take v62, add a table, a gun, a shooting range and a mirror"); the player's body is body.mjs.
 import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
 import { makeGun, fingersUp } from "../gun.mjs";
@@ -14,12 +14,7 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
   if (Q.get("gun") === "0") return null;
   let gun = null, mirror = null, error = null;
   if (!hud) { const d = document.createElement("div"); d.id = "gunHud"; d.style.cssText = "position:fixed;top:64px;left:50%;transform:translateX(-50%);padding:6px 12px;background:#101b25cc;border-radius:8px;font:12px monospace;color:#ffdf75;pointer-events:none;z-index:5"; document.body.appendChild(d); hud = t => { d.textContent = t; }; }
-  const body = new THREE.Group(); scene.add(body);   // the player's own body: shows in the mirror, and when you look down
-  {
-    const skin = new THREE.MeshStandardMaterial({ color: 0xd9a58a, roughness: 0.7 });
-    const trunk = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 1.05, 4, 10), new THREE.MeshStandardMaterial({ color: 0x3b4a5c, roughness: 0.8 })); trunk.position.y = -0.95; body.add(trunk);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), skin); body.add(head);   // at the eye: seen from inside, so invisible to the player, visible in the mirror
-  }
+  // (the player's body used to be a capsule here; body.mjs now draws the tracked upper-body rig)
   const _inv = new THREE.Matrix4(), _fwd = new THREE.Vector3(), pts = Array.from({ length: 21 }, () => new THREE.Vector3());
   const hand = { key: "R", group: handModel.group, pts, right: true, ext: [true, true, true, true] };
 
@@ -41,7 +36,6 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
   return {
     ready, get gun() { return gun; }, get mirror() { return mirror; },
     update(dt, now) {
-      body.position.copy(camera.position); body.rotation.set(0, camera.rotation.y, 0);
       if (!gun) return;
       const shown = handModel.visible;
       if (shown) {

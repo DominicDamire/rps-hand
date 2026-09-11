@@ -2,11 +2,20 @@
 // QR of camera.html?cam=<code>, and waits for the phone to CALL it with its camera stream (WebRTC media, no server of
 // ours). The returned MediaStream is used exactly like a local webcam, so the page's own tracker runs on the PC GPU.
 // Requires window.Peer (peerjs.min.js) and window.QRCode (qrcode.min.js) loaded by classic <script> tags.
-const ICE = { iceServers: [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
-  { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
-] };
+// STUN only by default: the free openrelay TURN servers that used to be listed here are gone (no relay candidates at all
+// on 2026-09-11), so the phone and the PC must be on the same network unless a TURN server is given:
+//   ?turn=turn:host:port|user|password   (several separated by ";"; "?turn=off" clears it). It is remembered, and the
+// QR code passes it on to the phone. Between different networks (phone on mobile data, a Wi-Fi with client isolation)
+// WebRTC needs a relay; free ones come with an account (e.g. metered.ca, expressturn.com).
+const TURN_KEY = "rpsh_turn";
+function turnServers() {
+  let t = null;
+  try { const q = new URLSearchParams(location.search).get("turn"); if (q != null) localStorage.setItem(TURN_KEY, q); t = localStorage.getItem(TURN_KEY); } catch {}
+  if (!t || t === "off") return [];
+  return t.split(";").map(s => s.trim()).filter(Boolean).map(s => { const [urls, username, credential] = s.split("|"); return username ? { urls, username, credential } : { urls }; });
+}
+const iceConfig = () => ({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }, ...turnServers()] });
+export const turnText = () => { try { return localStorage.getItem(TURN_KEY) || ""; } catch { return ""; } };
 const rnd = () => String(Math.floor(100 + Math.random() * 900));
 function camCode(fresh = false) {
   let c = null;
@@ -30,7 +39,7 @@ export function phoneCamera(onStatus = () => {}, onReplace = null) {
     document.body.appendChild(box);
     const state = t => { box.querySelector("#camState").textContent = t; onStatus(t); };
     const show = () => {
-      const url = new URL("camera.html?cam=" + code, location.href).href;
+      const turn = turnText(), url = new URL("camera.html?cam=" + code + (turn ? "&turn=" + encodeURIComponent(turn) : ""), location.href).href;   // the phone gets the same TURN server
       box.querySelector("#camCode").textContent = code; box.querySelector("#camUrl").textContent = url;
       const q = box.querySelector("#camQr"); q.innerHTML = ""; try { new QRCode(q, { text: url, width: 200, height: 200 }); } catch (e) { console.warn("qr", e); }
     };
@@ -42,7 +51,7 @@ export function phoneCamera(onStatus = () => {}, onReplace = null) {
       return;
     }
     const register = () => {
-      const p = new Peer("rpsh-cam-" + code, { config: ICE });
+      const p = new Peer("rpsh-cam-" + code, { config: iceConfig() });
       p.on("open", () => { live = { peer: p, code, call: null, take, replace: onReplace }; show(); state("waiting for the phone… (camera " + code + ")"); keepAwake(); });
       p.on("disconnected", () => setTimeout(() => { if (!p.dead && !p.destroyed) p.reconnect(); }, 1500));
       p.on("error", e => {
@@ -63,7 +72,7 @@ export function phoneCamera(onStatus = () => {}, onReplace = null) {
         pc?.addEventListener("iceconnectionstatechange", () => {
           const st = pc.iceConnectionState;
           if (st === "checking") state("phone found, connecting… (negotiating)");
-          else if (st === "failed") state("phone found but the connection failed on this network (ICE); the phone retries…");
+          else if (st === "failed") state("phone found but the connection failed on this network (ICE); the phone retries… Put both on the same Wi-Fi, or add a TURN server (?turn=turn:host:port|user|password)");
         });
         call.on("stream", stream => {
           if (live?.take) { const t = live.take; live.take = null; t(stream); }
@@ -81,7 +90,7 @@ export async function sendCamera(code, video, onStatus = () => {}) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } } });
   if (video) { video.srcObject = stream; video.muted = true; await video.play().catch(() => {}); }
   keepAwake();
-  const p = new Peer(undefined, { config: ICE });
+  const p = new Peer(undefined, { config: iceConfig() });
   let tries = 0, call = null;
   const dial = () => {
     tries++; onStatus(tries === 1 ? "calling PC " + code + "…" : `waiting for PC ${code}… (${tries}) is the map page open with ?cam on the PC?`);

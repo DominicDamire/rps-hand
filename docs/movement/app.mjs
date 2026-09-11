@@ -1,17 +1,18 @@
-import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=64';
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=64';
-import {setupThumbstick} from './thumbstick.mjs?v=64';
+import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=65';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=65';
+import {setupThumbstick} from './thumbstick.mjs?v=65';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=64';
-import {DustMap} from './map.mjs?v=64';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=65';
+import {DustMap} from './map.mjs?v=65';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=64';
-import {phoneCamera} from './camlink.mjs?v=64';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=64';
-import {makeHandModel,view as handView} from './hand-model.mjs?v=64';
-import {createNet} from './net.mjs?v=64';
-import {setupShooter} from './shooter.mjs?v=64';   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
+import {setupUI} from './ui.mjs?v=65';
+import {phoneCamera} from './camlink.mjs?v=65';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=65';
+import {makeHandModel,view as handView} from './hand-model.mjs?v=65';
+import {createNet} from './net.mjs?v=65';
+import {setupShooter} from './shooter.mjs?v=65';
+import {setupBody} from './body.mjs?v=65';   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
 const $=id=>document.getElementById(id);const CAM=new URLSearchParams(location.search).has('cam');   // ?cam: the phone streams its camera here
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
@@ -38,7 +39,7 @@ $('online').onclick=()=>{ensureNet();if(net.opp)return;const l=$('lobby');l.hidd
 $('closeLobby').onclick=()=>$('lobby').hidden=true;$('refresh').onclick=()=>{$('rooms').textContent='searching…';ensureNet().listRooms();};
 $('quick').onclick=()=>{$('rooms').textContent='looking for a player…';ensureNet().quickMatch();};$('create').onclick=()=>ensureNet().createRoom();
 scene.background=new THREE.Color('#abc9d9');scene.fog=new THREE.Fog('#abc9d9',90,180);
-const dustMap=new DustMap(scene);const shooter=setupShooter({scene,camera,dustMap,handModel});window.shooter=shooter;window.dustMap=dustMap;
+const dustMap=new DustMap(scene);const shooter=setupShooter({scene,camera,dustMap,handModel});window.shooter=shooter;window.dustMap=dustMap;const bodyRig=setupBody({scene,camera,handModel,video:$('cam')});window.bodyRig=bodyRig;window.headLook=headLook;
 dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · auto-step on';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
 function resize(){renderer.setPixelRatio(Math.min(1,Math.sqrt(900000/(innerWidth*innerHeight))));renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}addEventListener('resize',resize);resize();
 let head=null,lastHeadVideo=-1,lastFrameTime=0,lastHUD=-Infinity;let walkReason='START CAMERA';
@@ -55,7 +56,7 @@ async function start(){
   const takeCam=s=>{stream=s;$('cam').srcObject=s;$('cam').play().catch(()=>{});};
   stream=useCam?(stream?.active?stream:await phoneCamera(t=>status(t),takeCam)):await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
-  worker=new Worker(new URL('./tracker.mjs?v=64',import.meta.url),{type:'module'});
+  worker=new Worker(new URL('./tracker.mjs?v=65',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;if(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -85,13 +86,13 @@ async function start(){
       status(active?fingerMode.toUpperCase()+' · '+held.direction:walkReason,active);
     }
   };
-  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:33,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=64',import.meta.url)});head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
+  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:33,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=65',import.meta.url)});head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
  }catch(e){stop();status('Camera not started');$('error').textContent=e.name==='NotAllowedError'?'Camera access was declined. Allow camera access in your browser, then retry.':e.message;}
  finally{$('start').disabled=false;}
 }
 $('start').onclick=start;
 $('rest').onclick=()=>{resting=!resting;held.receive(null,performance.now());stick.reset();swipe.reset();demoRun=null;lookDemo=0;headLook.resetLook();head?.recenter();$('rest').textContent=resting?'Resume':'Rest';$('rest').setAttribute('aria-pressed',String(resting));walkReason=resting?'RESTING':'THUMB READY';status(walkReason);};
-$('centerHead').onclick=()=>{head?.recenter();headLook.resetLook();swipe.reset();};
+$('centerHead').onclick=()=>{head?.recenter();headLook.resetLook();swipe.reset();bodyRig?.recenter();};
 $('headEnabled').onchange=()=>{if(head)head.mode=$('headEnabled').checked?'first':'off';headLook.resetLook();head?.recenter();camera.rotation.y=headLook.heading;};
 $('turnMode').onchange=()=>{headLook.mode=$('turnMode').value;headLook.resetLook();head?.recenter();};
 $('headThreshold').oninput=()=>{headLook.deadzoneDegrees=+$('headThreshold').value;$('thresholdValue').textContent=$('headThreshold').value+'°';};
@@ -146,6 +147,7 @@ function frame(now){
  }
  if(remote.group.visible){const k=Math.min(1,dt*12);remote.group.position.lerp(remote.target.p,k);remote.group.rotation.y+=(remote.target.yaw-remote.group.rotation.y)*k;remote.eye.rotation.x+=(remote.target.pitch-remote.eye.rotation.x)*k;if(now-remote.seen>3000){remote.group.visible=false;remote.hand.hide();}}
  if(net?.opp?.open&&now-lastSent>=50){lastSent=now;const h=handModel.visible?handModel.points.flatMap(p=>[+p.x.toFixed(3),+p.y.toFixed(3),+p.z.toFixed(3)]):null;net.sendHands({t:'h',p:[+camera.position.x.toFixed(2),+camera.position.y.toFixed(2),+camera.position.z.toFixed(2)],r:[+camera.rotation.x.toFixed(3),+camera.rotation.y.toFixed(3)],h,o:handModel.offset,ts:Math.round(now)});}
+ bodyRig?.update(dt,now,{head,heading:headLook.heading});   // the rig's eyes follow the camera, its body faces the heading, its right arm reaches our hand
  shooter?.update(dt,now);
  renderer.render(scene,camera);
 }controlsChanged();requestAnimationFrame(frame);
