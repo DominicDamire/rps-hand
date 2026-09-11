@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=86";
-import { BodyView } from "../body/BodyView.js?v=86";
-import { BodyPose } from "../body/pose.mjs?v=86";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=80";
+import { BodyView } from "../body/BodyView.js?v=80";
+import { BodyPose } from "../body/pose.mjs?v=80";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
@@ -33,14 +33,6 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
   const modeEl = box.querySelector("#bodyMode"), calEl = box.querySelector("#bodyCal"), statusEl = box.querySelector("#bodyStatus");
   if (["full", "seated", "standing", "head"].includes(mode0)) modeEl.value = mode0;
   const tracked = () => modeEl.value === "seated" || modeEl.value === "standing";
-  // The doll's fingers are rigid parts socketed into one another. Rotating each phalanx to follow the tracked finger
-  // pulls them out of their sockets and the hand reads as scattered sticks - the owner's screenshot showed exactly
-  // that. The model's own finger pose is solid and looks like a hand, so that is what is drawn. ?fingers=1 turns the
-  // per-phalanx driving back on for anyone who wants to work on it.
-  const DRIVE_FINGERS = Q.get("fingers") === "1";
-  // Same for the walk: the model stands with its feet flat on the floor, and that is a better picture than a stride
-  // built out of joint angles. ?walk=1 brings the gait back.
-  const DRIVE_WALK = Q.get("walk") === "1";
 
   const rig = new DollRig(scene);
   // The doll is stylised: its arms reach 0.470 m where a 1.75 m adult's reach about 0.52, so a hand held out at arm's
@@ -192,12 +184,16 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
     recenter() {
       (far || local?.pose)?.recenter(modeEl.value);
       phase = 0; gait = 0; lastPos = null; neutral = null; lean.set(0, 0, 0);
-      handScaled.clear(); restPalm.clear(); restDirs.clear();   // one bad first frame is no longer permanent
+      handScaled.clear(); restPalm.clear(); restDirs.clear(); knuckled.clear();   // one bad first frame is no longer permanent
+      for (const S of ["L", "R"]) for (const [n] of FINGERS) {
+        const j = rig.joints?.[`${S}${n}1`];
+        if (j) { j.position.copy(rig.rest[`${S}${n}1`].world).sub(rig.rest[`${S}Hand`].world); j.scale.setScalar(1); }
+      }
       for (const S of ["L", "R"]) rig.joints?.[`${S}Hand`]?.scale.setScalar(1);
     },
     wants() { return tracked(); }, get told() { return told; }, set told(v) { told = v; },
 
-    update(dt, now, { head, heading = 0, look = null, lookPitch = null } = {}) {
+    update(dt, now, { head, heading = 0 } = {}) {
       cur.head = head;
       if (!rig.loaded) return;
       const mode = modeEl.value;
@@ -214,14 +210,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
 
       // --- head and the lean under it ---------------------------------------------------------------------------
       const p = head?.pose;
-      if (p) rig.setHead({
-        // Turn the head by what the VIEW actually turned, not by the raw tracked angle. The look system already
-        // converts your head yaw into where the camera points (heading plus look), and the doll's eyes are pinned to
-        // that camera - so driving the head with the raw angle on top turned it away while you were looking straight.
-        // Relative to the body the head is exactly `look`, and its pitch is exactly the view's pitch.
-        pitch: lookPitch ?? (p.physicalPitch || 0),
-        yaw: look ?? (p.physicalYaw || 0),
-        roll: p.physicalRoll || 0, facing: heading });
+      if (p) rig.setHead({ pitch: p.physicalPitch || 0, yaw: p.physicalYaw || 0, roll: p.physicalRoll || 0, facing: heading });
       // The doll's eyes are pinned to the camera, so the way to show the head moving through space is to lean the body
       // under it (owner: "the head can move in 3D plane space"). The face tracker gives where the head is in the
       // picture and how far away it is; the offset from where it started becomes a lean at the waist and the chest.
@@ -276,7 +265,8 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
         armTo(S, _w);
         fitHand(rig, S, src, handModel.group.matrixWorld);
         setPalm(rig, S, src, handModel.group.matrixWorld);
-        if (DRIVE_FINGERS) setFingers(rig, S, src, handModel.group.matrixWorld);
+        fitKnuckles(rig, S, src, handModel.group.matrixWorld);
+        setFingers(rig, S, src, handModel.group.matrixWorld);
       }
       // the steering hand: same treatment, it is a tracked hand like the other (owner: "make the left hand appear too")
       if (handModelL?.visible) {
@@ -287,7 +277,8 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
           armTo(SL, _w);
           fitHand(rig, SL, srcL, handModelL.group.matrixWorld);
           setPalm(rig, SL, srcL, handModelL.group.matrixWorld);
-          if (DRIVE_FINGERS) setFingers(rig, SL, srcL, handModelL.group.matrixWorld);
+          fitKnuckles(rig, SL, srcL, handModelL.group.matrixWorld);
+          setFingers(rig, SL, srcL, handModelL.group.matrixWorld);
         }
       }
       if (raw) for (const S of ["L", "R"]) {
@@ -299,7 +290,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
       }
 
       // --- legs -------------------------------------------------------------------------------------------------
-      if (mode !== "head" && DRIVE_WALK) {
+      if (mode !== "head") {
         legs(dt, camera.position, heading);
         // an arm that nothing is tracking swings with the opposite leg, which is what a person does
         for (const S of ["L", "R"]) {
@@ -360,16 +351,43 @@ function fitHand(rig, S, pts, mat) {
   if (!(real > 0.05 && real < 0.35) || !(mine > 0.02)) return;
   const k = Math.max(0.8, Math.min(1.8, real / mine));
   rig.joints[`${S}Hand`].scale.setScalar(k);
+  // Then each finger to its own: the doll's are not in a person's proportions - its little finger is much shorter than
+  // yours - so one scale for the whole hand still left the outer fingers several centimetres from the tracked ones.
   const scaled = [];
+  for (const [name, a2, b2, c2, d2] of FINGERS) {
+    const j1 = rig.joints[`${S}${name}1`], j3 = rig.joints[`${S}${name}3`];
+    if (!j1 || !j3) continue;
+    // joint 1 to joint 3 on the doll against knuckle to last-joint on the hand: the same span on both, no fudge
+    const yours = _p1.copy(pts[a2]).applyMatrix4(mat).distanceTo(_p2.copy(pts[c2]).applyMatrix4(mat));
+    const p1 = j1.getWorldPosition(new THREE.Vector3()), p3 = j3.getWorldPosition(new THREE.Vector3());
+    const ours = p1.distanceTo(p3) / Math.max(0.2, j1.scale.x);
+    if (!(yours > 0.01 && ours > 0.005)) continue;
+    const f = Math.max(0.6, Math.min(2.2, yours / ours));
+    j1.scale.setScalar(f); scaled.push(`${name} x${f.toFixed(2)}`);
+  }
   handScaled.add(S);
   console.info(`doll: ${S} hand x${k.toFixed(2)} (yours ${real.toFixed(3)} m, the doll's ${mine.toFixed(3)} m); fingers ${scaled.join(", ")}`);
 }
 
-// The knuckles are NOT moved onto the tracked hand, and the fingers are NOT scaled individually. Both were tried:
-// they cut the measured joint error from 3 cm to 1 cm and they wrecked the hand, because moving a knuckle drags a
-// rigid finger part away from the palm it is socketed into and leaves a gap. On a ball-joint doll the parts have to
-// stay where the model puts them; only their rotations are ours to set. The few centimetres that remain are the
-// difference between this doll's hand and a person's, and a hand that holds together is worth more than that.
+// Where the knuckles sit across the palm is the doll's own geometry, and it is not yours: after scaling the hand and
+// every finger, the knuckle joints themselves were still 4 cm from the tracked ones, and everything below them
+// inherits that. Each knuckle is moved onto the tracked one, once, in the hand's own space. Calibrate undoes it.
+const knuckled = new Set();
+function fitKnuckles(rig, S, pts, mat) {
+  if (knuckled.has(S)) return;
+  const hand = rig.joints[`${S}Hand`]; if (!hand) return;
+  rig.refresh(hand);
+  _mB.copy(hand.matrixWorld).invert();
+  let moved = 0;
+  for (const [name, a] of FINGERS) {
+    const j = rig.joints[`${S}${name}1`]; if (!j) continue;
+    _p1.copy(pts[a]).applyMatrix4(mat).applyMatrix4(_mB);
+    if (!Number.isFinite(_p1.x) || _p1.length() > 0.5) continue;   // a nonsense frame must not stick
+    j.position.copy(_p1); rig.refresh(j); moved++;
+  }
+  if (moved === 5) knuckled.add(S);
+}
+
 function setPalm(rig, S, pts, mat) {
   const key = S;
   if (!restPalm.has(key)) {
