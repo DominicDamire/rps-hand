@@ -1,5 +1,10 @@
 # Hand Pose Lab
 
+## Lab v9 — original model restored
+
+Restores the unchanged v80 doll hand geometry, original thumb lengths and attachments, and visible thumb-base marker. No generated palm surface, raised thumb pivot or thumb shortening is applied. Camera mapping, joint limits, smoothing and contact controls remain available. Earlier version notes below describe historical changes.
+
+
 ## Lab v8
 
 - Camera projection preserves the input aspect ratio, anchors the wrist to its image position, and mirrors the complete rendered view once to match the preview. The dashed frame shows the camera's fitted image area.
