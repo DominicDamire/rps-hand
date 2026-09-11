@@ -18,6 +18,7 @@ export function measureThumb(image,world,aspect=4/3,finger="thumb"){
  const palmPoint=[0,5,9,13,17].reduce((a,i)=>[a[0]+(1-image[i].x)/5,a[1]+image[i].y/aspect/5],[0,0]);
  return {open,rest:finger==='index'?reach(5)<.78:wrapped,scale:span,palm:palmPoint,point:[1-image[tip].x,image[tip].y/aspect],tip};
 }
+const REST_HOLD=200;   // ms a fist must be held before it re-places the circle; a single misread frame must not move it
 const valid=s=>s?.point?.length===2&&s.point.every(Number.isFinite)&&Number.isFinite(s.scale)&&s.scale>0;
 export function thumbVector(point,centre){
  if(!point||!centre||![...point,...centre].every(Number.isFinite))return null;
@@ -35,7 +36,7 @@ export class ThumbJoystick {
  // default, which keeps the original rule (the circle is captured once and never moves) and the tests that check it;
  // the movement page turns it on, and ?fistcentre=0 turns it back off.
  constructor(){this.size=.8;this.speed=4.5;this.fistCentre=false;this.reset();}
- reset(){this.centre=null;this.palm=null;this.scale=null;this.needsRest=true;this.settling=[];this.seen=-Infinity;this.stop('SHOW FINGER');}
+ reset(){this.centre=null;this.palm=null;this.scale=null;this.needsRest=true;this.settling=[];this.seen=-Infinity;this.restSince=null;this.stop('SHOW FINGER');}
  stop(reason){this.x=this.z=0;this.raw={x:0,z:0};this.candidate=null;this.lastTilt=null;this.reason=reason;}
  receive(sample,time){
   if(!valid(sample)){this.stop('TRACKING LOST');this.needsRest=true;this.settling=[];this.seen=-Infinity;return;}
@@ -60,13 +61,17 @@ export class ThumbJoystick {
   }
   if(sample.rest){
    this.needsRest=false;
-   if(this.fistCentre){   // fist: stop, and put the circle back around the finger where it is now resting
-    this.scale=sample.scale;
-    if(sample.tip===8){this.centre=[t[0],t[1]-.7*this.scale];}else this.centre=[...t];
-    this.stop('FIST REST · CENTRED');return;
+   if(this.fistCentre){   // a fist HELD still is the calibration: put the circle back around the finger resting there
+    this.restSince ??= time;
+    if(time-this.restSince>=REST_HOLD){
+     this.scale=sample.scale;
+     if(sample.tip===8){this.centre=[t[0],t[1]-.7*this.scale];}else this.centre=[...t];
+     this.stop('FIST REST · CENTRED');return;
+    }
    }
    this.stop('FIST REST');return;
   }
+  this.restSince=null;
   const offset=t.map((v,i)=>(v-this.centre[i])/this.effectiveScale);
   if(this.needsRest){
    if(Math.hypot(...offset)>.20){this.stop('RETURN FINGER TO CENTRE');return;}
