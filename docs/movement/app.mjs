@@ -11,7 +11,7 @@ import {phoneCamera} from './camlink.mjs';   // ?cam: the phone streams its came
 import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=62';
 import {makeHandModel,view as handView} from './hand-model.mjs?v=62';
 import {createNet} from './net.mjs?v=62';   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
-const $=id=>document.getElementById(id);
+const $=id=>document.getElementById(id);const CAM=new URLSearchParams(location.search).has('cam');   // ?cam: the phone streams its camera here
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
 $('saveTracking').onclick=()=>{const url=URL.createObjectURL(new Blob([JSON.stringify({version:62,frames:trackingLog},null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='thumb-tracking-v62.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
@@ -44,14 +44,15 @@ let head=null,lastHeadVideo=-1,lastFrameTime=0,lastHUD=-Infinity;let walkReason=
 let worker=null,stream=null,running=false,busy=false,lastVideo=-1,lastResult=0,demo=false,demoRun=null;
 function status(text,active=false){$('status').textContent=text;$('lamp').classList.toggle('on',active);}
 function apply(sample,time){const r=swipe.update(sample,time);const step=bodyDisplacement(r.dx,r.dz,headLook.heading);dustMap.move(camera.position,step.x,step.z);$('gestureStats').textContent=r.active?'MOVE engaged · relax index to release':'Hands free · movement off';status(r.status,r.active);return r;}
-function stop(){stick.reset();held.reset();trackedHand=null;lookDemo=0;headLook.resetLook();head?.worker?.terminate();if(head)clearTimeout(head.timer);head=null;$('headStatus').textContent='Head: camera off';running=false;busy=false;worker?.terminate();worker=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('cam').srcObject=null;swipe.reset();handModel.hide();trackingUI.camera(false);$('start').textContent='Start camera';}
+function stop(){stick.reset();held.reset();trackedHand=null;lookDemo=0;headLook.resetLook();head?.worker?.terminate();if(head)clearTimeout(head.timer);head=null;$('headStatus').textContent='Head: camera off';running=false;busy=false;worker?.terminate();worker=null;if(!CAM){stream?.getTracks().forEach(t=>t.stop());stream=null;}$('cam').srcObject=null;swipe.reset();handModel.hide();trackingUI.camera(false);$('start').textContent='Start camera';}
 async function start(){
  if(running){stop();status('Paused · camera off');return;}
  stop();demo=false;demoRun=null;$('demoControls').classList.remove('visible');$('error').textContent='';$('start').disabled=true;status('Starting camera…');
  try{
   const useCam=new URLSearchParams(location.search).has('cam');
   if(!useCam&&!navigator.mediaDevices?.getUserMedia)throw Error('Camera access needs HTTPS or localhost.');
-  stream=useCam?await phoneCamera(t=>status(t)):await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
+  const takeCam=s=>{stream=s;$('cam').srcObject=s;$('cam').play().catch(()=>{});};
+  stream=useCam?(stream?.active?stream:await phoneCamera(t=>status(t),takeCam)):await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
   $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
   worker=new Worker(new URL('./tracker.mjs?v=62',import.meta.url),{type:'module'});
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
@@ -110,7 +111,7 @@ for(const id of VIEW)$(id).oninput=applyView;applyView();
 $('demo').onclick=()=>{stop();demo=true;demoRun=null;$('demoControls').classList.add('visible');status('Demo · choose a movement below');};
 document.querySelectorAll('[data-look]').forEach(b=>b.onclick=()=>{lookDemo=+b.dataset.look;if(!lookDemo)headLook.speed=0;});
 document.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>{swipe.reset();demoRun={direction:b.dataset.demo,start:performance.now()};});
-document.addEventListener('visibilitychange',()=>{held.reset();swipe.reset();demoRun=null;if(document.hidden&&running)stop();});
+document.addEventListener('visibilitychange',()=>{held.reset();swipe.reset();demoRun=null;if(document.hidden&&running&&!CAM)stop();});
 addEventListener('pagehide',stop);
 function frame(now){
  requestAnimationFrame(frame);
