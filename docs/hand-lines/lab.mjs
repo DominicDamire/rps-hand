@@ -184,7 +184,7 @@ let lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if
  const j=rig.joints[side+selected];gizmo.position.setFromMatrixPosition(j.matrixWorld);gizmo.quaternion.copy(j.parent.getWorldQuaternion(new THREE.Quaternion())).multiply(jointBasis(selected));renderer.render(scene,camera);
 }requestAnimationFrame(loop);addEventListener('pagehide',()=>{stopCamera();worker?.terminate();});
 
-const startFields=['fingerThickness','tipInset','trackingGrace'];
+const startFields=['fingerThickness','tipInset','trackingGrace','eyeX','eyeY','eyeZ','eyeYaw','eyePitch','eyeFov'];
 function restoreStart(values){for(const id of startFields){const el=$(id),value=Number(values[id]);if(Number.isFinite(value)&&value>=Number(el.min)&&value<=Number(el.max)){el.value=value;el.nextElementSibling.value=value;}}}
 try{const saved=JSON.parse(localStorage.getItem('direct-lines-start-v2')||'null');if(saved)restoreStart(saved);}catch{}
 $('saveStart').onclick=()=>{try{localStorage.setItem('direct-lines-start-v2',JSON.stringify(Object.fromEntries(startFields.map(id=>[id,+$(id).value]))));$('startStatus').textContent='Starting settings saved in this browser.';}catch{$('startStatus').textContent='Browser storage unavailable.';}};
@@ -200,7 +200,14 @@ function renderOtherHand(dt){
  const result=drivers[side](pts,side,q,dt,{smooth:0,threshold:0,contactPixels:0,coupling:0,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm:extra.landmarks,width:$('preview').width,height:$('preview').height});side=originalSide;
  let n=0;for(let f=0;f<5;f++){const ids=[0,1+f*4,2+f*4,3+f*4,4+f*4];for(let k=0;k<4;k++)for(const i of [ids[k],ids[k+1]]){const v=result.points[i];secondLineGeometry.attributes.position.setXYZ(n++,v.x,v.y,v.z);}}secondLineGeometry.attributes.position.needsUpdate=true;
 }
-function setViewMode(){const first=$('viewMode').value==='first';camera.position.set(0,0,first?-1.2:0);camera.up.set(0,1,0);camera.lookAt(0,0,first?0:-1);camera.updateProjectionMatrix();$('scene').style.transform=first?'none':'scaleX(-1)';$('cameraFrame').style.display=first?'none':'';}
+function setViewMode(){const first=$('viewMode').value==='first';
+ if(first){camera.position.set(+$('eyeX').value,+$('eyeY').value,+$('eyeZ').value);const yaw=+$('eyeYaw').value*RAD,pitch=+$('eyePitch').value*RAD;const dir=new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));camera.up.set(0,1,0);camera.lookAt(camera.position.clone().add(dir));camera.fov=+$('eyeFov').value;}
+ else{camera.position.set(0,0,0);camera.up.set(0,1,0);camera.lookAt(0,0,-1);camera.fov=60;}
+ camera.updateProjectionMatrix();$('scene').style.transform=first?'none':'scaleX(-1)';$('cameraFrame').style.display=first?'none':'';}
+
 $('viewMode').onchange=setViewMode;const originalReset=$('viewReset').onclick;$('viewReset').onclick=()=>{originalReset();setViewMode();};
 
 $('recalibrateSize').onclick=()=>{for(const s of ['R','L']){drivers[s]=directDriver(rig,tips);delete depthStates[s];}$('startStatus').textContent='Size calibration reset. Hold both hands open and clearly visible.';};
+
+for(const id of ['eyeX','eyeY','eyeZ','eyeYaw','eyePitch','eyeFov'])$(id).oninput=()=>{$(id).nextElementSibling.value=$(id).value;setViewMode();};
+$('resetCamera').onclick=()=>{restoreStart({eyeX:0,eyeY:0,eyeZ:-1.2,eyeYaw:180,eyePitch:0,eyeFov:60});setViewMode();};

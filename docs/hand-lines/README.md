@@ -18,3 +18,5 @@ Fingertip inset now ranges from 0 to 100 estimated mm. View switches between cam
 
 ## Stable-size update
 The four assistance controls (smoothing, movement deadband, touch proximity, coupling) are hidden and their effects disabled. Segment lengths are captured independently for each hand and remain fixed while directions follow tracking. Recalibrate hand size resets length/depth calibration. Depth is separately stabilized with a 180 ms response and bounded updates; image perspective still changes with real distance. Tracking grace is adjustable 0–1000 ms, default 250; missing detections retain the last measurements until expiration, with no invented finger motion. Fixed-length regression verifies an 80 percent input size increase does not change segment lengths. Live clip replay has not been quantitatively verified.
+
+First-person camera controls now expose position XYZ, yaw, pitch and field of view. Camera settings are included in Save starting settings; the reset camera button restores defaults. Mirror uses the original calibrated projection. Opposite-side view is an inspection approximation, not a calibrated eye or head tracker.
