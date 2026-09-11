@@ -407,10 +407,16 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
       // forward distance taken from the tracked depth and then clamped to [near, far], and the direction itself is held
       // inside a cone a little narrower than the camera's. The hand's own shape is never touched: the group moves.
       _c.set((pts[0].x + pts[5].x + pts[17].x) / 3, (pts[0].y + pts[5].y + pts[17].y) / 3, (pts[0].z + pts[5].z + pts[17].z) / 3);
-      const zc = Math.max(0.05, -_c.z);                 // how far the palm is from the phone
+      // The angle the EYE sees the hand at, not the angle the phone sees it at. Using the phone's (x / distance from
+      // the phone) squashed the two hands together, because it throws away how far apart they really are: a hand half a
+      // metre from the phone and one right next to it came out at the same angle. From the eye the angle is
+      // x / (how far ahead of the eye the hand is), which keeps the real separation - two hands 40 cm apart stay 40 cm
+      // apart. When that distance collapses to nothing the angle blows up, which is what the cone clamp is for.
+      const aheadRaw = (D + _c.z) * (view.reach || 1);
+      const fromEye = Math.max(0.08, aheadRaw);
       const keep = view.keepIn ?? 0.8, tv = Math.tan((view.camFov ?? 65) * Math.PI / 360) * keep, th = tv * (view.aspect ?? 1.6);
-      const tanX = Math.max(-th, Math.min(th, _c.x / zc)), tanY = Math.max(-tv, Math.min(tv, _c.y / zc));
-      const ahead = Math.min(view.far ?? 0.6, Math.max(view.near ?? 0.3, (D + _c.z) * (view.reach || 1)));
+      const tanX = Math.max(-th, Math.min(th, _c.x / fromEye)), tanY = Math.max(-tv, Math.min(tv, _c.y / fromEye));
+      const ahead = Math.min(view.far ?? 0.6, Math.max(view.near ?? 0.3, aheadRaw));
       let px = -tanX * ahead, py = tanY * ahead - ey, pz = -ahead;
       if (view.drop) { const a = -view.drop * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), y2 = py * c - pz * sn; pz = py * sn + pz * c; py = y2; }
       offset[0] = -py; offset[1] = -pz;

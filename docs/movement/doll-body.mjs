@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=84";
-import { BodyView } from "../body/BodyView.js?v=84";
-import { BodyPose } from "../body/pose.mjs?v=84";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=85";
+import { BodyView } from "../body/BodyView.js?v=85";
+import { BodyPose } from "../body/pose.mjs?v=85";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
@@ -197,7 +197,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
     },
     wants() { return tracked(); }, get told() { return told; }, set told(v) { told = v; },
 
-    update(dt, now, { head, heading = 0 } = {}) {
+    update(dt, now, { head, heading = 0, look = null, lookPitch = null } = {}) {
       cur.head = head;
       if (!rig.loaded) return;
       const mode = modeEl.value;
@@ -214,7 +214,14 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
 
       // --- head and the lean under it ---------------------------------------------------------------------------
       const p = head?.pose;
-      if (p) rig.setHead({ pitch: p.physicalPitch || 0, yaw: p.physicalYaw || 0, roll: p.physicalRoll || 0, facing: heading });
+      if (p) rig.setHead({
+        // Turn the head by what the VIEW actually turned, not by the raw tracked angle. The look system already
+        // converts your head yaw into where the camera points (heading plus look), and the doll's eyes are pinned to
+        // that camera - so driving the head with the raw angle on top turned it away while you were looking straight.
+        // Relative to the body the head is exactly `look`, and its pitch is exactly the view's pitch.
+        pitch: lookPitch ?? (p.physicalPitch || 0),
+        yaw: look ?? (p.physicalYaw || 0),
+        roll: p.physicalRoll || 0, facing: heading });
       // The doll's eyes are pinned to the camera, so the way to show the head moving through space is to lean the body
       // under it (owner: "the head can move in 3D plane space"). The face tracker gives where the head is in the
       // picture and how far away it is; the offset from where it started becomes a lean at the waist and the chest.
