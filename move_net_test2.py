@@ -4,7 +4,7 @@ A leaves -> B gets 'opponent left' and the Online button resets."""
 import asyncio, os, sys, json
 from playwright.async_api import async_playwright
 HERE = os.path.dirname(os.path.abspath(__file__))
-URL = sys.argv[1] if len(sys.argv) > 1 else "https://d14life.github.io/rps-hand/movement/?v=62"
+URL = sys.argv[1] if len(sys.argv) > 1 else "https://d14life.github.io/rps-hand/movement/?v=63"
 ARGS = ["--enable-gpu", "--ignore-gpu-blocklist", "--autoplay-policy=no-user-gesture-required"]
 async def page(b, tag):
     pg = await b.new_page(viewport={"width": 1000, "height": 640}); await pg.goto(URL + "&t=" + tag); await pg.wait_for_timeout(1500); return pg

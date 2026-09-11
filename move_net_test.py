@@ -4,7 +4,7 @@ browser B joins from the lobby list; A walks (demo push) and B must see A's body
 import asyncio, os, sys, json
 from playwright.async_api import async_playwright
 HERE = os.path.dirname(os.path.abspath(__file__))
-URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8767/movement/?v=62"
+URL = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8767/movement/?v=63"
 Y4M = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "fakecam3.y4m")
 ARGS = ["--enable-gpu", "--ignore-gpu-blocklist", "--autoplay-policy=no-user-gesture-required", "--use-fake-device-for-media-stream",
         "--use-fake-ui-for-media-stream", "--use-file-for-fake-video-capture=" + Y4M]

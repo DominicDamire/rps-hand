@@ -23,7 +23,7 @@ async def run():
         bPH = await p.chromium.launch(channel="msedge", headless=True, args=PHONE_ARGS)
         pc = await bPC.new_page(viewport={"width": 1000, "height": 640}); ph = await bPH.new_page(viewport={"width": 390, "height": 800})
         errs = []; pc.on("pageerror", lambda e: errs.append("pc: " + str(e))); ph.on("pageerror", lambda e: errs.append("phone: " + str(e)))
-        await pc.goto(BASE + "?v=62&cam"); await wait(pc, "/^\\d{3}$/.test(document.getElementById('camCode')?.textContent || '')")
+        await pc.goto(BASE + "?v=63&cam"); await wait(pc, "/^\\d{3}$/.test(document.getElementById('camCode')?.textContent || '')")
         code = await pc.text_content("#camCode"); print("1 PC shows code", code, "|", await pc.text_content("#camState"))
         await ph.goto(BASE + "camera.html?cam=" + code)            # = scanning the QR once
         ok = await wait(pc, PC_LINKED); await wait(pc, TRACKING, 60)

@@ -26,7 +26,7 @@
   <footer style="color:#9aa4b8;font-size:13px">Keep this page open and the phone awake. Hold the phone so it sees your hands (and face for head look).</footer>
 </div>
 <script type="module">
-import { sendCamera } from "./camlink.mjs";
+import { sendCamera } from "./camlink.mjs?v=63";
 const $ = id => document.getElementById(id);
 const q = new URLSearchParams(location.search).get("cam");
 let last = ""; try { last = localStorage.getItem("rpsh_last_cam") || ""; } catch {}
