@@ -34,3 +34,12 @@ export function validateProfile(input){
  }
  return out;
 }
+
+// Structural constraints take precedence over user limits and imported poses.
+export const lockedAxis=(name,axis)=>axis===2||(axis===1&&!name.endsWith('1'));
+export function constrainJoint(name,values,limits){return values.map((v,i)=>lockedAxis(name,i)?0:limits?.[i]?.enabled?Math.max(limits[i].min,Math.min(limits[i].max,v)):v);}
+export const constrainAngles=(angles,limits)=>Object.fromEntries(JOINTS.map(n=>[n,constrainJoint(n,angles[n],limits[n])]));
+export function directionAngles(name,[x,y,z],previous=0){
+ const radial=Math.hypot(y,z),bend=radial<1e-8?previous:Math.atan2(-y,z)*180/Math.PI;
+ return [bend,name.endsWith('1')?Math.atan2(x,radial)*180/Math.PI:0,0];
+}

@@ -2,7 +2,7 @@ import {receivePhone} from './phone-link.mjs?v=2';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
-import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile} from './profile.mjs?v=1';
+import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile,lockedAxis,constrainJoint,constrainAngles,directionAngles} from './profile.mjs?v=3';
 const $=id=>document.getElementById(id),clone=x=>JSON.parse(JSON.stringify(x)),RAD=Math.PI/180,KEY='hand-pose-lab-v1';
 let profile=emptyProfile();try{const saved=localStorage.getItem(KEY);if(saved)profile=validateProfile(JSON.parse(saved));}catch{$('notice').textContent='Saved profile could not be read. Import your JSON backup to recover it.';}
 let closePhone=null;
@@ -23,7 +23,10 @@ function frameBasis(wrist,index,middle,pinky){const y=middle.clone().sub(wrist).
 function restBasis(S){const r=rig.rest;return frameBasis(r[S+'Hand'].world,r[S+'Index1'].world,r[S+'Middle1'].world,r[S+'Pinky1'].world);}
 function jointBasis(n){const key=side+n;if(basisCache[key])return basisCache[key];const r=rig.rest,k=+n.slice(-1),finger=n.slice(0,-1),here=r[key].world;
  const z=(k<3?r[side+finger+(k+1)].world.clone().sub(here):here.clone().sub(r[side+finger+(k-1)].world)).normalize();
- const x=r[side+'Index1'].world.clone().sub(r[side+'Pinky1'].world);x.addScaledVector(z,-x.dot(z)).normalize();const y=new THREE.Vector3().crossVectors(z,x).normalize();
+ const first=r[side+finger+'2'].world.clone().sub(r[side+finger+'1'].world).normalize(),second=r[side+finger+'3'].world.clone().sub(r[side+finger+'2'].world).normalize();
+ const lateral=r[side+'Index1'].world.clone().sub(r[side+'Pinky1'].world),x=new THREE.Vector3().crossVectors(first,second);
+ if(x.lengthSq()<1e-10)x.copy(lateral).addScaledVector(first,-lateral.dot(first));
+ if(x.dot(lateral)<0)x.negate();x.normalize();const y=new THREE.Vector3().crossVectors(z,x).normalize();
  return basisCache[key]=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x,y,z));
 }
 function solveRaw(world){const pts=world.map(p=>new THREE.Vector3(p.x,-p.y,-p.z));
@@ -31,14 +34,16 @@ function solveRaw(world){const pts=world.map(p=>new THREE.Vector3(p.x,-p.y,-p.z)
  const hand=rig.joints[side+'Hand'];hand.quaternion.copy(palmQ);rig.root.updateMatrixWorld(true);const result=blankAngles();
  for(const [f,fi] of FINGERS.map((f,i)=>[f,i]))for(let k=1;k<=3;k++){
   const n=f+k,j=rig.joints[side+n],a=1+fi*4+k-1,b=a+1;rig.refresh(j);
-  const here=rig.rest[side+n].world,rest=k<3?rig.rest[side+f+(k+1)].world.clone().sub(here):here.clone().sub(rig.rest[side+f+(k-1)].world);
   const dir=pts[b].clone().sub(pts[a]);if(dir.lengthSq()<1e-10)continue;
-  dir.applyQuaternion(j.parent.getWorldQuaternion(new THREE.Quaternion()).invert()).normalize();j.quaternion.setFromUnitVectors(rest.normalize(),dir);rig.refresh(j);
-  const qb=jointBasis(n),q=qb.clone().invert().multiply(j.quaternion).multiply(qb),e=new THREE.Euler().setFromQuaternion(q,'XYZ');result[n]=[e.x/RAD,e.y/RAD,e.z/RAD];
+  dir.applyQuaternion(j.parent.getWorldQuaternion(new THREE.Quaternion()).invert()).normalize();
+  const qb=jointBasis(n);dir.applyQuaternion(qb.clone().invert());
+  result[n]=constrainJoint(n,directionAngles(n,dir.toArray(),angles[n][0]),profile.limits[side][n]);
+  j.quaternion.copy(qb).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...result[n].map(v=>v*RAD),'XYZ'))).multiply(qb.clone().invert());rig.refresh(j);
+
  }
  return result;
 }
-function applyAngles(){if(!rig.loaded)return;angles=clampAngles(angles,profile.limits[side]);rig.joints[side+'Hand'].quaternion.copy(editing?frozenPalm:$('follow').checked?palmQ:new THREE.Quaternion());
+function applyAngles(){if(!rig.loaded)return;angles=constrainAngles(angles,profile.limits[side]);rig.joints[side+'Hand'].quaternion.copy(editing?frozenPalm:$('follow').checked?palmQ:new THREE.Quaternion());
  for(const n of JOINTS){const qb=jointBasis(n),v=angles[n];rig.joints[side+n].quaternion.copy(qb).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...v.map(x=>x*RAD),'XYZ'))).multiply(qb.clone().invert());}
  rig.root.updateMatrixWorld(true);
 }
@@ -93,8 +98,8 @@ $('save').onclick=()=>{const name=$('poseName').value.trim();if(!editing||!froze
  const pose={id:savedId||crypto.randomUUID(),name,side,features:[...frozenFeature],angles:clone(angles),capture:frozenCapture};const at=profile.poses.findIndex(p=>p.id===pose.id);if(at>=0)profile.poses[at]=pose;else profile.poses.push(pose);savedId=pose.id;if(persist())notice('Saved “'+name+'”. Resume live to test recognition, or export JSON.');renderLibrary();};
 function renderControls(){if(!rig.loaded)return;
  $('jointName').textContent=selected.replace(/\d$/,'')+' · '+jointLabel(selected);for(const n of JOINTS){const b=$('joint-'+n);b.setAttribute('aria-pressed',String(n===selected));b.querySelector('small').textContent=angles[n].map(v=>Math.round(v)).join(' / ');}
- for(let i=0;i<3;i++){const v=angles[selected][i];$('angle'+i).value=v;$('number'+i).value=v.toFixed(1);$('angle'+i).disabled=$('number'+i).disabled=!editing;
- const l=profile.limits[side][selected][i];$('enabled'+i).checked=l.enabled;$('min'+i).value=l.min;$('max'+i).value=l.max;for(const id of ['enabled','min','max'])$(id+i).disabled=!editing;}
+ for(let i=0;i<3;i++){const v=angles[selected][i];$('angle'+i).value=v;$('number'+i).value=v.toFixed(1);$('angle'+i).disabled=$('number'+i).disabled=!editing||lockedAxis(selected,i);
+ const locked=lockedAxis(selected,i),l=locked?{enabled:true,min:0,max:0}:profile.limits[side][selected][i];$('enabled'+i).checked=l.enabled;$('min'+i).value=l.min;$('max'+i).value=l.max;for(const id of ['enabled','min','max'])$(id+i).disabled=!editing||locked;}
 }
 function jointLabel(n){const k=+n.slice(-1);return n.startsWith('Thumb')?['CMC','MCP','IP'][k-1]:['MCP','PIP','DIP'][k-1];}
 for(const f of FINGERS){const label=document.createElement('div');label.className='finger';label.textContent=f;$('joints').append(label);for(let k=1;k<=3;k++){const n=f+k,b=document.createElement('button');b.id='joint-'+n;b.setAttribute('aria-label','Select '+f+' '+jointLabel(n));b.innerHTML=jointLabel(n)+'<small>0 / 0 / 0</small>';b.onclick=()=>{selected=n;renderControls();};$('joints').append(b);}}
