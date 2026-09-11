@@ -15,3 +15,6 @@ Thickness scales both transverse axes of all finger segments (default 1.3). Tip 
 ## View and two-hand update
 Fingertip inset now ranges from 0 to 100 estimated mm. View switches between camera mirror and an opposite-side first-person inspection camera; no head tracking is added. Both detected hands render by default, with independent filter/contact state and blue skeleton lines for the second hand. MediaPipe was already configured for two hands. Single-hand first-person sample verified; live two-hand input remains unverified.
 
+
+## Stable-size update
+The four assistance controls (smoothing, movement deadband, touch proximity, coupling) are hidden and their effects disabled. Segment lengths are captured independently for each hand and remain fixed while directions follow tracking. Recalibrate hand size resets length/depth calibration. Depth is separately stabilized with a 180 ms response and bounded updates; image perspective still changes with real distance. Tracking grace is adjustable 0–1000 ms, default 250; missing detections retain the last measurements until expiration, with no invented finger motion. Fixed-length regression verifies an 80 percent input size increase does not change segment lengths. Live clip replay has not been quantitatively verified.

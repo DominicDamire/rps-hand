@@ -1,10 +1,14 @@
 import * as T from 'three';
 export function directDriver(rig,tips){
- const matrices=new Map(rig.parts.map(m=>[m,m.matrix.clone()]));let held=null,lastSide=null,contact=null;
+ const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let held=null,lastSide=null,contact=null;const calibrated={};
  const fingers=['Thumb','Index','Middle','Ring','Pinky'];
  return function(points,side,palmQ,dt,{smooth=0,threshold=0,contactPixels=0,coupling=0,thickness=1,tipInset=0,lm,width,height}){
   if(lastSide!==side){held=null;contact=null;lastSide=side;}
   let p=points.map(v=>v.clone());
+  if(!calibrated[side])calibrated[side]=Array.from({length:5},(_,f)=>Array.from({length:3},(_,k)=>Math.max(.005,p[2+f*4+k].distanceTo(p[1+f*4+k]))));
+  const raw=p.map(v=>v.clone());
+  for(let f=0;f<5;f++)for(let k=0;k<3;k++){const i=1+f*4+k,dir=raw[i+1].clone().sub(raw[i]);if(dir.lengthSq()>1e-10)p[i+1].copy(p[i]).addScaledVector(dir.normalize(),calibrated[side][f][k]);}
+
   if(!held)held=p.map(v=>v.clone());
   const alpha=smooth>0?1-Math.exp(-dt/(smooth/1000)):1;
   p=p.map((v,i)=>{if(v.distanceTo(held[i])>threshold/1000)held[i].lerp(v,alpha);return held[i].clone();});
