@@ -24,7 +24,47 @@ export function setupUI(){
  };
 
  const edges=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
- return {clear(){trail=[];ctx.clearRect(0,0,canvas.width,canvas.height);},camera(on){$('previewNote').hidden=on;this.clear();},draw(hands,w,h,active=false,joystick=null,roles=null){   // roles: {joy, model, head} - which hand does what, drawn on the preview
+ // --- the two extra boxes: what the face tracker sees, and what the hand tracker sees -------------------------
+ const faceC=$('faceCanvas'),handsC=$('handsCanvas');
+ const fctx=faceC?.getContext('2d'),hctx=handsC?.getContext('2d');
+ const fit=(c,w,h)=>{const W=c.clientWidth*devicePixelRatio|0,H=c.clientHeight*devicePixelRatio|0;if(c.width!==W||c.height!==H){c.width=W;c.height=H;}return [c.width,c.height];};
+ return {clear(){trail=[];ctx.clearRect(0,0,canvas.width,canvas.height);if(fctx)fctx.clearRect(0,0,faceC.width,faceC.height);if(hctx)hctx.clearRect(0,0,handsC.width,handsC.height);},
+  // The face tracker gives a pose, not a mesh: where the face is in the picture, how big it is, and which way it is
+  // pointing. Drawn as the oval it found, the eye line, and an arrow along the gaze - enough to see it working.
+  face(pose,found){
+   if(!fctx)return;const [W,H]=fit(faceC);fctx.clearRect(0,0,W,H);
+   const note=$('faceNote');
+   if(!pose||!found){if(note)note.textContent='no face';return;}
+   const x=(1-pose.centerX)*W,y=pose.centerY*H,r=Math.max(6,pose.span*W*1.6);
+   fctx.lineWidth=Math.max(1.5,W/220);
+   fctx.strokeStyle='#67ffbb';fctx.beginPath();fctx.ellipse(x,y,r*0.78,r,0,0,Math.PI*2);fctx.stroke();
+   fctx.strokeStyle='#67ffbb88';fctx.beginPath();fctx.moveTo(x-r*0.78,y);fctx.lineTo(x+r*0.78,y);fctx.stroke();
+   fctx.beginPath();fctx.moveTo(x,y-r);fctx.lineTo(x,y+r);fctx.stroke();
+   const e=r*0.34;fctx.fillStyle='#e5fff3';
+   for(const s of [-1,1]){fctx.beginPath();fctx.arc(x+s*e,y-r*0.18,Math.max(2,W/150),0,Math.PI*2);fctx.fill();}
+   const g=r*1.5;fctx.strokeStyle='#ffdf75';fctx.lineWidth=Math.max(2,W/170);
+   fctx.beginPath();fctx.moveTo(x,y);fctx.lineTo(x-Math.sin(pose.yaw)*g,y-Math.sin(pose.pitch)*g);fctx.stroke();
+   if(note)note.textContent=`yaw ${(pose.yaw*180/Math.PI).toFixed(0)}° · pitch ${(pose.pitch*180/Math.PI).toFixed(0)}°`;
+  },
+  // Every hand the tracker found, with its finger lines, and which is which.
+  hands(list,labels){
+   if(!hctx)return;const [W,H]=fit(handsC);hctx.clearRect(0,0,W,H);
+   const note=$('handsNote');
+   const hands=(list||[]).filter(h=>h&&h.length===21);
+   if(!hands.length){if(note)note.textContent='no hands';return;}
+   const pt=p=>[(1-p.x)*W,p.y*H];
+   hands.forEach((hand,i)=>{
+    const colour=i===0?'#67ffbb':'#7cc5ff';
+    hctx.lineWidth=Math.max(1.5,W/200);hctx.lineCap='round';hctx.strokeStyle=colour;
+    for(const [a,b] of edges){hctx.beginPath();hctx.moveTo(...pt(hand[a]));hctx.lineTo(...pt(hand[b]));hctx.stroke();}
+    hctx.fillStyle='#e5fff3';
+    for(let k=0;k<21;k++){hctx.beginPath();hctx.arc(...pt(hand[k]),k%4===0?W/95:W/150,0,Math.PI*2);hctx.fill();}
+    hctx.fillStyle=colour;hctx.font='bold '+Math.max(10,Math.round(W/24))+'px system-ui,sans-serif';
+    const [lx,ly]=pt(hand[0]);hctx.textAlign='center';
+    hctx.fillText(labels?.[i]||'',lx,Math.min(H-4,ly+W/16));
+   });
+   if(note)note.textContent=hands.length===1?'1 hand':hands.length+' hands';
+  },camera(on){$('previewNote').hidden=on;this.clear();},draw(hands,w,h,active=false,joystick=null,roles=null){   // roles: {joy, model, head} - which hand does what, drawn on the preview
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;$('previewImage').style.aspectRatio=w+'/'+h;}
   ctx.clearRect(0,0,w,h);if(preview.hidden)return;const crop=zoomView(hands,w,h,joystick);
   const tip=joystick?.tip??4;const point=p=>[(1-p.x)*w,p.y*h];

@@ -6,8 +6,8 @@
 import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
 import { makeGun, fingersUp } from "../gun.mjs";
-import { setupPunch } from "./punch.mjs?v=85";
-import * as sfx from "./sound.mjs?v=85";
+import { setupPunch } from "./punch.mjs?v=86";
+import * as sfx from "./sound.mjs?v=86";
 
 const TABLE_H = 1.32;   // table top above the floor: the tracked hand sits at chest height in front of the eye (1.65 m)
 // ?mirror=N refreshes the reflection every Nth frame it is on screen (default 3, 1 = every frame)

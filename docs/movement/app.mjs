@@ -1,19 +1,19 @@
-import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=85';
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=85';
-import {setupThumbstick} from './thumbstick.mjs?v=85';
+import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=86';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=86';
+import {setupThumbstick} from './thumbstick.mjs?v=86';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=85';
-import {DustMap} from './map.mjs?v=85';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=86';
+import {DustMap} from './map.mjs?v=86';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=85';
-import {phoneCamera} from './camlink.mjs?v=85';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=85';
-import {makeHandModel,view as handView} from './hand-model.mjs?v=85';
-import {createNet} from './net.mjs?v=85';
-import {setupShooter} from './shooter.mjs?v=85';
-import {setupBody} from './doll-body.mjs?v=85';   // the ball-joint doll; the old skinned avatar is body.mjs, kept for reference
-import {startRemote,shimVideoSize} from './remote.mjs?v=85';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
+import {setupUI} from './ui.mjs?v=86';
+import {phoneCamera} from './camlink.mjs?v=86';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=86';
+import {makeHandModel,view as handView} from './hand-model.mjs?v=86';
+import {createNet} from './net.mjs?v=86';
+import {setupShooter} from './shooter.mjs?v=86';
+import {setupBody} from './doll-body.mjs?v=86';   // the ball-joint doll; the old skinned avatar is body.mjs, kept for reference
+import {startRemote,shimVideoSize} from './remote.mjs?v=86';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
 const $=id=>document.getElementById(id);const CAM=new URLSearchParams(location.search).has('cam');   // ?cam: the phone streams its camera here
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
@@ -69,7 +69,7 @@ async function start(){
    stream=useCam?(stream?.active?stream:await phoneCamera(t=>status(t),takeCam)):await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
    $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
   }
-  worker=phoneLink?phoneLink.handWorker:new Worker(new URL('./tracker.mjs?v=85',import.meta.url),{type:'module'});   // the shim answers 'ready' as soon as the phone speaks
+  worker=phoneLink?phoneLink.handWorker:new Worker(new URL('./tracker.mjs?v=86',import.meta.url),{type:'module'});   // the shim answers 'ready' as soon as the phone speaks
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;{const t=performance.now();hf.n++;if(t-hf.t>=1000){dbg.handFps=Math.round(hf.n*1000/(t-hf.t));hf.n=0;hf.t=t;}}   // hand tracker rate, shown in the HUDif(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -85,6 +85,7 @@ async function start(){
     if(resting){held.receive(null,lastResult);swipe.reset();handModel.hide();handModelL.hide();walkReason='RESTING';return;}
     const label=handIndex>=0?data.handedness?.[handIndex]?.[0]?.categoryName:null;
     trackedHand=label;
+    {const lab=(data.landmarks||[]).map((_,i)=>i===handIndex?'JOYSTICK':i===modelIndex?'3D HAND':'');trackingUI.hands(data.landmarks,lab);}
     if(modelIndex>=0)handModel.update(data.landmarks[modelIndex],data.worldLandmarks[modelIndex],$('cam').videoWidth,$('cam').videoHeight);else handModel.hide();
     if(handIndex>=0)handModelL.update(data.landmarks[handIndex],data.worldLandmarks[handIndex],$('cam').videoWidth,$('cam').videoHeight);else handModelL.hide();   // the steering hand keeps steering AND is shown
     pinchTap(handModel,performance.now());
@@ -101,7 +102,7 @@ async function start(){
       status(active?fingerMode.toUpperCase()+' · '+held.direction:walkReason,active);
     }
   };
-  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:66,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=85',import.meta.url),worker:phoneLink?phoneLink.headWorker:null});window.head=head;head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
+  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:66,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=86',import.meta.url),worker:phoneLink?phoneLink.headWorker:null});window.head=head;head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
  }catch(e){stop();status('Camera not started');$('error').textContent=e.name==='NotAllowedError'?'Camera access was declined. Allow camera access in your browser, then retry.':e.message;}
  finally{$('start').disabled=false;}
 }
@@ -140,7 +141,7 @@ function frame(now){
  requestAnimationFrame(frame);
  const dt=lastFrameTime?Math.min(.1,(now-lastFrameTime)/1000):1/60;lastFrameTime=now;
  if(head&&!resting){const pose=head.update(now,dt),valid=head.mode!=='off'&&freshHead(head.lastResult,now);
-  headSeen=valid;{const L=valid?head.latest:null;if(L&&L.span>0){const f=1/(2*Math.tan(handView.phoneFov*Math.PI/360)),d=Math.min(2,Math.max(.18,f*.09/L.span)),asp=($('cam').videoWidth/$('cam').videoHeight)||4/3;handView.eye=[(L.centerX-.5)*d/f,-(L.centerY-.5)*d/(f*asp),d];}else handView.eye=null;}   // the tracked eye (phone frame) places the hand: outer-eye span 90 mm
+  headSeen=valid;trackingUI.face(head.latest,valid);{const L=valid?head.latest:null;if(L&&L.span>0){const f=1/(2*Math.tan(handView.phoneFov*Math.PI/360)),d=Math.min(2,Math.max(.18,f*.09/L.span)),asp=($('cam').videoWidth/$('cam').videoHeight)||4/3;handView.eye=[(L.centerX-.5)*d/f,-(L.centerY-.5)*d/(f*asp),d];}else handView.eye=null;}   // the tracked eye (phone frame) places the hand: outer-eye span 90 mm
  const rawYaw=valid&&head.pose.neutral?-(head.pose.latest.yaw-head.pose.neutral.yaw):0;const viewYaw=headLook.update(rawYaw,dt,valid,head.lastResult?.ts);const rawPitch=valid&&head.pose.neutral?head.pose.latest.pitch-head.pose.neutral.pitch:0;const viewPitch=headLook.updatePitch(rawPitch,dt,valid);if(valid)camera.rotation.set(viewPitch,viewYaw,0,'YXZ');if(now-lastHUD>=100)$('headStatus').textContent=(head.failed?'Head error: '+head.error:!head.ready?'Head loading…':head.mode==='off'?'Head off':valid?'Head tracking · '+head.perf.fps+' fps':'Face not tracked')+(head.lastResult?` · age ${Math.max(0,Math.round(now-head.lastResult.ts))}ms`:'')+(valid?` · yaw ${(rawYaw*180/Math.PI).toFixed(0)}° · pitch ${(rawPitch*180/Math.PI).toFixed(0)}° · ${headLook.state}${headLook.state==='HOLD TO TURN'?' '+Math.round(headLook.progress*100)+'%':''}`:' · turn stopped');}
  if(demo&&!resting){camera.rotation.set(0,headLook.update(lookDemo*.35,dt),0,'YXZ');}
 
