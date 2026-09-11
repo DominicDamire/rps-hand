@@ -6,8 +6,8 @@
 import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
 import { makeGun, fingersUp } from "../gun.mjs";
-import { setupPunch } from "./punch.mjs?v=72";
-import * as sfx from "./sound.mjs?v=72";
+import { setupPunch } from "./punch.mjs?v=73";
+import * as sfx from "./sound.mjs?v=73";
 
 const TABLE_H = 1.32;   // table top above the floor: the tracked hand sits at chest height in front of the eye (1.65 m)
 // ?mirror=N refreshes the reflection every Nth frame it is on screen (default 3, 1 = every frame)
@@ -34,6 +34,9 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
     mirror = new Reflector(new THREE.PlaneGeometry(mw, mh), { clipBias: 0.003, textureWidth: 512, textureHeight: 256, color: 0xb8c4cc, multisample: 0 });
     const mx = spawn.x - 4.5, mz = spawn.z - 4.5, mfloor = dustMap.floor(mx, mz, floor + 1) ?? floor;   // measured (probe_map.py): flat floor there, nearest wall 19 m away, no ceiling
     mirror.position.set(mx, mfloor + mh / 2, mz); mirror.lookAt(spawn.x, mfloor + mh / 2, spawn.z); scene.add(mirror);
+    // The player's own head sits on its own layer so the first-person camera does not look at the inside of it. The
+    // mirror has to put that layer back, or you see a headless body looking at you.
+    try { mirror.getReflectionCamera?.(camera)?.layers.enable(1); } catch (e) { console.warn("mirror layers", e); }
     // A mirror draws the WHOLE map a second time, every frame, and Dust II is not small: at full rate it cost 25 page fps
     // and dragged the trackers down with it (hand 12 fps, face inference 89 ms) because they share the GPU. Measured with
     // it hidden: 289 page fps, hand 28, face 22 ms. So: refresh the reflection only when the mirror is actually on screen,

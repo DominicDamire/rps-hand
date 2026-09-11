@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=72";
-import { BodyView } from "../body/BodyView.js?v=72";
-import { BodyPose } from "../body/pose.mjs?v=72";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=73";
+import { BodyView } from "../body/BodyView.js?v=73";
+import { BodyPose } from "../body/pose.mjs?v=73";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
@@ -35,6 +35,11 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
   const tracked = () => modeEl.value === "seated" || modeEl.value === "standing";
 
   const rig = new DollRig(scene);
+  // The doll is stylised: its arms reach 0.470 m where a 1.75 m adult's reach about 0.52, so a hand held out at arm's
+  // length - which is exactly where the gun is - was 5 cm beyond what the arm could reach and the wrist fell short by
+  // that much, taking every finger with it. A 1.1 scale on each arm puts the reach at a human 0.517 m.
+  const ARM_SCALE = +(new URLSearchParams(location.search).get("arm")) || 1.1;
+  rig.ready.then(() => { for (const S of ["L", "R"]) rig.joints[`${S}UpperArm`].scale.setScalar(ARM_SCALE); });
   let error = null;
   rig.ready.catch(e => { error = e; console.warn("doll unavailable:", e); statusEl.textContent = "doll could not load"; });
 
@@ -77,7 +82,8 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
     }
   }
 
-  let told = null, shownMode = null;
+  let told = null, shownMode = null, neutral = null;
+  const lean = new THREE.Vector3();
   return {
     rig, get error() { return error; },
     recenter() { (far || local?.pose)?.recenter(modeEl.value); phase = 0; gait = 0; lastPos = null; },
@@ -96,9 +102,25 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
       rig.reset();
       rig.placeEyes(camera.position, heading);
 
-      // --- head -----------------------------------------------------------------------------------------------
+      // --- head and the lean under it ---------------------------------------------------------------------------
       const p = head?.pose;
       if (p) rig.setHead({ pitch: p.physicalPitch || 0, yaw: p.physicalYaw || 0, roll: p.physicalRoll || 0 });
+      // The doll's eyes are pinned to the camera, so the way to show the head moving through space is to lean the body
+      // under it (owner: "the head can move in 3D plane space"). The face tracker gives where the head is in the
+      // picture and how far away it is; the offset from where it started becomes a lean at the waist and the chest.
+      const L = head?.latest;
+      if (L && L.span > 0) {
+        const f = 1 / (2 * Math.tan(60 * Math.PI / 360)), d = Math.min(2, Math.max(0.18, f * 0.09 / L.span));
+        _v.set((L.centerX - 0.5) * d / f, -(L.centerY - 0.5) * d / f, d);
+        if (!neutral) neutral = _v.clone();
+        lean.lerp(_t.set(_v.x - neutral.x, _v.y - neutral.y, _v.z - neutral.z), Math.min(1, dt * 8));
+      }
+      for (const [name, k] of [["Waist", 0.5], ["Chest", 0.5]]) {
+        const j = rig.joints[name]; if (!j) continue;
+        j.rotation.z = THREE.MathUtils.clamp(-lean.x * 1.6, -0.35, 0.35) * k;      // sway sideways
+        j.rotation.x = THREE.MathUtils.clamp(-lean.y * 1.6, -0.35, 0.35) * k;      // lean forward and back
+        j.updateMatrixWorld(true);
+      }
 
       // --- body from the pose tracker ---------------------------------------------------------------------------
       const raw = !tracked() ? null : far ? far.update(now, dt, true, camera.position.toArray()) : local ? local.update(now, dt) : null;
@@ -114,6 +136,8 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
         const S = handModel.right ? "R" : "L";
         _e.copy(_w).add(_v.set(handModel.right ? 0.22 : -0.22, -0.2, 0.12).applyAxisAngle(UP, heading));
         rig.reach(`${S}UpperArm`, `${S}Forearm`, `${S}Hand`, _w, _e);
+        fitHand(rig, S, src, handModel.group.matrixWorld);
+        setPalm(rig, S, src, handModel.group.matrixWorld);
         setFingers(rig, S, src, handModel.group.matrixWorld);
       }
       if (raw) for (const S of ["L", "R"]) {
@@ -141,7 +165,56 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
 
 const UP = new THREE.Vector3(0, 1, 0);
 const FINGERS = [["Thumb", 1, 2, 3, 4], ["Index", 5, 6, 7, 8], ["Middle", 9, 10, 11, 12], ["Ring", 13, 14, 15, 16], ["Pinky", 17, 18, 19, 20]];
-const _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3(), _d1 = new THREE.Vector3(), _d2 = new THREE.Vector3();
+const _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3(), _p3 = new THREE.Vector3(), _d1 = new THREE.Vector3(), _d2 = new THREE.Vector3(), _v2 = new THREE.Vector3();
+// --- the palm ---------------------------------------------------------------------------------------------------
+// The IK only decides where the wrist is. Without this the hand keeps whatever twist the forearm happened to end with,
+// so the knuckles can sit 10 cm from the tracked ones even with every finger angle right. Build a frame from the
+// tracked wrist, index knuckle and little-finger knuckle, build the same frame from the doll's own rest pose, and turn
+// the hand by the rotation between them.
+const _u = new THREE.Vector3(), _n2 = new THREE.Vector3(), _y = new THREE.Vector3();
+const _mA = new THREE.Matrix4(), _mB = new THREE.Matrix4(), _qh = new THREE.Quaternion();
+const restPalm = new Map();
+function basis(out, o, a, b) {
+  _u.subVectors(a, o); _v2.subVectors(b, o);
+  _n2.crossVectors(_u, _v2);
+  if (_u.lengthSq() < 1e-10 || _n2.lengthSq() < 1e-12) return null;
+  _u.normalize(); _n2.normalize(); _y.crossVectors(_n2, _u).normalize();
+  return out.makeBasis(_u, _y, _n2);
+}
+// The doll is stylised and its hands are small. Scale the hand (and with it every finger, since they hang off it) to
+// the player's own hand the first time it is seen, so the knuckles land where the tracked ones are and the gun sits in
+// a hand the right size for it. Clamped, so a bad frame cannot produce a giant hand.
+const handScaled = new Set();
+function fitHand(rig, S, pts, mat) {
+  if (handScaled.has(S)) return;
+  _p1.copy(pts[0]).applyMatrix4(mat); _p2.copy(pts[9]).applyMatrix4(mat); _p3.copy(pts[12]).applyMatrix4(mat);
+  const real = _p1.distanceTo(_p2) + _p2.distanceTo(_p3);
+  // measured live, so any scale already applied to the arm is included
+  const P = n => rig.joints[n].getWorldPosition(new THREE.Vector3());
+  const h = P(`${S}Hand`), m1 = P(`${S}Middle1`), m3 = P(`${S}Middle3`);
+  const mine = h.distanceTo(m1) + m1.distanceTo(m3);
+  if (!(real > 0.05 && real < 0.35) || !(mine > 0.02)) return;
+  const k = Math.max(0.8, Math.min(1.8, real / mine));
+  rig.joints[`${S}Hand`].scale.setScalar(k);
+  handScaled.add(S);
+  console.info(`doll: ${S} hand scaled x${k.toFixed(2)} (yours ${real.toFixed(3)} m, the doll's ${mine.toFixed(3)} m)`);
+}
+
+function setPalm(rig, S, pts, mat) {
+  const key = S;
+  if (!restPalm.has(key)) {
+    const m = new THREE.Matrix4();
+    const ok = basis(m, rig.rest[`${S}Hand`].world, rig.rest[`${S}Index1`].world, rig.rest[`${S}Pinky1`].world);
+    restPalm.set(key, ok ? m.clone().invert() : null);
+  }
+  const restInv = restPalm.get(key); if (!restInv) return;
+  _p1.copy(pts[0]).applyMatrix4(mat); _p2.copy(pts[5]).applyMatrix4(mat); _p3.copy(pts[17]).applyMatrix4(mat);
+  if (!basis(_mA, _p1, _p2, _p3)) return;
+  _mB.multiplyMatrices(_mA, restInv);
+  _qh.setFromRotationMatrix(_mB);
+  rig.setWorldQuat(`${S}Hand`, _qh);
+}
+
 
 /** curl the doll's fingers to match the tracked hand: each phalanx points where the tracked one points */
 const restDirs = new Map();

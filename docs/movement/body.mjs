@@ -9,9 +9,9 @@
 //  - the tracked right hand (hand-model.mjs) is the right arm's IK target, so the rig's forearm ends at our hand.
 // The body faces the walking heading (head-look.mjs), which the rig applies as `facing`.
 import * as THREE from "three";
-import { RiggedAvatar } from "../avatar/RiggedAvatar.js?v=72";
-import { BodyView } from "../body/BodyView.js?v=72";
-import { BodyPose } from "../body/pose.mjs?v=72";
+import { RiggedAvatar } from "../avatar/RiggedAvatar.js?v=73";
+import { BodyView } from "../body/BodyView.js?v=73";
+import { BodyPose } from "../body/pose.mjs?v=73";
 
 const SKIN = 0xd9a58a;   // the hand model's colour, so the arm and the hand read as one body
 const KEYS = ["leftShoulder", "rightShoulder", "leftHip", "rightHip", "leftElbow", "rightElbow", "leftWrist", "rightWrist"];
