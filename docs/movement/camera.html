@@ -19,6 +19,7 @@
 <div id="wrap">
   <header>
     <div>This phone is the <b>camera</b> for the map running on the PC.</div>
+    <div style="color:#9aa4b8;font-size:13px;margin-top:4px">It tracks your hands and face here and sends the numbers to the PC, so it works on any network.</div>
     <div style="margin-top:8px"><input id="code" inputmode="numeric" maxlength="3" placeholder="PC code"><button id="go">CONNECT</button></div>
     <div id="status">enter the 3-digit code shown on the PC, or scan its QR</div>
   </header>
@@ -26,9 +27,9 @@
   <footer style="color:#9aa4b8;font-size:13px">Keep this page open and the phone awake. Hold the phone so it sees your hands (and face for head look).</footer>
 </div>
 <script type="module">
-import { sendCamera } from "./camlink.mjs?v=65";
+import { startPhone } from "./phone.mjs?v=66";
 const $ = id => document.getElementById(id);
-const q = new URLSearchParams(location.search).get("cam");
+const params = new URLSearchParams(location.search), q = params.get("cam"), VIDEO = params.has("video");
 let last = ""; try { last = localStorage.getItem("rpsh_last_cam") || ""; } catch {}
 $("code").value = q || last;
 async function go() {
@@ -36,8 +37,12 @@ async function go() {
   if (!/^\d{3}$/.test(c)) { $("status").textContent = "enter the 3-digit code from the PC"; return; }
   try { localStorage.setItem("rpsh_last_cam", c); } catch {}
   $("go").disabled = true;
-  try { await sendCamera(c, $("cam"), t => $("status").textContent = t); }
-  catch (e) { $("status").textContent = "camera error: " + e.message; $("go").disabled = false; }
+  try {
+    // Default: track here and send the landmarks (works on any network). ?video=1: send the camera itself over WebRTC,
+    // which only completes when the phone and the PC can reach each other directly (one Wi-Fi, no client isolation).
+    if (VIDEO) { const { sendCamera } = await import("./camlink.mjs?v=66"); await sendCamera(c, $("cam"), t => $("status").textContent = t); }
+    else await startPhone(c, $("cam"), t => $("status").textContent = t);
+  } catch (e) { $("status").textContent = "error: " + e.message; $("go").disabled = false; }
 }
 $("go").onclick = go;
 if (q) go();   // opened from the PC's QR: connect right away (the camera prompt appears; allow it)

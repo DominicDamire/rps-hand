@@ -9,13 +9,14 @@
 //  - the tracked right hand (hand-model.mjs) is the right arm's IK target, so the rig's forearm ends at our hand.
 // The body faces the walking heading (head-look.mjs), which the rig applies as `facing`.
 import * as THREE from "three";
-import { RiggedAvatar } from "../avatar/RiggedAvatar.js?v=65";
-import { BodyView } from "../body/BodyView.js?v=65";
+import { RiggedAvatar } from "../avatar/RiggedAvatar.js?v=66";
+import { BodyView } from "../body/BodyView.js?v=66";
+import { BodyPose } from "../body/pose.mjs?v=66";
 
 const SKIN = 0xd9a58a;   // the hand model's colour, so the arm and the hand read as one body
 const KEYS = ["leftShoulder", "rightShoulder", "leftHip", "rightHip", "leftElbow", "rightElbow", "leftWrist", "rightWrist"];
 
-export function setupBody({ scene, camera, handModel, video }) {
+export function setupBody({ scene, camera, handModel, video, getRemote = () => null }) {
   const Q = new URLSearchParams(location.search);
   if (Q.get("body") === "0") return null;
   const cur = { head: null };
@@ -29,8 +30,9 @@ export function setupBody({ scene, camera, handModel, video }) {
   // recreated on every Start, so read the current one through an adapter.
   const headAdapter = { camera, get mode() { return cur.head?.mode ?? "off"; }, get ready() { return !!cur.head?.ready; }, get busy() { return !!cur.head?.busy; },
     get completedFrames() { return cur.head?.completedFrames ?? 0; }, performance: { get latency() { return cur.head?.perf?.latency ?? 0; } } };
-  let body = null, error = null;
-  try { body = new BodyView(video, headAdapter, { mode: modeEl, status: statusEl, recenter: calEl }); } catch (e) { error = e; console.warn("body tracking unavailable:", e); statusEl.textContent = "body tracking unavailable"; }
+  let body = null, error = null, far = null, wired = null;   // `far`: the phone is the camera, so it runs the body tracker and sends samples here
+  const startLocal = () => { try { body = new BodyView(video, headAdapter, { mode: modeEl, status: statusEl, recenter: calEl }); } catch (e) { error = e; console.warn("body tracking unavailable:", e); statusEl.textContent = "body tracking unavailable"; } };
+  const startFar = link => { far = new BodyPose(modeEl.value); wired = link; link.onBody = s => far.receive(s, performance.now()); modeEl.addEventListener("change", () => far.recenter(modeEl.value)); calEl.addEventListener("click", () => far.recenter(modeEl.value)); };
   const avatar = new RiggedAvatar(scene, camera, null);
   avatar.ready.then(() => { for (const mesh of avatar.meshes) mesh.material.color.set(SKIN); }).catch(e => { error = e; console.warn("avatar unavailable:", e); });
   const _F = new THREE.Quaternion(), _Y = new THREE.Vector3(0, 1, 0), _v = new THREE.Vector3(), _w = new THREE.Vector3(), joints = {};
@@ -38,10 +40,15 @@ export function setupBody({ scene, camera, handModel, video }) {
 
   return {
     avatar, body, get error() { return error; }, get joints() { return last; },
-    recenter() { body?.pose.recenter(modeEl.value); },
+    recenter() { (far || body?.pose)?.recenter(modeEl.value); },
     update(dt, now, { head, heading }) {   // after the camera moved and turned, before the render
       cur.head = head;
-      const raw = body ? body.update(now, dt) : null;   // eye-relative, player frame: x right, y up, -z toward the phone
+      const link = getRemote();
+      if (link && wired !== link) startFar(link); else if (!link && !body && !far && !error) startLocal();
+      const active = modeEl.value !== "off";
+      const raw = far ? far.update(now, dt, active, camera.position.toArray()) : body ? body.update(now, dt) : null;   // eye-relative, player frame: x right, y up, -z toward the phone
+      if (far) statusEl.textContent = !active ? "Head only · body pose inferred" : now - far.seen > 220 ? "Body out of frame on the phone · arms relaxed" :
+        !far.neutral ? `Hold a relaxed ${modeEl.value} pose · calibrating ${Math.min(100, Math.round(far.samples.length / 12 * 100))}%` : `Body from the phone · ${modeEl.value}${far.partial ? " · following visible joints" : ""}`;
       _F.setFromAxisAngle(_Y, heading || 0);
       let j = null;
       if (raw) { j = joints; for (const k of KEYS) { const p = raw[k]; j[k] = p ? _v.fromArray(p).applyQuaternion(_F).toArray() : null; } }   // into world axes: the body faces the heading

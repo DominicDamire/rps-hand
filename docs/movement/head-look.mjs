@@ -1,13 +1,15 @@
 const RAD=Math.PI/180;
 export class HeadLook {
- constructor(){this.heading=0;this.gain=1.5;this.lookGain=2.5;this.deadzoneDegrees=14;this.mode='hybrid';this.resetLook();}
+ constructor(){this.heading=0;this.gain=1.5;this.lookGain=1.6;this.deadzoneDegrees=14;this.smooth=.12;this.mode='hybrid';this.resetLook();}
+ // lookGain 2.5 and a 25 ms filter made the view swing far and jitter with the tracker (owner: "the head movement is too
+ // much"). 1.6x with a 120 ms filter follows the head without the noise; both are sliders on the page.
  resetLook(){this.speed=0;this.look=0;this.pitch=0;this.pending=0;this.direction=0;this.turning=false;this.previous=null;this.samples=[];this.armed=true;this.neutralTime=0;this.progress=0;this.state='LOOK ONLY';}
  update(yaw,dt,valid=true,sampleTime=null){
   dt=Math.max(0,Math.min(.1,Number.isFinite(dt)?dt:0));this.speed=0;
   if(!valid||!Number.isFinite(yaw)){this.previous=null;this.samples=[];this.pending=0;this.turning=false;this.progress=0;this.state='TRACKING PAUSED';return this.heading+this.look;}
   const angle=Math.abs(yaw),direction=Math.sign(yaw),dead=this.deadzoneDegrees*RAD;
   const target=Math.max(-70*RAD,Math.min(70*RAD,yaw*this.lookGain));
-  this.look+=(target-this.look)*(1-Math.exp(-dt/.025));this.state='LOOK ONLY';this.progress=0;
+  this.look+=(target-this.look)*(1-Math.exp(-dt/Math.max(.01,this.smooth)));this.state='LOOK ONLY';this.progress=0;
   if(this.mode==='quick'||this.mode==='hybrid'){
    // One outward flick; returning to centre never reverses the body turn.
    if(angle<Math.max(5,this.deadzoneDegrees-5)*RAD){this.neutralTime+=dt;if(this.neutralTime>=.15)this.armed=true;}else this.neutralTime=0;
@@ -41,7 +43,7 @@ export class HeadLook {
  updatePitch(pitch,dt,valid=true){
   if(!valid||!Number.isFinite(pitch))return this.pitch;
   const target=Math.max(-70*RAD,Math.min(70*RAD,pitch*this.lookGain));
-  this.pitch+=(target-this.pitch)*(1-Math.exp(-Math.min(.1,Math.max(0,dt))/.025));return this.pitch;
+  this.pitch+=(target-this.pitch)*(1-Math.exp(-Math.min(.1,Math.max(0,dt))/Math.max(.01,this.smooth)));return this.pitch;
  }
 
 }

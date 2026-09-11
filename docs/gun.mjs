@@ -15,7 +15,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js";
 
-const GRAB_R = 0.15;        // metres from the palm centre to the grip to pick the gun up
+const GRAB_R = 0.2;         // metres from the palm centre to the grip to pick the gun up (0.15 asked for more precision than hand tracking gives)
 const FIRE_ON = 50, FIRE_OFF = 40;   // index middle-knuckle bend (degrees) that fires / re-arms the trigger (a press, like a normal gun)
 const FIRE_GAP = 0.12;      // seconds between shots
 const GRIP = new THREE.Vector3(0, 0.045, 0.062);          // grip centre, gun space (y up, barrel -z): the pick-up point

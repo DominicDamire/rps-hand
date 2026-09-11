@@ -337,7 +337,9 @@ function makeRigSkin(variant, color) {
 // group sits at (0, -height, -dist) in the eye's frame, turned half a turn about the vertical axis. A proper rotation,
 // so the right hand stays a right hand and appears on the right.
 // Joint depths come from the world model + one translation (locate, as the main page); the picture fixes x/y exactly.
-export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5, eye: null };   // sliders write here; eye = [x, y up, distance] of the tracked eye behind the phone (phone frame, metres), set by the app when the head is seen
+export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5, eye: null, reach: 1.7 };   // reach: the hand's distance from the eye is multiplied by this (the shape is not stretched, the whole hand moves), so a
+// comfortable half-extended arm reaches the table 0.55 m away - without it the hand could never get further from the eye
+// than the eye-to-phone distance (0.6 m) and the gun on the table was out of reach (owner: "the hand just would not extend")   // sliders write here; eye = [x, y up, distance] of the tracked eye behind the phone (phone frame, metres), set by the app when the head is seen
 // The eye is FIXED (the slider distance, or the tracked head): a hand brought toward the face comes close to the eye and
 // the gun's sight fills the view, as on the main page. (Before, the eye retreated to keep the hand 0.25 m ahead, so a
 // hand near the face moved AWAY - the owner wants aiming by bringing the gun to the eye.) The hand is only kept from
@@ -365,7 +367,7 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
   let skinR = null, skinL = null, chir = 0;   // both sides, chosen by the thumb's side of the palm as the main page does (the label flickers, the geometry does not)
   rigPromise ??= loadRig("../arm");
   const ready = rigPromise.then(rig => { skinR = makeRigSkin(rig.R, 0xd9a58a); skinL = makeRigSkin(rig.L, 0xd9a58a); group.add(skinR.mesh, skinL.mesh); }).catch(e => console.warn("hand mesh unavailable:", e));
-  const pts = Array.from({ length: 21 }, () => new THREE.Vector3()), q = new THREE.Quaternion(), ax = new THREE.Vector3(1, 0, 0), _w = new THREE.Vector3();
+  const pts = Array.from({ length: 21 }, () => new THREE.Vector3()), q = new THREE.Quaternion(), ax = new THREE.Vector3(1, 0, 0), _w = new THREE.Vector3(), _c = new THREE.Vector3();
   const offset = [0, 0.6];   // [height, dist] the group is placed with (sent to the other player so their copy lands in the same place)
   let shown = false;
   function drive() {   // the rig follows pts
@@ -389,7 +391,15 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
       const ex = view.eye ? view.eye[0] : 0, ey = view.eye ? view.eye[1] : view.height, D = view.eye ? view.eye[2] : view.dist;
       let zMin = Infinity; for (const p of pts) zMin = Math.min(zMin, p.z);
       const push = (MIN_AHEAD - D) - zMin; if (push > 0) for (const p of pts) p.z += push;   // never behind or inside the eye (phone frame: the eye at z = -D)
-      offset[0] = ey; offset[1] = D; group.position.set(ex, -ey, -D);
+      // Reach. The group sits at (ex, -ey, -D) in the eye's frame and is turned 180 deg, so a hand point (x, y, z) lands at
+      // (ex - x, y - ey, -z - D). Multiplying that whole offset from the eye by `reach` moves the hand further out along the
+      // same direction while its own shape stays exactly as tracked (we translate the group, we never scale it).
+      const g = Math.max(1, view.reach || 1);
+      _c.set((pts[0].x + pts[5].x + pts[17].x) / 3, (pts[0].y + pts[5].y + pts[17].y) / 3, (pts[0].z + pts[5].z + pts[17].z) / 3);   // palm centre
+      let tx = (g - 1) * (ex - _c.x), ty = (g - 1) * (_c.y - ey), tz = (g - 1) * (-_c.z - D);
+      let zMax = -Infinity; for (const p of pts) zMax = Math.max(zMax, -p.z - D + tz);   // the nearest point's depth in the eye's frame (forward is negative)
+      if (zMax > -MIN_AHEAD) tz -= zMax + MIN_AHEAD;
+      offset[0] = ey - ty; offset[1] = D - tz; group.position.set(ex + tx, -ey + ty, -D + tz);
       window.dbg = Object.assign(window.dbg || {}, { model: pts, offset }); drive();
     },
     setPoints(flat, o) {   // from the network: 63 numbers in the other player's phone frame + their [height, dist]

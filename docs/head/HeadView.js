@@ -6,7 +6,9 @@ import { ViewPose } from './pose.mjs';
 import { SpatialPose, median } from './spatial.mjs';
 
 export class HeadView {
-  constructor({ hfov = Math.PI / 3, mode = 'first', interval = 33, workerUrl = new URL('./worker.mjs', import.meta.url), widths = [384, 512, 288] } = {}) {
+  constructor({ hfov = Math.PI / 3, mode = 'first', interval = 33, workerUrl = new URL('./worker.mjs', import.meta.url), widths = [384, 512, 288], worker = null } = {}) {
+    // `worker`: an object with the worker's message interface instead of a real Worker. The movement page passes one that
+    // is fed by the phone over the data link (movement/remote.mjs), so the face tracking can run on the phone.
     // capture widths: the face detector misses some small faces at one resampling and finds them at another (measured on
     // test/seated_desk.jpg: missed at 384, found at 256 and 717), so the width cycles while no face is found
     this.hfov = hfov; this.interval = interval; this.widths = widths; this.widthIdx = 0;
@@ -17,7 +19,7 @@ export class HeadView {
     this.perf = { fps: 0, frames: 0, start: performance.now(), latency: 0, delegate: '' };
     this.latest = null;   // last worker result with a face: {centerX, centerY, span, yaw, pitch, fit}
     const fail = e => { this.failed = true; this.busy = false; this.error = e?.message || String(e); this.worker?.terminate(); clearTimeout(this.timer); };
-    try { this.worker = new Worker(workerUrl, { type: 'module' }); } catch (e) { fail(e); return; }
+    try { this.worker = worker || new Worker(workerUrl, { type: 'module' }); } catch (e) { fail(e); return; }
     this.worker.onerror = e => fail(e.message || 'worker error');
     this.worker.onmessage = ({ data }) => {
       if (data.type === 'error') return fail(data.message);

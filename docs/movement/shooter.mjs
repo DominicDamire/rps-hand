@@ -7,7 +7,9 @@ import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
 import { makeGun, fingersUp } from "../gun.mjs";
 
-const TABLE_H = 1.3;   // table top above the floor: the tracked hand sits at chest height in front of the eye (1.65 m)
+const TABLE_H = 1.32;   // table top above the floor: the tracked hand sits at chest height in front of the eye (1.65 m)
+const TABLE_AHEAD = 0.55;   // in front of the spawn. With the eye at 1.65 m the gun is then 0.65 m away, inside the reach of a
+// half-extended arm (hand-model.mjs `reach`); at the old 0.75 m it was 0.83 m away and could not be grabbed at all.
 
 export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
   const Q = new URLSearchParams(location.search);
@@ -20,7 +22,7 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
 
   async function build() {   // once the map is there: the range in front of the spawn, the mirror front-left
     const spawn = dustMap.spawn.clone(), floor = spawn.y - dustMap.eye;
-    const tableZ = spawn.z - 0.75, tableFloor = dustMap.floor(spawn.x, tableZ, floor + 1) ?? floor;
+    const tableZ = spawn.z - TABLE_AHEAD, tableFloor = dustMap.floor(spawn.x, tableZ, floor + 1) ?? floor;
     gun = await makeGun({ scene, worldObjs: dustMap.meshes, floorY: tableFloor, url: new URL("../gun.glb", import.meta.url).href,
       place: { pos: new THREE.Vector3(spawn.x, tableFloor + TABLE_H, tableZ), yaw: 0 }, hold: Q.has("grab") });
     const mw = 8, mh = 4;   // a wall-sized mirror (owner: "much bigger, like 15 times" - about 15x the old 1.1 x 2.0 m area), 6.4 m to the front-left, facing the spawn: the whole body fits with room to walk
