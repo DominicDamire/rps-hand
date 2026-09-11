@@ -372,21 +372,14 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
   }
   let skinR = null, skinL = null, chir = 0;   // both sides, chosen by the thumb's side of the palm as the main page does (the label flickers, the geometry does not)
   rigPromise ??= loadRig("../arm");
-  const ready = rigPromise.then(rig => { skinR = makeRigSkin(rig.R, 0xd9a58a); skinL = makeRigSkin(rig.L, 0xd9a58a); if (model.drawMesh) group.add(skinR.mesh, skinL.mesh); }).catch(e => console.warn("hand mesh unavailable:", e));
+  const ready = rigPromise.then(rig => { skinR = makeRigSkin(rig.R, 0xd9a58a); skinL = makeRigSkin(rig.L, 0xd9a58a); group.add(skinR.mesh, skinL.mesh); }).catch(e => console.warn("hand mesh unavailable:", e));
   const pts = Array.from({ length: 21 }, () => new THREE.Vector3()), q = new THREE.Quaternion(), ax = new THREE.Vector3(1, 0, 0), _w = new THREE.Vector3(), _c = new THREE.Vector3();
   const offset = [0, 0.6];   // [height, dist] the group is placed with (sent to the other player so their copy lands in the same place)
-  let shown = false, drawMesh = true;
+  let shown = false;
   function drive() {   // the rig follows pts
-    shown = true;
+    shown = true; if (!skinR) return;
     _u.subVectors(pts[5], pts[0]); _n.subVectors(pts[17], pts[0]); _n.crossVectors(_u, _n).normalize();
     chir += 0.2 * (Math.sign(_r.subVectors(pts[4], pts[0]).dot(_n)) - chir);
-    if (!skinR) return;
-    if (model.drawMesh === false) {
-      skinR.mesh.visible = skinL.mesh.visible = false;
-      group.remove(skinR.mesh, skinL.mesh);
-      return; // The doll consumes points directly; do not animate an invisible second skeleton.
-    }
-    if (skinR.mesh.parent !== group) group.add(skinR.mesh, skinL.mesh);
     const right = model.right, on = right ? skinR : skinL, off = right ? skinL : skinR;
     const src = model.override ? model.override() : pts;   // shooter.mjs: the gripping pose while the gun is held
     off.mesh.visible = false; on.update(src, right, undefined, undefined, !!model.override);
@@ -394,17 +387,9 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
     // (the gun grip, the punching and the doll's fingers all read them), it simply is not drawn.
     if (model.drawMesh === false) on.mesh.visible = false;
   }
-  const model = { group, ready, points: pts, offset, override: null,
-    get drawMesh() { return drawMesh; },
-    set drawMesh(value) {
-      if (drawMesh === value) return;
-      drawMesh = value;
-      if (!value && skinR) { skinR.mesh.visible = skinL.mesh.visible = false; group.remove(skinR.mesh, skinL.mesh); }
-      else if (shown) drive();
-    }, get visible() { return shown; }, get right() { return chir * CHIR_RIGHT >= 0; },
+  const model = { group, ready, points: pts, offset, override: null, drawMesh: true, get visible() { return shown; }, get right() { return chir * CHIR_RIGHT >= 0; },
     update(image, world, W, H) {   // from the tracker: picture + world landmarks -> the phone's GL frame
-      if (image?.length !== 21 || world?.length !== 21 || !(W > 0 && H > 0) || !image.every(p => Number.isFinite(p.x) && Number.isFinite(p.y)) || !world.every(p => Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z))) { model.hide(); return; }
-      const [Tz, xu, yv] = locate(world, image, W, H); if (!Number.isFinite(Tz) || Tz <= 0.05) { model.hide(); return; }
+      const [Tz, xu, yv] = locate(world, image, W, H); if (!Number.isFinite(Tz) || Tz <= 0.05) return;
       q.setFromAxisAngle(ax, view.tilt * Math.PI / 180);
       const a = shown ? view.smooth : 1;   // one-pole smoothing; the main page's error-adaptive filter if this jitters
       for (let i = 0; i < 21; i++) {

@@ -1,6 +1,6 @@
-# Movement v89
+# Movement v89 · restored v80 model and joints
 
-[Play v89](https://d14life.github.io/rps-hand/movement/?v=89) · [Hand movement test](https://d14life.github.io/rps-hand/movement/hand-check.html?v=89) · [Implementation and validation](docs/movement/V89.md)
+[Play v89](https://d14life.github.io/rps-hand/movement/?v=89-v80) · [Hand movement test](https://d14life.github.io/rps-hand/movement/hand-check.html?v=89-v80) · [Implementation and validation](docs/movement/V89.md)
 
 # RPS Hand
 

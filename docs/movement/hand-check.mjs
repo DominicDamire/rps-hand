@@ -62,7 +62,7 @@ async function check(label,path){
 try{
  const results=[];
  if(new URLSearchParams(location.search).has('compare'))for(const v of [76,80,88]){const {result}=await check('v'+v,`../../../baseline-v${v}/docs/movement/doll-body.mjs`);results.push(result);}
- const {body,result}=await check('v89','./doll-body.mjs?v=89');results.push(result);
+ const {body,result}=await check('v89','./doll-body.mjs?v=89-v80');results.push(result);
  const pass=Object.values(result.cases).every(c=>c.maxFingerDegrees<.01&&c.maxWristMM<5);
  document.querySelector('#results').textContent=(pass?'PASS':'FAIL')+' — all 30 finger segments on both hands\n'+JSON.stringify(results,null,2);
  let photoMode=false;document.querySelector("#pose").onchange=()=>{photoMode=false;right.right=true;left.visible=true;body.recenter();viewer.position.set(0,1.45,-1.3);viewer.lookAt(0,1.38,-.2);};
@@ -73,11 +73,11 @@ try{
  document.querySelector('#photos').onclick=async()=>{
   photoMode=true;animation=false;left.visible=false;
   const out=document.querySelector('#photoResults'),photo=document.querySelector('#trackingPhoto');out.textContent='Loading hand tracker…';photo.style.display='block';
-  const worker=new Worker(new URL('./tracker.mjs?v=89',import.meta.url),{type:'module'});
+  const worker=new Worker(new URL('./tracker.mjs?v=89-v80',import.meta.url),{type:'module'});
   const request=data=>new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('Tracker timeout')),45000);worker.onmessage=({data:r})=>{clearTimeout(timeout);if(r.type==='error')reject(Error(r.message));else resolve(r);};worker.onerror=e=>{clearTimeout(timeout);reject(Error(e.message));};worker.postMessage(data,data.bitmap?[data.bitmap]:[]);});
   let source;
   try{
-   const {makeHandModel}=await import('./hand-model.mjs?v=89');source=makeHandModel(cam,false);source.drawMesh=false;
+   const {makeHandModel}=await import('./hand-model.mjs?v=89-v80');source=makeHandModel(cam,false);source.drawMesh=false;
    await request({type:'init'});const checks=[];
    for(const name of ['count5.png','user_fist.jpg','raised_fist.jpg','peace.jpg','thumbs_up1.jpg']){
     photo.src=new URL('../test/'+name,import.meta.url);await photo.decode();

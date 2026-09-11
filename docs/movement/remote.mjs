@@ -2,7 +2,7 @@
 // and this turns them back into exactly the worker messages app.mjs and HeadView already expect, so the rest of the page
 // does not know the difference. Nothing here needs a peer-to-peer connection, so it works on mobile data and across
 // networks, unlike the WebRTC video path in camlink.mjs (kept for one shared Wi-Fi: open the page with &video=1).
-import { connectLink, unpackHands, linkCode } from "./link.mjs?v=89";
+import { connectLink, unpackHands, linkCode } from "./link.mjs?v=89-v80";
 
 function shim() {   // looks enough like a Worker for app.mjs / HeadView
   let fn = null, pending = null;   // the phone can say "ready" before the page attaches its handler: replay it
@@ -20,7 +20,7 @@ let live = null;   // one link per page, kept across Stop/Start so the phone nev
 export async function startRemote({ onStatus = () => {}, fresh = false } = {}) {
   if (live && live.link.connected && !fresh) { live.overlay?.remove(); return live; }
   const code = linkCode();
-  const url = new URL("camera.html?v=89&cam=" + code, location.href).href;
+  const url = new URL("camera.html?v=89-v80&cam=" + code, location.href).href;
   const box = document.createElement("div");
   box.id = "camlink";
   box.style.cssText = "position:fixed;inset:0;z-index:50;display:grid;place-items:center;text-align:center;background:rgba(10,14,20,.94);color:#fff;font:16px/1.4 system-ui,sans-serif";

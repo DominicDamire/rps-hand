@@ -1,20 +1,20 @@
-import {RenderClock} from './render-clock.mjs?v=89';
-import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=89';
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=89';
-import {setupThumbstick} from './thumbstick.mjs?v=89';
+import {RenderClock} from './render-clock.mjs?v=89-v80';
+import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=89-v80';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=89-v80';
+import {setupThumbstick} from './thumbstick.mjs?v=89-v80';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=89';
-import {DustMap} from './map.mjs?v=89';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=89-v80';
+import {DustMap} from './map.mjs?v=89-v80';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=89';
-import {phoneCamera} from './camlink.mjs?v=89';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=89';
-import {makeHandModel,view as handView} from './hand-model.mjs?v=89';
-import {createNet} from './net.mjs?v=89';
-import {setupShooter} from './shooter.mjs?v=89';
-import {setupBody} from './doll-body.mjs?v=89';   // the ball-joint doll; the old skinned avatar is body.mjs, kept for reference
-import {startRemote,shimVideoSize} from './remote.mjs?v=89';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
+import {setupUI} from './ui.mjs?v=89-v80';
+import {phoneCamera} from './camlink.mjs?v=89-v80';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=89-v80';
+import {makeHandModel,view as handView} from './hand-model.mjs?v=89-v80';
+import {createNet} from './net.mjs?v=89-v80';
+import {setupShooter} from './shooter.mjs?v=89-v80';
+import {setupBody} from './doll-body.mjs?v=89-v80';   // the ball-joint doll; the old skinned avatar is body.mjs, kept for reference
+import {startRemote,shimVideoSize} from './remote.mjs?v=89-v80';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
 const $=id=>document.getElementById(id);const CAM=new URLSearchParams(location.search).has('cam');   // ?cam: the phone streams its camera here
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
@@ -72,7 +72,7 @@ async function start(){
    stream=useCam?(stream?.active?stream:await phoneCamera(t=>status(t),takeCam)):await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
    $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
   }
-  worker=phoneLink?phoneLink.handWorker:new Worker(new URL('./tracker.mjs?v=89',import.meta.url),{type:'module'});   // the shim answers 'ready' as soon as the phone speaks
+  worker=phoneLink?phoneLink.handWorker:new Worker(new URL('./tracker.mjs?v=89-v80',import.meta.url),{type:'module'});   // the shim answers 'ready' as soon as the phone speaks
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;{const t=performance.now();hf.n++;if(t-hf.t>=1000){dbg.handFps=Math.round(hf.n*1000/(t-hf.t));hf.n=0;hf.t=t;}}   // Hand tracker rate, shown in the HUD
@@ -106,7 +106,7 @@ async function start(){
       status(active?fingerMode.toUpperCase()+' · '+held.direction:walkReason,active);
     }
   };
-  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:66,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=89',import.meta.url),worker:phoneLink?phoneLink.headWorker:null});window.head=head;head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
+  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:66,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=89-v80',import.meta.url),worker:phoneLink?phoneLink.headWorker:null});window.head=head;head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
  }catch(e){stop();status('Camera not started');$('error').textContent=e.name==='NotAllowedError'?'Camera access was declined. Allow camera access in your browser, then retry.':e.message;}
  finally{$('start').disabled=false;}
 }
