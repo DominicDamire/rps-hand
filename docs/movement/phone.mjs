@@ -3,7 +3,7 @@
 // which is the whole point: the WebRTC video path (camlink.mjs) only completes when both devices can reach each other
 // directly, and every free TURN relay it could fall back on is dead (owner: it worked on one phone, not on his).
 // Extra: the phone does the inference, so the PC only draws, and the link carries about 0.5 KB per hand frame.
-import { connectLink, packHands } from "./link.mjs?v=67";
+import { connectLink, packHands } from "./link.mjs?v=68";
 
 const HFOV = Math.PI / 3;
 
@@ -14,17 +14,19 @@ export async function startPhone(code, video, onStatus = () => {}) {
   try { if (navigator.wakeLock) await navigator.wakeLock.request("screen"); } catch {}
 
   onStatus("connecting to PC " + code + "…");
-  const link = await connectLink(code, { onStatus: t => onStatus(t), subscribe: false });
+  const link = await connectLink(code, { onStatus: t => onStatus(t), subscribeTo: "c",   // only the PC's control topic: subscribing to everything would echo our own frames back
+    onMessage: (kind, payload) => { if (kind !== "c") return; try { const d = JSON.parse(payload.toString()); if (typeof d.body === "number") setBody(!!d.body); } catch {} } });
   onStatus("connected · loading tracking…");
 
-  const wantBody = new URLSearchParams(location.search).get("body") !== "0";
+  let wantBody = new URLSearchParams(location.search).get("body") === "1";   // off until the PC asks: with "head only" there is nothing to drive
   const dbg = window.rpshPhone = { face: null, body: null, get ready() { return ready; }, get fps() { return fps; }, get err() { return err; } };   // diagnostics for the owner's phone
-  const hand = new Worker(new URL("./tracker.mjs?v=67", import.meta.url), { type: "module" });
-  const head = new Worker(new URL("./head-tracker.mjs?v=67", import.meta.url), { type: "module" });
+  const hand = new Worker(new URL("./tracker.mjs?v=68", import.meta.url), { type: "module" });
+  const head = new Worker(new URL("./head-tracker.mjs?v=68", import.meta.url), { type: "module" });
   let bodyW = null;   // started a few seconds later: the hand and the face matter more and three models at once stall a phone
   const ready = { hand: false, head: false, body: false };
   const WIDTHS = [288, 384, 512]; let widthIdx = 0;   // the face detector misses some faces at one size and finds them at another
-  let handBusy = false, headBusy = false, bodyBusy = false, lastVideo = -1, lastHeadVideo = -1, lastBody = -Infinity, turn = "head";
+  const HEAD_EVERY = 100, BODY_EVERY = 260;   // ms between face and body frames; the hand is sent as fast as it comes back
+  let handBusy = false, headBusy = false, bodyBusy = false, lastVideo = -1, lastHeadVideo = -1, lastHeadAt = -Infinity, lastBody = -Infinity;
   let frames = 0, fps = 0, since = performance.now(), sent = 0, err = null, ts = 0, stopped = false;
 
   hand.onerror = e => { err = "hand tracker: " + (e.message || "error"); };
@@ -46,9 +48,12 @@ export async function startPhone(code, video, onStatus = () => {}) {
     link.sendJSON("f", { p: data.pose ? round(data.pose) : null, f: data.found ? 1 : 0, w: data.width });
   };
   hand.postMessage({ type: "init" });
-  if (wantBody) setTimeout(() => {
+  function setBody(on) {
+    wantBody = on;
+    if (!on) { bodyW?.terminate(); bodyW = null; ready.body = false; bodyBusy = false; return; }
+    if (bodyW) return;
     try {
-      bodyW = new Worker(new URL("../body/worker.mjs?v=67", import.meta.url), { type: "module" });
+      bodyW = new Worker(new URL("../body/worker.mjs?v=68", import.meta.url), { type: "module" });
       bodyW.onerror = () => { bodyW = null; };
       bodyW.onmessage = ({ data }) => {
         if (data.type === "ready") { ready.body = true; return; }
@@ -57,7 +62,8 @@ export async function startPhone(code, video, onStatus = () => {}) {
         bodyBusy = false; dbg.body = { found: !!data.pose, at: Math.round(performance.now()) }; link.sendJSON("b", { p: data.pose ? trim(data.pose) : null });
       };
     } catch { bodyW = null; }
-  }, 3000);
+  }
+  if (wantBody) setTimeout(() => setBody(true), 3000);
 
   const round = p => ({ centerX: +p.centerX.toFixed(5), centerY: +p.centerY.toFixed(5), span: +p.span.toFixed(5), yaw: +p.yaw.toFixed(4), pitch: +p.pitch.toFixed(4) });
   const r4 = a => Array.isArray(a) ? a.map(v => +v.toFixed(4)) : a;   // an upperBodyPose sample, small enough to send
@@ -78,18 +84,21 @@ export async function startPhone(code, video, onStatus = () => {}) {
     const now = performance.now();
     if (now - since >= 1000) { fps = Math.round(frames * 1000 / (now - since)); frames = 0; since = now; note(); link.sendJSON("p", { w: video.videoWidth, h: video.videoHeight, fps, hand: ready.hand ? 1 : 0, head: ready.head ? 1 : 0 }); }
     if (!video.videoWidth || document.hidden) return;
-    const handReady = ready.hand && !handBusy && video.currentTime !== lastVideo;
-    const headReady = ready.head && !headBusy && video.currentTime !== lastHeadVideo;
-    if (handBusy || headBusy || bodyBusy) return;           // one inference at a time: two at once starve each other on a phone
-    let job = handReady && headReady ? (turn === "head" ? "hand" : "head") : headReady ? "head" : handReady ? "hand" : null;
-    if (!job && ready.body && bodyW && !bodyBusy && now - lastBody >= 250) job = "body";   // the body gets the gaps, at most 4 per second
-    if (!job) return;
-    turn = job;
+    // All three run side by side. Each worker refuses a new frame while it is busy, so they cannot queue up; the hand is
+    // sent every camera frame it can take, the face and the body at their own intervals. Taking turns made the fast hand
+    // tracker wait for the slow face one and everything crawled.
     try {
-      if (job === "hand") { handBusy = true; lastVideo = video.currentTime; const bitmap = await grab(480); hand.postMessage({ type: "frame", bitmap, time: now }, [bitmap]); }
-      else if (job === "head") { headBusy = true; lastHeadVideo = video.currentTime; const frame = await grab(Math.min(WIDTHS[widthIdx], video.videoWidth)); ts = Math.max(ts + 1, Math.floor(now)); head.postMessage({ frame, ts, hfov: HFOV }, [frame]); }
-      else { bodyBusy = true; lastBody = now; const frame = await grab(Math.min(384, video.videoWidth)); bodyW.postMessage({ frame, ts: now }); }
-    } catch (e) { handBusy = headBusy = false; err = e.message; note(); }
+      if (ready.hand && !handBusy && video.currentTime !== lastVideo) {
+        handBusy = true; lastVideo = video.currentTime; const bitmap = await grab(480); hand.postMessage({ type: "frame", bitmap, time: now }, [bitmap]);
+      }
+      if (ready.head && !headBusy && now - lastHeadAt >= HEAD_EVERY && video.currentTime !== lastHeadVideo) {
+        headBusy = true; lastHeadAt = now; lastHeadVideo = video.currentTime;
+        const frame = await grab(Math.min(WIDTHS[widthIdx], video.videoWidth)); ts = Math.max(ts + 1, Math.floor(now)); head.postMessage({ frame, ts, hfov: HFOV }, [frame]);
+      }
+      if (ready.body && bodyW && !bodyBusy && now - lastBody >= BODY_EVERY) {
+        bodyBusy = true; lastBody = now; const frame = await grab(Math.min(384, video.videoWidth)); bodyW.postMessage({ frame, ts: now });
+      }
+    } catch (e) { handBusy = headBusy = bodyBusy = false; err = e.message; note(); }
   }
   requestAnimationFrame(loop);
   const shut = () => { stopped = true; hand.terminate(); head.terminate(); bodyW?.terminate(); link.close(); };

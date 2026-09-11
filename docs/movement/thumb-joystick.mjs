@@ -28,7 +28,13 @@ export function thumbVector(point,centre){
  return {x:x/r*magnitude,z:z/r*magnitude};
 }
 export class ThumbJoystick {
- constructor(){this.size=.8;this.speed=4.5;this.reset();}
+ // `fistCentre` (for the owner: "when it detects the thumb it puts the centre where my finger cannot reach the
+ // edges, let alone forward"; "make not moving easier, it constantly follows the thumb - when the thumb is in a fist we
+ // stop using it to move"): with it on, a fist is both the stop AND the calibration - the circle jumps to wherever the
+ // thumb is resting, so neutral is exact and every direction, forward included, is the same distance away. Off by
+ // default, which keeps the original rule (the circle is captured once and never moves) and the tests that check it;
+ // the movement page turns it on, and ?fistcentre=0 turns it back off.
+ constructor(){this.size=.8;this.speed=4.5;this.fistCentre=false;this.reset();}
  reset(){this.centre=null;this.palm=null;this.scale=null;this.needsRest=true;this.settling=[];this.seen=-Infinity;this.stop('SHOW FINGER');}
  stop(reason){this.x=this.z=0;this.raw={x:0,z:0};this.candidate=null;this.lastTilt=null;this.reason=reason;}
  receive(sample,time){
@@ -48,10 +54,19 @@ export class ThumbJoystick {
   // First visible finger places the circle, with no timed pose setup.
   if(!this.centre){
    this.centre=[...t];this.scale=sample.scale;
-   if(sample.rest)this.centre[1]-=(sample.tip===8?.7:.35)*this.scale;
+   // The offset puts the circle above a folded finger, which the thumb does not need: its rest position IS the neutral.
+   if(sample.rest&&(sample.tip===8||!this.fistCentre))this.centre[1]-=(sample.tip===8?.7:.35)*this.scale;
    this.needsRest=false;this.stop('READY');return;
   }
-  if(sample.rest){this.needsRest=false;this.stop('FIST REST');return;}
+  if(sample.rest){
+   this.needsRest=false;
+   if(this.fistCentre){   // fist: stop, and put the circle back around the finger where it is now resting
+    this.scale=sample.scale;
+    if(sample.tip===8){this.centre=[t[0],t[1]-.7*this.scale];}else this.centre=[...t];
+    this.stop('FIST REST · CENTRED');return;
+   }
+   this.stop('FIST REST');return;
+  }
   const offset=t.map((v,i)=>(v-this.centre[i])/this.effectiveScale);
   if(this.needsRest){
    if(Math.hypot(...offset)>.20){this.stop('RETURN FINGER TO CENTRE');return;}

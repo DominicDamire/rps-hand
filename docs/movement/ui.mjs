@@ -19,13 +19,14 @@ export function setupUI(){
   box.style.aspectRatio='4/3';$('cam').style.visibility=hands?.length||joystick?.centre?'visible':'hidden';const zoom=box.clientWidth/crop.width;
   for(const el of [$('cam'),canvas]){el.style.width=w*zoom+'px';el.style.height=h*zoom+'px';el.style.left=-crop.x*zoom+'px';el.style.top=-crop.y*zoom+'px';}
   const speed=Math.hypot(joystick?.x||0,joystick?.z||0);
-  $('handZoomState').textContent=!joystick?.centre?(joystick?.reason==='OPEN PALM · RESET'?'Open palm · reset':'Show selected finger'):joystick.active?(speed>1.01?'BOOST ':'MOVE ')+Math.round(speed*100)+'%':joystick.reason==='RETURN FINGER TO CENTRE'?'Finger to green centre':joystick.reason?.includes('TRACKING')||!hands?.length?'Show hand to resume':'Centre / fist = stop';
+  const _r=crop;$('handZoomState').textContent=!joystick?.centre?(joystick?.reason==='OPEN PALM · RESET'?'Open palm · reset':'Show selected finger'):joystick.active?(speed>1.01?'BOOST ':'MOVE ')+Math.round(speed*100)+'%':joystick.reason==='RETURN FINGER TO CENTRE'?'Finger to green centre':joystick.reason?.includes('TRACKING')||!hands?.length?'Show hand to resume':'Centre / fist = stop';
+  return _r;
  };
 
  const edges=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]];
- return {clear(){trail=[];ctx.clearRect(0,0,canvas.width,canvas.height);},camera(on){$('previewNote').hidden=on;this.clear();},draw(hands,w,h,active=false,joystick=null){
+ return {clear(){trail=[];ctx.clearRect(0,0,canvas.width,canvas.height);},camera(on){$('previewNote').hidden=on;this.clear();},draw(hands,w,h,active=false,joystick=null,roles=null){   // roles: {joy, model, head} - which hand does what, drawn on the preview
   if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;$('previewImage').style.aspectRatio=w+'/'+h;}
-  ctx.clearRect(0,0,w,h);if(preview.hidden)return;zoomView(hands,w,h,joystick);
+  ctx.clearRect(0,0,w,h);if(preview.hidden)return;const crop=zoomView(hands,w,h,joystick);
   const tip=joystick?.tip??4;const point=p=>[(1-p.x)*w,p.y*h];
   const now=performance.now();trail=trail.filter(p=>now-p.t<350);if(active&&hands?.length===1)trail.push({xy:point(hands[0][tip]),t:now});else trail=[];
   for(const hand of hands??[]){if(hand.length!==21)continue;
@@ -33,6 +34,27 @@ export function setupUI(){
    for(const [a,b]of edges){ctx.strokeStyle=(tip===8?a>=5&&b<=8:a>=1&&b<=4)?'#ffdf75':'#67ffbb';ctx.beginPath();ctx.moveTo(...point(hand[a]));ctx.lineTo(...point(hand[b]));ctx.stroke();}
    for(let i=0;i<21;i++){ctx.fillStyle=i===tip?'#ffdf75':'#e5fff3';ctx.beginPath();ctx.arc(...point(hand[i]),i===tip?w/65:w/160,0,Math.PI*2);ctx.fill();}
    const [x,y]=point(hand[tip]);ctx.strokeStyle=active?'#ffdf75':'#ffffff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,w/38,0,Math.PI*2);ctx.stroke();
+  }
+  if(roles){   // the other hand (the 3D one) is not in `hands`, so outline it faintly and name both
+   const shown=hands??[];
+   if(roles.model&&roles.model.length===21&&!shown.includes(roles.model)){
+    ctx.lineWidth=Math.max(1.5,w/420);ctx.strokeStyle='#5aa9ffcc';
+    for(const [a,b] of edges){ctx.beginPath();ctx.moveTo(...point(roles.model[a]));ctx.lineTo(...point(roles.model[b]));ctx.stroke();}
+    for(let i=0;i<21;i++){ctx.fillStyle='#5aa9ff';ctx.beginPath();ctx.arc(...point(roles.model[i]),w/260,0,Math.PI*2);ctx.fill();}
+   }
+   // The preview is zoomed into a crop of the camera, so every label is clamped inside that crop or it would be cut off.
+   const size=Math.max(11,Math.round(crop.width/16)),pad=size*0.7;
+   const clampX=(x,half)=>Math.min(crop.x+crop.width-half-pad,Math.max(crop.x+half+pad,x));
+   const clampY=y=>Math.min(crop.y+crop.height-pad,Math.max(crop.y+size+pad,y));
+   const tag=(pts,text,colour)=>{if(!pts||pts.length!==21)return;const [x0,y0]=point(pts[0]);
+    ctx.font='bold '+size+'px system-ui,sans-serif';ctx.textAlign='center';
+    const x=clampX(x0,ctx.measureText(text).width/2),y=clampY(y0+size*1.6);
+    ctx.lineWidth=Math.max(3,size/3);ctx.strokeStyle='rgba(8,12,18,.9)';ctx.strokeText(text,x,y);ctx.fillStyle=colour;ctx.fillText(text,x,y);};
+   tag(roles.joy,'JOYSTICK','#ffdf75');tag(roles.model,'3D HAND','#7cc5ff');
+   const ht=roles.head?'HEAD TRACKED':'HEAD NOT SEEN';
+   ctx.font='bold '+Math.round(size*0.8)+'px system-ui,sans-serif';ctx.textAlign='left';
+   ctx.lineWidth=Math.max(3,size/3);ctx.strokeStyle='rgba(8,12,18,.9)';
+   ctx.strokeText(ht,crop.x+pad,crop.y+size+pad);ctx.fillStyle=roles.head?'#67ffbb':'#94a3b8';ctx.fillText(ht,crop.x+pad,crop.y+size+pad);
   }
   if(joystick)drawThumbJoystick(ctx,hands?.[0],w,h,joystick);
   if(trail.length>1){ctx.strokeStyle='#ffab45';ctx.lineWidth=Math.max(3,w/140);ctx.beginPath();trail.forEach((p,i)=>i?ctx.lineTo(...p.xy):ctx.moveTo(...p.xy));ctx.stroke();}

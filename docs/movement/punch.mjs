@@ -6,7 +6,7 @@
 // through them, so a surface finally stops the hand. Footsteps play while you walk.
 // Only the tracked right hand exists in 3D (the left one is the joystick), so that is the hand that can punch.
 import * as THREE from "three";
-import * as sfx from "./sound.mjs?v=67";
+import * as sfx from "./sound.mjs?v=68";
 import { fingersUp } from "../gun.mjs";
 
 const BAG_R = 0.17, BAG_TOP = 1.75, BAG_BOTTOM = 0.75, BASE_R = 0.33;   // metres above the floor: the top reaches head height, so a punch thrown level lands on it
@@ -35,7 +35,7 @@ export function setupPunch({ scene, camera, handModel, floorY, at, getGun }) {
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _up = new THREE.Vector3(), _push = new THREE.Vector3();
   const _ax = new THREE.Vector3(), _q = new THREE.Quaternion();
   const applied = new THREE.Vector3(), leftAt = new THREE.Vector3(); let pushing = false;   // our own push, taken back each frame so it never accumulates
-  let have = false, speed = 0, touching = false, lastHit = -Infinity, lastWhoosh = -Infinity, walked = 0, lastCam = null, hits = 0;
+  let have = false, speed = 0, touching = false, lastHit = -Infinity, lastWhoosh = -Infinity, walked = 0, lastCam = null, hits = 0, touches = 0;
 
   window.sfx = sfx;   // so a probe (and the owner) can check whether sound is allowed yet
   const wake = () => sfx.ensure();
@@ -43,7 +43,7 @@ export function setupPunch({ scene, camera, handModel, floorY, at, getGun }) {
   addEventListener("keydown", wake, { capture: true });
 
   return {
-    group, get hits() { return hits; }, get swing() { return +lean.length().toFixed(3); },
+    group, get hits() { return hits; }, get touches() { return touches; }, get swing() { return +lean.length().toFixed(3); },
     update(dt, now) {
       dt = Math.min(0.05, Math.max(0.0005, dt));
       // --- the bag swings back to upright -------------------------------------------------------------------------
@@ -86,9 +86,9 @@ export function setupPunch({ scene, camera, handModel, floorY, at, getGun }) {
           touching = true; lastHit = now;
           if (into > HIT_SPEED || (closed && speed > HIT_SPEED)) {
             const power = Math.min(1, Math.max(into, speed) / 3.5);
-            sfx.punch(closed ? power : power * 0.5); hits++;
+            sfx.punch(closed ? power : power * 0.5); hits++; touches++;
             vel.x -= _push.x * (closed ? 5.5 : 2.4) * power; vel.y -= _push.z * (closed ? 5.5 : 2.4) * power;
-          } else sfx.tap(0.35);
+          } else { touches++; sfx.tap(0.35); }
         }
         applied.addScaledVector(_push, -gap);   // the hand stops at the surface instead of sinking in
       } else {

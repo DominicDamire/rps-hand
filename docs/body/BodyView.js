@@ -36,15 +36,19 @@ export class BodyView {
   }
   wantsFrame(now){
     const nearEdge=this.pose.partial||this.pose.evidence?.length>0;
-    const interval=this.misses>=3&&!nearEdge?250:Math.max(this.latency,this.head.performance.latency)>65?125:66;
+    // rps-hand: the arms do not need 15 samples a second, and the hand tracker does need the GPU, so the base
+    // interval is 150 ms (about 6 a second) instead of 66 ms.
+    const interval=this.misses>=3&&!nearEdge?320:Math.max(this.latency,this.head.performance.latency)>65?220:150;
+    // rps-hand: the "two finished face frames earn one body frame" rule and the head.busy check below made all
+    // three trackers queue behind each other. They are separate workers, so each one now just keeps its own interval.
     return this.enabled&&this.head.mode!=='off'&&!document.hidden&&this.ready&&!this.busy&&!this.failed&&
-      this.head.completedFrames-this.lastFaceCount>=2&&now-this.lastCapture>=interval&&
+      now-this.lastCapture>=interval&&
       this.video.readyState>=2&&this.video.currentTime!==this.lastVideo;
   }
   async capture(now){
     // Two completed face frames earn one body frame. Serial inference prevents
     // GPU competition, while this turn-taking prevents body starvation on CPU.
-    if(!this.wantsFrame(now)||this.head.busy)return;
+    if(!this.wantsFrame(now))return;
     this.busy=true;this.lastCapture=now;this.lastVideo=this.video.currentTime;
     this.lastFaceCount=this.head.completedFrames;
     const generation=this.generation;

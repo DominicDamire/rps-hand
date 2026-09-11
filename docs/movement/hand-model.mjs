@@ -337,7 +337,10 @@ function makeRigSkin(variant, color) {
 // group sits at (0, -height, -dist) in the eye's frame, turned half a turn about the vertical axis. A proper rotation,
 // so the right hand stays a right hand and appears on the right.
 // Joint depths come from the world model + one translation (locate, as the main page); the picture fixes x/y exactly.
-export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5, eye: null, reach: 1.7 };   // reach: the hand's distance from the eye is multiplied by this (the shape is not stretched, the whole hand moves), so a
+export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5, eye: null, reach: 1.7, drop: 9 };
+// drop: degrees the whole hand is swung DOWN about the eye, so it rests low in the frame the way a shooter's viewmodel
+// does instead of sitting in the middle of the screen (owner sent CS:GO screenshots: "that is how much view the hand
+// should take"). It is an angle, not a distance, so the hand keeps the same place in the frame however far out it is.   // reach: the hand's distance from the eye is multiplied by this (the shape is not stretched, the whole hand moves), so a
 // comfortable half-extended arm reaches the table 0.55 m away - without it the hand could never get further from the eye
 // than the eye-to-phone distance (0.6 m) and the gun on the table was out of reach (owner: "the hand just would not extend")   // sliders write here; eye = [x, y up, distance] of the tracked eye behind the phone (phone frame, metres), set by the app when the head is seen
 // The eye is FIXED (the slider distance, or the tracked head): a hand brought toward the face comes close to the eye and
@@ -399,7 +402,9 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
       let tx = (g - 1) * (ex - _c.x), ty = (g - 1) * (_c.y - ey), tz = (g - 1) * (-_c.z - D);
       let zMax = -Infinity; for (const p of pts) zMax = Math.max(zMax, -p.z - D + tz);   // the nearest point's depth in the eye's frame (forward is negative)
       if (zMax > -MIN_AHEAD) tz -= zMax + MIN_AHEAD;
-      offset[0] = ey - ty; offset[1] = D - tz; group.position.set(ex + tx, -ey + ty, -D + tz);
+      let py = -ey + ty, pz = -D + tz;
+      if (view.drop) { const a = -view.drop * Math.PI / 180, c = Math.cos(a), sn = Math.sin(a), y2 = py * c - pz * sn; pz = py * sn + pz * c; py = y2; }
+      offset[0] = -py; offset[1] = -pz; group.position.set(ex + tx, py, pz);
       window.dbg = Object.assign(window.dbg || {}, { model: pts, offset }); drive();
     },
     setPoints(flat, o) {   // from the network: 63 numbers in the other player's phone frame + their [height, dist]

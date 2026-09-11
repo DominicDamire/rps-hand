@@ -36,7 +36,7 @@ function loadMqtt() {
 // heard the other. The sender publishes on all of them; the receiver follows whichever one delivered last and ignores the
 // copies, so a broker that goes quiet costs at most 1.5 s.
 // onMessage(kind, payload): kind is the last topic segment ("h" hands, "f" face, "b" body, "p" phone status).
-export async function connectLink(code, { onMessage = () => {}, onStatus = () => {}, subscribe = true } = {}) {
+export async function connectLink(code, { onMessage = () => {}, onStatus = () => {}, subscribe = true, subscribeTo = "#" } = {}) {
   const mqtt = await loadMqtt();
   const base = "rpsh1/" + code;
   const clients = new Array(BROKERS.length).fill(null);
@@ -48,7 +48,7 @@ export async function connectLink(code, { onMessage = () => {}, onStatus = () =>
     let c;
     try { c = mqtt.connect(url, { connectTimeout: 8000, keepalive: 20, reconnectPeriod: 3000, clean: true, clientId: "rpsh_" + Math.random().toString(36).slice(2, 10) }); }
     catch { return finish(); }
-    c.on("connect", () => { if (subscribe) c.subscribe(base + "/#", { qos: 0 }); clients[i] = c; finish(); });
+    c.on("connect", () => { if (subscribe || subscribeTo !== "#") c.subscribe(base + "/" + subscribeTo, { qos: 0 }); clients[i] = c; finish(); });   // the phone takes only "c", the PC's control topic: subscribing to everything would echo its own frames back
     c.on("message", (topic, payload) => {
       if (dead) return;
       const now = performance.now();

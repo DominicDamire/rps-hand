@@ -6,16 +6,18 @@
 import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
 import { makeGun, fingersUp } from "../gun.mjs";
-import { setupPunch } from "./punch.mjs?v=67";
-import * as sfx from "./sound.mjs?v=67";
+import { setupPunch } from "./punch.mjs?v=68";
+import * as sfx from "./sound.mjs?v=68";
 
 const TABLE_H = 1.32;   // table top above the floor: the tracked hand sits at chest height in front of the eye (1.65 m)
+// ?mirror=N refreshes the reflection every Nth frame it is on screen (default 3, 1 = every frame)
 const TABLE_AHEAD = 0.55;   // in front of the spawn. With the eye at 1.65 m the gun is then 0.65 m away, inside the reach of a
 // half-extended arm (hand-model.mjs `reach`); at the old 0.75 m it was 0.83 m away and could not be grabbed at all.
 
 export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
   const Q = new URLSearchParams(location.search);
   if (Q.get("gun") === "0") return null;
+  const MIRROR_EVERY = Math.max(1, +Q.get("mirror") || 3);
   let gun = null, mirror = null, error = null, bag = null, wasMode = "rest";
   if (!hud) { const d = document.createElement("div"); d.id = "gunHud"; d.style.cssText = "position:fixed;top:64px;left:50%;transform:translateX(-50%);padding:6px 12px;background:#101b25cc;border-radius:8px;font:12px monospace;color:#ffdf75;pointer-events:none;z-index:5"; document.body.appendChild(d); hud = t => { d.textContent = t; }; }
   // (the player's body used to be a capsule here; body.mjs now draws the tracked upper-body rig)
@@ -29,9 +31,26 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
       place: { pos: new THREE.Vector3(spawn.x, tableFloor + TABLE_H, tableZ), yaw: 0 }, hold: Q.has("grab") });
     bag = setupPunch({ scene, camera, handModel, floorY: tableFloor, at: new THREE.Vector3(spawn.x + 0.85, 0, spawn.z - 0.15), getGun: () => gun });   // a heavy bag beside the table, within arm's reach
     const mw = 8, mh = 4;   // a wall-sized mirror (owner: "much bigger, like 15 times" - about 15x the old 1.1 x 2.0 m area), 6.4 m to the front-left, facing the spawn: the whole body fits with room to walk
-    mirror = new Reflector(new THREE.PlaneGeometry(mw, mh), { clipBias: 0.003, textureWidth: 1024, textureHeight: 512, color: 0xb8c4cc });
+    mirror = new Reflector(new THREE.PlaneGeometry(mw, mh), { clipBias: 0.003, textureWidth: 512, textureHeight: 256, color: 0xb8c4cc, multisample: 0 });
     const mx = spawn.x - 4.5, mz = spawn.z - 4.5, mfloor = dustMap.floor(mx, mz, floor + 1) ?? floor;   // measured (probe_map.py): flat floor there, nearest wall 19 m away, no ceiling
     mirror.position.set(mx, mfloor + mh / 2, mz); mirror.lookAt(spawn.x, mfloor + mh / 2, spawn.z); scene.add(mirror);
+    // A mirror draws the WHOLE map a second time, every frame, and Dust II is not small: at full rate it cost 25 page fps
+    // and dragged the trackers down with it (hand 12 fps, face inference 89 ms) because they share the GPU. Measured with
+    // it hidden: 289 page fps, hand 28, face 22 ms. So: refresh the reflection only when the mirror is actually on screen,
+    // and then every third frame. A reflection three frames old is invisible to the eye; the frame rate is not.
+    {
+      const original = mirror.onBeforeRender, sphere = new THREE.Sphere(mirror.position.clone(), Math.hypot(mw, mh) / 2);
+      const frustum = new THREE.Frustum(), _m4 = new THREE.Matrix4();
+      let tick = 0;
+      mirror.onBeforeRender = function (renderer, sc, cam) {
+        _m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); frustum.setFromProjectionMatrix(_m4);
+        if (!frustum.intersectsSphere(sphere)) return;   // behind you: keep the texture we already have
+        const d = cam.position.distanceTo(mirror.position);
+        const every = MIRROR_EVERY * (d < 3 ? 1 : d < 6 ? 2 : 4);   // across the room a stale reflection is invisible anyway
+        if (tick++ % every) return;
+        original.call(this, renderer, sc, cam);
+      };
+    }
     const frame = new THREE.Mesh(new THREE.BoxGeometry(mw + 0.3, mh + 0.3, 0.08), new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.6 }));   // a 15 cm border: visible from 6 m
     frame.position.copy(mirror.position); frame.quaternion.copy(mirror.quaternion); frame.translateZ(-0.045); scene.add(frame);
   }
