@@ -15,6 +15,7 @@ export const HEAD_LAYER = 1;   // the head parts live here so a first-person cam
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4();
 const _lp = new THREE.Vector3(), _lp2 = new THREE.Vector3(), _qy = new THREE.Quaternion(), _eye = new THREE.Vector3();
+const _s = new THREE.Vector3(), _elbow = new THREE.Vector3(), _end = new THREE.Vector3(), _rU = new THREE.Vector3(), _rL = new THREE.Vector3(), _dir = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0);
 const ID = new THREE.Quaternion();
 
@@ -68,8 +69,13 @@ export class DollRig {
     const o = this.joints[name]; if (!o) return;
     o.parent.getWorldQuaternion(_q2).invert();
     o.quaternion.copy(_q2.multiply(q));
-    o.updateMatrixWorld(true);
+    // Refresh this one node only. updateMatrixWorld(true) walked the whole subtree every time, and with ~25 joints set
+    // a frame that was tens of thousands of matrix updates a second on the main thread, which the trackers pay for.
+    // Callers that need a child's world position after this use refresh(); the renderer updates the tree once a frame.
+    o.updateMatrix(); o.matrixWorld.multiplyMatrices(o.parent.matrixWorld, o.matrix);
   }
+  /** make one node's matrixWorld current from its (current) parent, without touching anything else */
+  refresh(o) { o.updateMatrix(); o.matrixWorld.multiplyMatrices(o.parent.matrixWorld, o.matrix); return o; }
   reset() {
     for (const [n, o] of Object.entries(this.joints)) o.quaternion.copy(this.rest[n].localQ);
     this.root.updateMatrixWorld(true);
@@ -86,13 +92,13 @@ export class DollRig {
   reach(upper, lower, tip, target, hint) {
     const U = this.joints[upper], L = this.joints[lower], T = this.joints[tip];
     if (!U || !L || !T) return;
-    this.root.updateMatrixWorld(true);
-    const s = U.getWorldPosition(new THREE.Vector3());
+    this.refresh(U); this.refresh(L); this.refresh(T);   // the chain is current relative to whatever moved above it
+    const s = _s.setFromMatrixPosition(U.matrixWorld);
     // Measured live, not from the rest positions in the report: a scale on any of these nodes (the arms carry one, to
     // make up the doll's short reach) changes the real segment lengths, and solving with the unscaled ones made the
     // hand overshoot by up to 4.7 cm, by a different amount at every distance.
-    const l1 = L.getWorldPosition(_lp).distanceTo(s);
-    const l2 = T.getWorldPosition(_lp2).distanceTo(L.getWorldPosition(_lp));
+    const l1 = _lp.setFromMatrixPosition(L.matrixWorld).distanceTo(s);
+    const l2 = _lp2.setFromMatrixPosition(T.matrixWorld).distanceTo(_lp);
     _v.copy(target).sub(s);
     const d = Math.min(l1 + l2 - 1e-4, Math.max(Math.abs(l1 - l2) + 1e-4, _v.length()));
     if (d < 1e-5) return;
@@ -106,26 +112,24 @@ export class DollRig {
     const off = Math.sqrt(Math.max(0, l1 * l1 - along * along));
     // these must be their own vectors: aim() uses the shared temporaries, and borrowing _a/_b here quietly destroyed
     // the elbow and the end point on the first call, which is why the hand never arrived at the target.
-    const elbow = new THREE.Vector3().copy(s).addScaledVector(_v, along).addScaledVector(_n, off);
-    const end = new THREE.Vector3().copy(s).addScaledVector(_v, d);
+    // own scratch, never the _a/_b that aim() writes to (that aliasing once made the arm miss by 39 cm)
+    _elbow.copy(s).addScaledVector(_v, along).addScaledVector(_n, off);
+    _end.copy(s).addScaledVector(_v, d);
     // Every joint's rest world rotation is identity (the tree is built from pure translations), so pointing a segment
     // is just the rotation that takes its rest direction to the wanted one; setWorldQuat turns that into a local one.
-    const rU = new THREE.Vector3().copy(this.rest[lower].world).sub(this.rest[upper].world).normalize();
-    const rL = new THREE.Vector3().copy(this.rest[tip].world).sub(this.rest[lower].world).normalize();
-    this.aim(upper, rU, new THREE.Vector3().copy(elbow).sub(s));
-    this.joints[upper].updateMatrixWorld(true);
-    const lw = L.getWorldPosition(new THREE.Vector3());
-    this.aim(lower, rL, new THREE.Vector3().copy(end).sub(lw));
+    _rU.copy(this.rest[lower].world).sub(this.rest[upper].world).normalize();
+    _rL.copy(this.rest[tip].world).sub(this.rest[lower].world).normalize();
+    this.aim(upper, _rU, _dir.copy(_elbow).sub(s));
+    this.refresh(L);                                                     // the elbow moved with the upper arm
+    this.aim(lower, _rL, _dir.copy(_end).setFromMatrixPosition(L.matrixWorld).negate().add(_end));
   }
 
   /** put the doll's eyes at `pos`, facing `yaw` (radians, 0 = -Z) */
   placeEyes(pos, yaw = 0) {
-    this.root.quaternion.setFromAxisAngle(_v.set(0, 1, 0), yaw);
-    this.root.position.set(0, 0, 0);
-    this.root.updateMatrixWorld(true);
+    this.root.quaternion.setFromAxisAngle(UP, yaw);
     const eyeNow = _v2.copy(this.eye).applyQuaternion(this.root.quaternion);
     this.root.position.copy(pos).sub(eyeNow);
-    this.root.updateMatrixWorld(true);
+    this.root.updateMatrixWorld(true);   // once: everything below is posed against this
   }
 
   /** head and neck from the tracked physical angles (radians), on top of the body's heading */
@@ -142,10 +146,11 @@ export class DollRig {
   /** nudge the root so the eyes sit exactly on `pos` after everything else has been posed */
   pinEyes(pos) {
     if (!this.eyeInHead) return;
-    this.root.updateMatrixWorld(true);
-    _eye.copy(this.eyeInHead); this.joints.Head.localToWorld(_eye);
+    // the spine chain is what moved: Root -> Hips -> Waist -> Chest -> Neck -> Head
+    for (const n of ["Hips", "Waist", "Chest", "Neck", "Head"]) this.refresh(this.joints[n]);
+    _eye.copy(this.eyeInHead).applyMatrix4(this.joints.Head.matrixWorld);
     this.root.position.add(_a.copy(pos).sub(_eye));
-    this.root.updateMatrixWorld(true);
+    this.root.updateMatrix(); this.root.matrixWorld.multiplyMatrices(this.root.parent.matrixWorld, this.root.matrix);
   }
 
   dispose() { this.root.parent?.remove(this.root); }

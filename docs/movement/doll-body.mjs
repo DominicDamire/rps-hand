@@ -13,9 +13,9 @@
 // targets are taken as directions from the shoulder and the IK clamps the distance; the arm points the right way even
 // when a real arm would be longer.
 import * as THREE from "three";
-import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=74";
-import { BodyView } from "../body/BodyView.js?v=74";
-import { BodyPose } from "../body/pose.mjs?v=74";
+import { DollRig, HEAD_LAYER } from "../doll/DollRig.js?v=75";
+import { BodyView } from "../body/BodyView.js?v=75";
+import { BodyPose } from "../body/pose.mjs?v=75";
 
 const STEP = 0.42;          // metres of travel before the trailing foot swings through
 const STEP_TIME = 0.28;     // seconds a step takes
@@ -127,11 +127,11 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
         if (!neutral) neutral = _v.clone();
         lean.lerp(_t.set(_v.x - neutral.x, _v.y - neutral.y, _v.z - neutral.z), Math.min(1, dt * 8));
       }
-      for (const [name, k] of [["Waist", 0.5], ["Chest", 0.5]]) {
+      for (const [name, k] of LEAN_JOINTS) {
         const j = rig.joints[name]; if (!j) continue;
         j.rotation.z = THREE.MathUtils.clamp(-lean.x * 1.6, -0.35, 0.35) * k;      // sway sideways
         j.rotation.x = THREE.MathUtils.clamp(-lean.y * 1.6, -0.35, 0.35) * k;      // lean forward and back
-        j.updateMatrixWorld(true);
+        rig.refresh(j);
       }
 
       // --- body from the pose tracker ---------------------------------------------------------------------------
@@ -147,7 +147,10 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
         _w.copy(src[0]).applyMatrix4(handModel.group.matrixWorld);
         const S = handModel.right ? "R" : "L";
         _e.copy(_w).add(_v.set(handModel.right ? 0.22 : -0.22, -0.2, 0.12).applyAxisAngle(UP, heading));
+        // the arm sits under the chest, which the lean just moved: bring the chain up to date first
+        for (const n of ["Hips", "Waist", "Chest", `${S}Clavicle`]) rig.refresh(rig.joints[n]);
         rig.reach(`${S}UpperArm`, `${S}Forearm`, `${S}Hand`, _w, _e);
+        rig.refresh(rig.joints[`${S}Hand`]);
         fitHand(rig, S, src, handModel.group.matrixWorld);
         setPalm(rig, S, src, handModel.group.matrixWorld);
         setFingers(rig, S, src, handModel.group.matrixWorld);
@@ -158,12 +161,14 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
         if (!wj || !ej) continue;
         _w.fromArray(wj).applyAxisAngle(UP, heading).add(camera.position);
         _e.fromArray(ej).applyAxisAngle(UP, heading).add(camera.position);
+        for (const n of ["Hips", "Waist", "Chest", `${S}Clavicle`]) rig.refresh(rig.joints[n]);
         rig.reach(`${S}UpperArm`, `${S}Forearm`, `${S}Hand`, _w, _e);
       }
 
       // --- legs -------------------------------------------------------------------------------------------------
       if (mode !== "head") legs(dt, camera.position);
       rig.pinEyes(camera.position);   // after the lean, the head and the arms have moved things
+      rig.root.updateMatrixWorld(true);   // the one full tree update this frame
       if (shownMode !== mode) {   // "head only" hides the body; the head itself is always on its own layer, so a
         shownMode = mode;         // first-person camera never sees it from the inside while the mirror still does
         for (const m of rig.parts) {
@@ -177,7 +182,9 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
+const LEAN_JOINTS = [["Waist", 0.5], ["Chest", 0.5]];
 const FINGERS = [["Thumb", 1, 2, 3, 4], ["Index", 5, 6, 7, 8], ["Middle", 9, 10, 11, 12], ["Ring", 13, 14, 15, 16], ["Pinky", 17, 18, 19, 20]];
+const FI = [[0, 1], [1, 2], [2, 3]];   // which two of (a, b, c, d) each phalanx runs between, hoisted out of the frame loop
 const _p1 = new THREE.Vector3(), _p2 = new THREE.Vector3(), _p3 = new THREE.Vector3(), _d1 = new THREE.Vector3(), _d2 = new THREE.Vector3(), _v2 = new THREE.Vector3();
 // --- the palm ---------------------------------------------------------------------------------------------------
 // The IK only decides where the wrist is. Without this the hand keeps whatever twist the forearm happened to end with,
@@ -203,6 +210,7 @@ function fitHand(rig, S, pts, mat) {
   _p1.copy(pts[0]).applyMatrix4(mat); _p2.copy(pts[9]).applyMatrix4(mat); _p3.copy(pts[12]).applyMatrix4(mat);
   const real = _p1.distanceTo(_p2) + _p2.distanceTo(_p3);
   // measured live, so any scale already applied to the arm is included
+  rig.root.updateMatrixWorld(true);   // once, the first time only
   const P = n => rig.joints[n].getWorldPosition(new THREE.Vector3());
   const h = P(`${S}Hand`), m1 = P(`${S}Middle1`), m3 = P(`${S}Middle3`);
   const mine = h.distanceTo(m1) + m1.distanceTo(m3);
@@ -226,6 +234,7 @@ function setPalm(rig, S, pts, mat) {
   _mB.multiplyMatrices(_mA, restInv);
   _qh.setFromRotationMatrix(_mB);
   rig.setWorldQuat(`${S}Hand`, _qh);
+  rig.refresh(rig.joints[`${S}Hand`]);
 }
 
 
@@ -244,9 +253,10 @@ function fingerRest(rig, S, name, k) {
 function setFingers(rig, S, pts, mat) {
   for (const [name, a, b, c, d] of FINGERS) {
     for (let k = 1; k <= 3; k++) {
-      if (!rig.joints[`${S}${name}${k}`]) continue;
-      const i0 = [a, b, c][k - 1], i1 = [b, c, d][k - 1];
-      _p1.copy(pts[i0]).applyMatrix4(mat); _p2.copy(pts[i1]).applyMatrix4(mat);
+      const j = rig.joints[`${S}${name}${k}`]; if (!j) continue;
+      rig.refresh(j);   // its parent (the hand, or the phalanx before) has just been turned
+      const i0 = FI[k - 1][0], i1 = FI[k - 1][1];
+      _p1.copy(pts[i0 === 0 ? a : i0 === 1 ? b : c]).applyMatrix4(mat); _p2.copy(pts[i1 === 1 ? b : i1 === 2 ? c : d]).applyMatrix4(mat);
       _d1.subVectors(_p2, _p1);
       const rest = fingerRest(rig, S, name, k);
       if (!rest || _d1.lengthSq() < 1e-8) continue;

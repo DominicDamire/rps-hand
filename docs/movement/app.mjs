@@ -1,19 +1,19 @@
-import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=74';
-import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=74';
-import {setupThumbstick} from './thumbstick.mjs?v=74';
+import {TrackingScheduler,freshHead} from './tracking-scheduler.mjs?v=75';
+import {ThumbJoystick,measureThumb} from './thumb-joystick.mjs?v=75';
+import {setupThumbstick} from './thumbstick.mjs?v=75';
 
-import {HeadLook,bodyDisplacement} from './head-look.mjs?v=74';
-import {DustMap} from './map.mjs?v=74';
+import {HeadLook,bodyDisplacement} from './head-look.mjs?v=75';
+import {DustMap} from './map.mjs?v=75';
 import {HeadView} from '../head/HeadView.js';
 import * as THREE from 'three';
-import {setupUI} from './ui.mjs?v=74';
-import {phoneCamera} from './camlink.mjs?v=74';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
-import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=74';
-import {makeHandModel,view as handView} from './hand-model.mjs?v=74';
-import {createNet} from './net.mjs?v=74';
-import {setupShooter} from './shooter.mjs?v=74';
-import {setupBody} from './doll-body.mjs?v=74';   // the ball-joint doll; the old skinned avatar is body.mjs, kept for reference
-import {startRemote,shimVideoSize} from './remote.mjs?v=74';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
+import {setupUI} from './ui.mjs?v=75';
+import {phoneCamera} from './camlink.mjs?v=75';   // ?cam: the phone streams its camera to this page over WebRTC and the tracker runs here
+import {SwipeController,measurePointer,selectLeftHand} from './swipe.mjs?v=75';
+import {makeHandModel,view as handView} from './hand-model.mjs?v=75';
+import {createNet} from './net.mjs?v=75';
+import {setupShooter} from './shooter.mjs?v=75';
+import {setupBody} from './doll-body.mjs?v=75';   // the ball-joint doll; the old skinned avatar is body.mjs, kept for reference
+import {startRemote,shimVideoSize} from './remote.mjs?v=75';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
 const $=id=>document.getElementById(id);const CAM=new URLSearchParams(location.search).has('cam');   // ?cam: the phone streams its camera here
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
@@ -44,7 +44,7 @@ scene.background=new THREE.Color('#abc9d9');scene.fog=new THREE.Fog('#abc9d9',90
 const dustMap=new DustMap(scene);const shooter=setupShooter({scene,camera,dustMap,handModel});window.shooter=shooter;window.dustMap=dustMap;const bodyRig=setupBody({scene,camera,handModel,video:$('cam'),getRemote:()=>phoneLink});window.bodyRig=bodyRig;window.headLook=headLook;
 dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · auto-step on';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
 function resize(){renderer.setPixelRatio(Math.min(1,Math.sqrt(900000/(innerWidth*innerHeight))));renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();handView.aspect=camera.aspect;}addEventListener('resize',resize);resize();
-let head=null,lastHeadVideo=-1,lastFrameTime=0,lastHUD=-Infinity,phoneLink=null;const hf={n:0,t:performance.now()},dbg=window.dbg=window.dbg||{};let headSeen=false;const LABELS=new URLSearchParams(location.search).get('labels')==='1';
+let head=null,lastHeadVideo=-1,lastFrameTime=0,lastHUD=-Infinity,phoneLink=null;const hf={n:0,t:performance.now()},dbg=window.dbg=window.dbg||{};let headSeen=false;const walkF={x:0,z:0};const LABELS=new URLSearchParams(location.search).get('labels')==='1';
 let walkReason='START CAMERA';
 let worker=null,stream=null,running=false,busy=false,lastVideo=-1,lastResult=0,demo=false,demoRun=null;
 function status(text,active=false){$('status').textContent=text;$('lamp').classList.toggle('on',active);}
@@ -64,7 +64,7 @@ async function start(){
    stream=useCam?(stream?.active?stream:await phoneCamera(t=>status(t),takeCam)):await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},frameRate:{ideal:60}}});
    $('cam').srcObject=stream;await $('cam').play();trackingUI.camera(true);$('previewImage').style.aspectRatio=$('cam').videoWidth+'/'+$('cam').videoHeight;status('Loading motion tracking…');
   }
-  worker=phoneLink?phoneLink.handWorker:new Worker(new URL('./tracker.mjs?v=74',import.meta.url),{type:'module'});   // the shim answers 'ready' as soon as the phone speaks
+  worker=phoneLink?phoneLink.handWorker:new Worker(new URL('./tracker.mjs?v=75',import.meta.url),{type:'module'});   // the shim answers 'ready' as soon as the phone speaks
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out. Check your connection and retry.')),45000);worker.onerror=e=>{clearTimeout(timer);reject(Error(e.message));};worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();}else if(data.type==='error'){clearTimeout(timer);reject(Error(data.message));}};worker.postMessage({type:'init'});});
   worker.onerror=e=>{stop();status('Tracking stopped');$('error').textContent=e.message;};
   worker.onmessage=({data})=>{busy=false;{const t=performance.now();hf.n++;if(t-hf.t>=1000){dbg.handFps=Math.round(hf.n*1000/(t-hf.t));hf.n=0;hf.t=t;}}   // hand tracker rate, shown in the HUDif(data.type==='error'){stop();status('Tracking stopped');$('error').textContent=data.message;return;}if(data.type!=='result')return;
@@ -94,7 +94,7 @@ async function start(){
       status(active?fingerMode.toUpperCase()+' · '+held.direction:walkReason,active);
     }
   };
-  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:66,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=74',import.meta.url),worker:phoneLink?phoneLink.headWorker:null});window.head=head;head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
+  head=new HeadView({mode:$('headEnabled').checked?'first':'off',interval:66,widths:[288,384,512],workerUrl:new URL('./head-tracker.mjs?v=75',import.meta.url),worker:phoneLink?phoneLink.headWorker:null});window.head=head;head.pose.sensitivity=1.5;headLook.gain=+$('headGain').value;lastHeadVideo=-1;lastVideo=-1;running=true;lastResult=performance.now();$('start').textContent='Stop camera';status('Left hand: joystick · right hand: model');
  }catch(e){stop();status('Camera not started');$('error').textContent=e.name==='NotAllowedError'?'Camera access was declined. Allow camera access in your browser, then retry.':e.message;}
  finally{$('start').disabled=false;}
 }
@@ -139,7 +139,12 @@ function frame(now){
  if(demo&&demoRun&&!resting){const elapsed=now-demoRun.start,t=Math.max(0,Math.min(1,(elapsed-180)/180));const d=demoRun.direction;apply({x:.5+(d.includes('right')?.25:d.includes('left')?-.25:0)*t,z:.5+(d.includes('forward')?-.18:d.includes('backward')?.18:0)*t,pinch:.8,extended:true,pointing:true},now);if(elapsed>1050){demoRun=null;apply(null,now);status('Demo complete · choose another movement');}}
  if(inputMode==='touch'&&!document.hidden&&!demo&&!resting){const v=stick.vector,step=bodyDisplacement(v.x*held.speed*Math.min(.05,dt),v.z*held.speed*Math.min(.05,dt),headLook.heading);dustMap.move(camera.position,step.x,step.z);const moving=Math.hypot(v.x,v.z)>.001;status(moving?'WALKING · release to stop':'Thumbstick ready · drag to walk',moving);$('gestureStats').textContent=moving?'Walking '+Math.round(Math.hypot(v.x,v.z)*100)+'%':'Stopped';}
  if(running&&!resting){
-  const movement=held.step(now,dt),world=bodyDisplacement(movement.dx,movement.dz,headLook.heading),beforeX=camera.position.x,beforeZ=camera.position.z;dustMap.move(camera.position,world.x,world.z);if(held.direction){walkReason=!dustMap.ready?'MAP LOADING':Math.hypot(camera.position.x-beforeX,camera.position.z-beforeZ)<.00001?'BLOCKED BY MAP':'MOVING';}
+  const movement=held.step(now,dt);
+  // the joystick's own
+  // output jumps as the finger jitters. A 120 ms low-pass on the walking vector removes that without adding lag you
+  // can feel, and the default gain slider starts lower.
+  {const k=1-Math.exp(-Math.min(.1,dt)/.12);walkF.x+=(movement.dx-walkF.x)*k;walkF.z+=(movement.dz-walkF.z)*k;if(!held.direction&&Math.hypot(walkF.x,walkF.z)<1e-4){walkF.x=walkF.z=0;}}
+  const world=bodyDisplacement(walkF.x,walkF.z,headLook.heading),beforeX=camera.position.x,beforeZ=camera.position.z;dustMap.move(camera.position,world.x,world.z);if(held.direction){walkReason=!dustMap.ready?'MAP LOADING':Math.hypot(camera.position.x-beforeX,camera.position.z-beforeZ)<.00001?'BLOCKED BY MAP':'MOVING';}
   if(inputMode!=='touch'&&now-lastResult>450){held.receive(null,now);swipe.update(null,now);trackingUI.draw([],$('cam').videoWidth,$('cam').videoHeight,false,{tip:fingerMode==='index'?8:4,centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,reason:held.reason});handModel.hide();walkReason='WAITING FOR TRACKING';status(walkReason);}
   if(!phoneLink){const v=$('cam');   // with the phone tracking there is nothing to capture here; results arrive over the link
   // the two trackers live in separate workers and each already refuses a second frame while it is busy, so they

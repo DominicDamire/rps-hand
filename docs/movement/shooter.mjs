@@ -6,18 +6,23 @@
 import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
 import { makeGun, fingersUp } from "../gun.mjs";
-import { setupPunch } from "./punch.mjs?v=74";
-import * as sfx from "./sound.mjs?v=74";
+import { setupPunch } from "./punch.mjs?v=75";
+import * as sfx from "./sound.mjs?v=75";
 
 const TABLE_H = 1.32;   // table top above the floor: the tracked hand sits at chest height in front of the eye (1.65 m)
 // ?mirror=N refreshes the reflection every Nth frame it is on screen (default 3, 1 = every frame)
 const TABLE_AHEAD = 0.45;   // in front of the spawn. With the eye at 1.65 m the gun is then 0.65 m away, inside the reach of a
 // half-extended arm (hand-model.mjs `reach`); at the old 0.75 m it was 0.83 m away and could not be grabbed at all.
 
+// A phone has a coarse pointer (a finger). Screen size is not a tell: a short desktop window was being taken for one.
+const isPhone = () => !!(window.matchMedia && matchMedia("(pointer: coarse)").matches && navigator.maxTouchPoints > 0);
+
 export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
   const Q = new URLSearchParams(location.search);
   if (Q.get("gun") === "0") return null;
-  const MIRROR_EVERY = Math.max(1, +Q.get("mirror") || 3);
+  // Measured on an RX 6650 XT with the doll in the scene: 1024x512 every frame took the page to 55 fps and the hand
+  // tracker to 12; every second frame 77 fps and 23. Every second frame is not visible; a tracker at 12 fps is.
+  const MIRROR_EVERY = Math.max(1, +Q.get("mirror") || (isPhone() ? 3 : 2));
   let gun = null, mirror = null, error = null, bag = null, wasMode = "rest";
   if (!hud) { const d = document.createElement("div"); d.id = "gunHud"; d.style.cssText = "position:fixed;top:64px;left:50%;transform:translateX(-50%);padding:6px 12px;background:#101b25cc;border-radius:8px;font:12px monospace;color:#ffdf75;pointer-events:none;z-index:5"; document.body.appendChild(d); hud = t => { d.textContent = t; }; }
   // (the player's body used to be a capsule here; body.mjs now draws the tracked upper-body rig)
@@ -31,7 +36,10 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
       place: { pos: new THREE.Vector3(spawn.x, tableFloor + TABLE_H, tableZ), yaw: 0 }, hold: Q.has("grab") });
     bag = setupPunch({ scene, camera, handModel, floorY: tableFloor, at: new THREE.Vector3(spawn.x + 0.85, 0, spawn.z - 0.15), getGun: () => gun });   // a heavy bag beside the table, within arm's reach
     const mw = 8, mh = 4;   // a wall-sized mirror (owner: "much bigger, like 15 times" - about 15x the old 1.1 x 2.0 m area), 6.4 m to the front-left, facing the spawn: the whole body fits with room to walk
-    mirror = new Reflector(new THREE.PlaneGeometry(mw, mh), { clipBias: 0.003, textureWidth: 512, textureHeight: 256, color: 0xb8c4cc, multisample: 0 });
+    // A PC can afford a proper reflection; a phone cannot. ?mirrorpx= overrides the width.
+    const PC = !isPhone();
+    const mpx = +Q.get("mirrorpx") || (PC ? 1024 : 384);
+    mirror = new Reflector(new THREE.PlaneGeometry(mw, mh), { clipBias: 0.003, textureWidth: mpx, textureHeight: mpx / 2, color: 0xc4ccd2, multisample: 0 });
     const mx = spawn.x - 4.5, mz = spawn.z - 4.5, mfloor = dustMap.floor(mx, mz, floor + 1) ?? floor;   // measured (probe_map.py): flat floor there, nearest wall 19 m away, no ceiling
     mirror.position.set(mx, mfloor + mh / 2, mz); mirror.lookAt(spawn.x, mfloor + mh / 2, spawn.z); scene.add(mirror);
     // The player's own head sits on its own layer so the first-person camera does not look at the inside of it. The
@@ -56,6 +64,9 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
     }
     const frame = new THREE.Mesh(new THREE.BoxGeometry(mw + 0.3, mh + 0.3, 0.08), new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 0.6 }));   // a 15 cm border: visible from 6 m
     frame.position.copy(mirror.position); frame.quaternion.copy(mirror.quaternion); frame.translateZ(-0.045); scene.add(frame);
+    // You could walk straight through the glass. The map's collision raycasts against dustMap.meshes, so the frame
+    // (a solid box behind the glass) joins that list and the mirror becomes a wall like any other.
+    frame.updateMatrixWorld(true); dustMap.meshes.push(frame);
   }
   const ready = dustMap.ready ? build() : new Promise(res => { const t = setInterval(() => { if (dustMap.ready) { clearInterval(t); res(build()); } }, 200); });
   ready.catch(e => { error = e; console.warn("shooter unavailable:", e); });
