@@ -1,14 +1,14 @@
-import {drawFace} from './face-overlay.mjs?v=19.2';
+import {drawFace,drawShoulders} from './face-overlay.mjs?v=19.6';
 import * as T from 'three';
 import {GLTFLoader} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js';
 import {cameraUV,cameraPosition} from './projection.mjs';
-import {faceReference,calibratedDepth,eyeCenter,eyeCenters} from './head-depth.mjs?v=19.2';
+import {faceReference,calibratedDepth,eyeCenter,eyeCenters} from './head-depth.mjs?v=19.6';
 const outline=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10];
 export class CombinedHead {
  constructor(scene,options){
   this.options=options;this.group=new T.Group();this.group.name='CombinedBlackHeadAndShoulders';this.group.visible=false;scene.add(this.group);this.bones={};this.rest=new Map();this.face=null;this.pose=null;this.seen=0;this.poseSeen=0;this.depthRef=null;this.neutral=new T.Quaternion();this.smoothed=new T.Quaternion();this.position=null;
   this.ready=new GLTFLoader().loadAsync(new URL('../head-shoulders/alien.glb',import.meta.url).href).then(g=>{
-   this.asset=g.scene;this.group.add(g.scene);g.scene.traverse(o=>{if(o.isBone){const n=o.name.toLowerCase();if(n.includes('eye'))(this.bones.eyes??=[]).push(o);else if(n.includes('head'))this.bones.head=o;else if(n.includes('neck'))this.bones.neck=o;else if(n.includes('root'))this.bones.root=o;}if(o.isMesh){o.frustumCulled=false;for(const mat of Array.isArray(o.material)?o.material:[o.material]){mat.color?.set(0x171b20);mat.roughness=.6;}}});
+   this.asset=g.scene;this.group.add(g.scene);g.scene.traverse(o=>{if(o.isBone){const n=o.name.toLowerCase();if(n.includes('eye'))(this.bones.eyes??=[]).push(o);else if(n.includes('head'))this.bones.head=o;else if(n.includes('neck'))this.bones.neck=o;else if(n.includes('root'))this.bones.root=o;}if(o.isMesh){o.frustumCulled=false;for(const mat of Array.isArray(o.material)?o.material:[o.material]){mat.color?.set(0xcacaca);mat.map=null;mat.roughness=.65;mat.needsUpdate=true;}}});
    scene.updateMatrixWorld(true);for(const b of [this.bones.root,this.bones.neck,this.bones.head,...(this.bones.eyes||[])])if(b)this.rest.set(b,b.getWorldQuaternion(new T.Quaternion()));
    const eyes=this.bones.eyes;if(!this.bones.head||eyes?.length!==2)throw Error('Alien head/eye bones were not found');
    this.restEyeSpan=eyes[0].getWorldPosition(new T.Vector3()).distanceTo(eyes[1].getWorldPosition(new T.Vector3()));this.loaded=true;
@@ -47,6 +47,6 @@ export class CombinedHead {
   const line=(points,color,closed=false)=>{ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.beginPath();points.forEach((p,i)=>ctx[i?'lineTo':'moveTo']((1-p.x)*w,p.y*h));if(closed)ctx.closePath();ctx.stroke();};
   if(this.face&&o.faceRate>0&&performance.now()-this.seen<900){const p=this.face.points;drawFace(ctx,p,w,h);}
 
-  if(this.pose&&o.shoulderRate>0&&performance.now()-this.poseSeen<900){const p=this.pose.points;for(const [a,b] of [[11,12],[11,13],[13,15],[12,14],[14,16]])if(p[a].visibility>.4&&p[b].visibility>.4)line([p[a],p[b]],'#ffd36c');}
+  if(this.pose&&o.shoulderRate>0&&performance.now()-this.poseSeen<900)drawShoulders(ctx,this.pose,this.face,w,h);
  }
 }

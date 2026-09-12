@@ -1,5 +1,5 @@
-import {drawFace,encodeAux,decodeAux} from './face-overlay.mjs?v=19.5';
-import {startTracking,defaults} from './tracking-session.mjs?v=19.5';
+import {drawFace,drawShoulders,encodeAux,decodeAux} from './face-overlay.mjs?v=19.6';
+import {startTracking,defaults} from './tracking-session.mjs?v=19.6';
 // Cross-device link: the phone runs hand tracking and sends landmark numbers.
 // This avoids peer-to-peer video, which commonly fails across NATs and guest Wi-Fi.
 import {connectLink,packHands,unpackHands} from '../movement/link.mjs?v=91';
@@ -13,7 +13,7 @@ export function receivePhone(onResult,onStatus,onEnd,onAux=()=>{},getOptions=()=
  const id=newCode();let link=null,closed=false,connected=false,heartbeat=null,size={w:640,h:480},trackerDetail='';
  const box=document.createElement('dialog');box.className='phonePair';
  box.innerHTML='<h2>Use your phone camera</h2><p>Scan this QR on the other phone, then tap <b>Start camera</b>.<br>Different Wi-Fi or mobile data is supported.</p><div class="qr"></div><p class="code"></p><p><a target="_blank" rel="noopener">Open phone camera page</a></p><div class="row"><button type="button" data-copy>Copy phone link</button><button type="button" data-cancel>Cancel</button></div><p class="pairStatus" role="status">Connecting PC to relay…</p>';
- const url=new URL('camera.html',import.meta.url);url.searchParams.set('pair',id);url.searchParams.set('v','19.5');
+ const url=new URL('camera.html',import.meta.url);url.searchParams.set('pair',id);url.searchParams.set('v','19.6');
  box.querySelector('a').href=url.href;box.querySelector('.code').textContent='Pairing code: '+id;
  new QRCode(box.querySelector('.qr'),{text:url.href,width:220,height:220,correctLevel:QRCode.CorrectLevel.M});
  const status=text=>{if(closed||(connected&&/^relay connected/.test(text)))return;const el=box.querySelector('.pairStatus');if(el)el.textContent=text;onStatus(text);};
@@ -48,7 +48,7 @@ export async function sendPhone(id,video,status,facing='user'){
   const seg=(a,b,color)=>{c.strokeStyle=color;c.lineWidth=2;c.beginPath();c.moveTo((1-a.x)*w,a.y*h);c.lineTo((1-b.x)*w,b.y*h);c.stroke();};
   for(const lm of settings.overlayRate>0?(recent.hands?.landmarks||[]):[])for(let f=0;f<5;f++){let prev=0;for(let i=1;i<=4;i++){const j=4*f+i;seg(lm[prev],lm[j],'#8ee3bf');prev=j;}}
   if(settings.overlayRate>0){for(const lm of recent.hands?.landmarks||[]){c.fillStyle='#effff5';for(const p of lm){c.beginPath();c.arc((1-p.x)*w,p.y*h,2.5,0,Math.PI*2);c.fill();}}if(recent.face?.face)drawFace(c,recent.face.face.points,w,h);}
-  if(settings.overlayRate>0&&recent.pose?.pose){const p=recent.pose.pose.points;for(const [a,b] of [[11,12],[11,13],[13,15],[12,14],[14,16]])if(p[a].visibility>.4&&p[b].visibility>.4)seg(p[a],p[b],'#ffd36c');}
+  if(settings.overlayRate>0&&recent.pose?.pose)drawShoulders(c,recent.pose.pose,recent.face?.face,w,h);
  };
  const stop=()=>{if(stopped)return;stopped=true;session?.();link?.close();stream?.getTracks().forEach(track=>track.stop());video.srcObject=null;video.style.cssText='';wrap.before(video);wrap.remove();wake?.release().catch(()=>{});};
  try{

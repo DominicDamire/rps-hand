@@ -43,3 +43,6 @@ A live preview with repeated media timestamps could reject every frame while cal
 Compared original tagirz500/alien-head docs/index.html and standalone hand-lines/phone-link.mjs: both dispatch from RAF, use low-quality bitmap resize and independent worker-busy guards. Restore that capture pattern; disable the shared serial queue by default. Keep fixed-timestamp recovery, sparse drawing and expression classification off. Add Hands only / Face only / Combined buttons using the same camera, detector and inference path for on-device comparison. Combining three neural tasks still has a resource cost; no zero-latency or 60 inference FPS claim.
 
 V19.5 also restores the original face repository camera request: ideal 30 FPS, without a maximum constraint. Capture follows video changes on RAF, without a second target-FPS gate. Comparison buttons remain available.
+
+## V19.6 face dots and shoulder-only output
+Restore 468 green face dots, omit orientation arrows and expression classification. Shoulder overlay/output contains only points 11/12, linked to chin; no arm/elbow/wrist pose output. Independent pose tracker uses every second capture opportunity like the original face app, with a 15 Hz default. Pose Landmarker still internally computes its full pose. Grey head and torso material. Original V14 archived separately at hand-lines-v14.

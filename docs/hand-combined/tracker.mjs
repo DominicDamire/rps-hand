@@ -1,4 +1,4 @@
-import {faceIds} from './face-overlay.mjs?v=19.2';
+import {faceIds} from './face-overlay.mjs?v=19.6';
 const MP='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1',base='https://storage.googleapis.com/mediapipe-models/';
 const params=new URLSearchParams(self.location.search),task=params.get('task')||'hands',preferred=params.get('delegate')||'GPU';
 let tracker;
@@ -15,7 +15,7 @@ self.onmessage=async({data})=>{try{
    if(task==='hands')Object.assign(out,{landmarks:r.landmarks,worldLandmarks:r.worldLandmarks,handedness:r.handedness});
    // Keep only the outline and calibration anchors; no expression classifier.
    if(task==='face')out.face=r.faceLandmarks?.[0]&&r.facialTransformationMatrixes?.[0]?{matrix:Array.from(r.facialTransformationMatrixes[0].data),points:Object.fromEntries(faceIds.map(i=>[i,{x:round(r.faceLandmarks[0][i].x),y:round(r.faceLandmarks[0][i].y)}]))}:null;
-   if(task==='pose')out.pose=r.landmarks?.[0]?{points:r.landmarks[0].slice(0,17).map(p=>({x:round(p.x),y:round(p.y),visibility:round(p.visibility)})),world:Object.fromEntries([11,12].map(i=>[i,r.worldLandmarks[0][i]]))}:null;
+   if(task==='pose')out.pose=r.landmarks?.[0]?{points:Object.fromEntries([11,12].map(i=>{const p=r.landmarks[0][i];return [i,{x:round(p.x),y:round(p.y),visibility:round(p.visibility)}]})),world:Object.fromEntries([11,12].map(i=>[i,r.worldLandmarks[0][i]]))}:null;
    out.inferenceMs=performance.now()-start;self.postMessage(out);
   }finally{source.close?.();}
  }
