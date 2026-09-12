@@ -16,7 +16,12 @@ export class CombinedHead {
    const torso=[];g.scene.traverse(mesh=>{if(!mesh.isSkinnedMesh)return;for(let i=0;i<mesh.geometry.attributes.position.count;i++){const point=mesh.getVertexPosition(i,new T.Vector3()).applyMatrix4(mesh.matrixWorld);if(point.y<this.bones.neck.getWorldPosition(new T.Vector3()).y)torso.push({mesh,i,point});}});
    const maxX=Math.max(...torso.map(s=>s.point.x)),minX=Math.min(...torso.map(s=>s.point.x));
    this.shoulderBindings=[-1,1].map(sign=>torso.filter(s=>sign<0?s.point.x<minX*.75:s.point.x>maxX*.75).sort((a,b)=>b.point.y-a.point.y)[0]);
-   const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.BufferAttribute(new Float32Array((this.faceBindings.length+2)*3),3));
+   // Keep only head-weighted triangles. Bone hierarchy remains intact for tracking.
+   g.scene.traverse(mesh=>{if(!mesh.isSkinnedMesh)return;const geo=mesh.geometry.clone(),ids=geo.attributes.skinIndex,w=geo.attributes.skinWeight,index=geo.index,kept=[];
+    const isHead=i=>{let weight=0;for(let k=0;k<4;k++){let bone=mesh.skeleton.bones[ids.getComponent(i,k)];while(bone&&bone!==this.bones.head)bone=bone.parent;if(bone===this.bones.head)weight+=w.getComponent(i,k);}return weight>.45;};
+    for(let i=0;i<(index?.count||geo.attributes.position.count);i+=3){const triangle=[0,1,2].map(k=>index?index.getX(i+k):i+k);if(triangle.every(isHead))kept.push(...triangle);}geo.setIndex(kept);mesh.geometry=geo;
+   });
+   const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.BufferAttribute(new Float32Array((this.faceBindings.length+2)*3),3));geometry.setDrawRange(0,this.faceBindings.length);
    this.faceDots=new T.Points(geometry,new T.PointsMaterial({color:0x8ee3bf,size:.0018,depthTest:true}));this.faceDots.frustumCulled=false;scene.add(this.faceDots);this.contactDot=new T.Mesh(new T.SphereGeometry(.0025,10,8),new T.MeshBasicMaterial({color:0xffc56e,depthTest:false}));this.contactDot.renderOrder=100;scene.add(this.contactDot);this.loaded=true;
   }).catch(e=>{this.error=e.message;});
  }
