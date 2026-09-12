@@ -30,3 +30,7 @@ Phone distance is a user-entered face/hand reference (15–150 cm). Hold hands b
 
 ## Direct motion restored without mesh resizing
 Restores the earlier direct joint translation and direction mapping; removes the rest-palm-anchor reconstruction and FABRIK that changed movement. Mesh matrices depend only on manual thickness/inset settings, never tracked lengths. Tests verify unchanged geometry transforms plus exact tracked joint positions and segment directions for both hands while inputs scale from 0.4 to 3 times. Fixed-size rigid pieces may show seams when tracked spacing differs from mesh proportions; endpoint agreement is not guaranteed surface contact. Face distance remains manual; there is no face detector.
+
+## Connected rollback
+Restores the connected fixed-dimension solver from the previous non-resizing version. Older direct tracking contributes segment directions, not independent joint translations or live scale. Regression jointly verifies mesh matrices remain constant, parent-child attachment lengths remain fixed, and segment directions match the earlier tracker across input scales 0.4–3. Nearby contact remains optional fixed-length fitting. Live personal camera matching is not verified; endpoint pixel overlap is not guaranteed for differing proportions.
+
