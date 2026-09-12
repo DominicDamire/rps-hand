@@ -42,7 +42,7 @@ export class CombinedHead {
   for(const b of this.bones.eyes)this.setWorld(b,this.smoothed.clone().multiply(new T.Quaternion().setFromEuler(new T.Euler(gy,gx,0))).multiply(this.rest.get(b)));
   const uv=cameraUV(eyeCenter(this.face.points),aspect,camera.aspect),target=camera.isOrthographicCamera?new T.Vector3((uv.x-.5)*camera.aspect,.5-uv.y,-depth):new T.Vector3().fromArray(cameraPosition(uv,depth,camera.aspect));
   this.anchor??=target.clone();target.sub(this.anchor).multiplyScalar(o.moveGain).add(this.anchor);this.position??=target.clone();this.position.lerp(target,alpha);
-  this.group.updateMatrixWorld(true);const midpoint=this.bones.eyes.reduce((v,b)=>v.add(b.getWorldPosition(new T.Vector3())),new T.Vector3()).multiplyScalar(.5);this.group.position.add(this.position.clone().sub(midpoint));this.group.updateMatrixWorld(true);this.group.traverse(m=>{if(m.isSkinnedMesh){m.skeleton.update();m.computeBoundingBox();}});this.frontBounds=new T.Box3().setFromObject(this.group);
+  this.group.updateMatrixWorld(true);const midpoint=this.bones.eyes.reduce((v,b)=>v.add(b.getWorldPosition(new T.Vector3())),new T.Vector3()).multiplyScalar(.5);this.group.position.add(this.position.clone().sub(midpoint));this.group.updateMatrixWorld(true);
  }
  overlay(ctx,w,h){const o=this.options();if(!o.overlayRate)return;
   const line=(points,color,closed=false)=>{ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.beginPath();points.forEach((p,i)=>ctx[i?'lineTo':'moveTo']((1-p.x)*w,p.y*h));if(closed)ctx.closePath();ctx.stroke();};
