@@ -1,4 +1,4 @@
-import {directDriver} from './direct.mjs?v=6';
+import {directDriver} from './direct.mjs?v=7';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -9,7 +9,7 @@ import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
 import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile,lockedAxis,constrainJoint,constrainAngles,directionAngles} from './profile.mjs?v=8-final';
 const $=id=>document.getElementById(id),clone=x=>JSON.parse(JSON.stringify(x)),RAD=Math.PI/180,KEY='hand-lines-experimental-v1';
 let profile=emptyProfile();try{const saved=localStorage.getItem(KEY);if(saved)profile=validateProfile(JSON.parse(saved));}catch{$('notice').textContent='Saved profile could not be read. Import your JSON backup to recover it.';}
-let captureAspect=4/3;let allHands=[];const recentHands=new Map(),depthStates={};let closePhone=null,tips=null,straight={},pinching=false,pinchFinger=null,contactHold=null,contactAngles=null;const tipDots={};let thumbGap=null;
+let captureAspect=4/3;let allHands=[];const recentHands=new Map(),depthStates={},distanceGains={};let closePhone=null,tips=null,straight={},pinching=false,pinchFinger=null,contactHold=null,contactAngles=null;const tipDots={};let thumbGap=null;
 let side='R',selected='Index1',editing=false,latest=null,editBase=null,frozenFeature=null,frozenCapture=null,savedId=null,angles=blankAngles(),epoch=0,stream=null,worker=null,workerReady=null,request=null,inflight=false,lastVideo=-1,sampleSource=null;
 let neutralSplay=profile.calibration.neutralSplay;
 const closureState=new ClosureTracker();let thumbReference=0;let curls=[0,0,0,0],posePreview=false,depthScale=profile.calibration.depthScale,lastDepth=null,lastTracking=0;
@@ -58,8 +58,8 @@ function cameraPoints(world,lm){
  const now=performance.now(),state=depthStates[side];
  if(!state)depthStates[side]={depth,scale,time:now};
  else {const dt=Math.min(.05,(now-state.time)/1000);const desired=Math.max(state.depth*.85,Math.min(state.depth*1.15,depth));state.depth+=(desired-state.depth)*(1-Math.exp(-dt/.18));state.time=now;}
- const stable=depthStates[side];
- return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,stable.depth,stable.scale).map(p=>new THREE.Vector3().fromArray(p));
+ const stable=depthStates[side],gain=distanceGains[side]||1;
+ return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,Math.max(.05,+$('phoneDistance').value/100+(stable.depth*gain-+$('phoneDistance').value/100)*+$('depthGain').value),stable.scale*gain).map(p=>new THREE.Vector3().fromArray(p));
 }
 function solveRaw(world,lm){const pts=cameraPoints(world,lm);
  palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));
@@ -178,9 +178,9 @@ tips=buildTips(rig);const drivers={R:directDriver(rig,tips),L:directDriver(rig,t
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
-configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready. Connect camera or Phone camera · QR. Tracked endpoints restored. Camera projection is selectable.');
+configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready. Connect camera or Phone camera · QR. Rigid hand geometry. Tracking cannot resize fingers or palm.');
 let lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(stream&&!editing&&$('video').readyState>=2&&!inflight&&$('video').currentTime!==lastVideo){lastVideo=$('video').currentTime;detect($('video'));}
- if(now-lastPaint<16)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,{smooth:0,threshold:0,contactPixels:$('tipContact').checked?8:0,coupling:0,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm:latest.landmarks,width:$('preview').width,height:$('preview').height});$('directStatus').textContent=directResult.contact?'Estimated fingertip contact held':'Tracked endpoints · no pose presets';}renderOtherHand(renderDt);if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked;
+ if(now-lastPaint<16)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,{smooth:0,threshold:0,contactPixels:$('tipContact').checked?8:0,coupling:0,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm:latest.landmarks,width:$('preview').width,height:$('preview').height});$('directStatus').textContent=directResult.contact?'Estimated fingertip contact held':'Rigid hand · no automatic resizing';}renderOtherHand(renderDt);if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked;
  for(const n of JOINTS){const dot=jointDots[n];dot.visible=true;dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  for(const [i,f] of FINGERS.entries())tipDots[f].position.copy(directResult?directResult.points[4+i*4]:tipWorld(rig,tips,side,f));
  modelLines.visible=$('dots').checked;let lineIndex=0;const linePoints=lineGeometry.attributes.position;
@@ -191,7 +191,7 @@ let lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if
  const j=rig.joints[side+selected];gizmo.position.setFromMatrixPosition(j.matrixWorld);gizmo.quaternion.copy(j.parent.getWorldQuaternion(new THREE.Quaternion())).multiply(jointBasis(selected));renderer.render(scene,camera);
 }requestAnimationFrame(loop);addEventListener('pagehide',()=>{stopCamera();worker?.terminate();});
 
-const startFields=['fingerThickness','tipInset','trackingGrace','eyeX','eyeY','eyeZ','eyeYaw','eyePitch','eyeFov'];
+const startFields=['fingerThickness','tipInset','trackingGrace','eyeX','eyeY','eyeZ','eyeYaw','eyePitch','eyeFov','phoneDistance','depthGain'];
 function restoreStart(values){for(const id of startFields){const el=$(id),value=Number(values[id]);if(Number.isFinite(value)&&value>=Number(el.min)&&value<=Number(el.max)){el.value=value;el.nextElementSibling.value=value;}}}
 try{const saved=JSON.parse(localStorage.getItem('direct-lines-start-v2')||'null');if(saved)restoreStart(saved);}catch{}
 $('saveStart').onclick=()=>{try{localStorage.setItem('direct-lines-start-v2',JSON.stringify(Object.fromEntries(startFields.map(id=>[id,+$(id).value]))));$('startStatus').textContent='Starting settings saved in this browser.';}catch{$('startStatus').textContent='Browser storage unavailable.';}};
@@ -214,7 +214,11 @@ function setViewMode(){const desired=$('cameraProjection').value==='constant'?or
 
 $('cameraProjection').onchange=setViewMode;$('viewMode').onchange=setViewMode;const originalReset=$('viewReset').onclick;$('viewReset').onclick=()=>{originalReset();setViewMode();};
 
-$('recalibrateSize').onclick=()=>{for(const s of ['R','L']){drivers[s]=directDriver(rig,tips);delete depthStates[s];}$('startStatus').textContent='Size calibration reset. Hold both hands open and clearly visible.';};
+$('recalibrateSize').onclick=()=>{for(const s of ['R','L']){drivers[s]=directDriver(rig,tips);delete depthStates[s];delete distanceGains[s];}$('startStatus').textContent='Size calibration reset. Hold both hands open and clearly visible.';};
 
 for(const id of ['eyeX','eyeY','eyeZ','eyeYaw','eyePitch','eyeFov'])$(id).oninput=()=>{$(id).nextElementSibling.value=$(id).value;setViewMode();};
 $('resetCamera').onclick=()=>{restoreStart({eyeX:0,eyeY:0,eyeZ:-1.2,eyeYaw:180,eyePitch:0,eyeFov:60});setViewMode();};
+
+$('phoneDistance').oninput=()=>{$('phoneDistance').nextElementSibling.value=$('phoneDistance').value;$('eyeZ').value=-$('phoneDistance').value/100;$('eyeZ').nextElementSibling.value=$('eyeZ').value;setViewMode();};
+$('depthGain').oninput=()=>{$('depthGain').nextElementSibling.value=$('depthGain').value;};
+$('calibrateDistance').onclick=()=>{if(!latest||camera.isOrthographicCamera){$('depthCalibrationStatus').textContent='Use perspective and show a hand next to your face first.';return;}const metres=+$('phoneDistance').value/100;let count=0;for(const s of ['R','L'])if(depthStates[s]?.depth){distanceGains[s]=metres/depthStates[s].depth;count++;}$('eyeZ').value=-metres;$('eyeZ').nextElementSibling.value=-metres;setViewMode();$('depthCalibrationStatus').textContent='Calibrated '+count+' hand(s) at '+$('phoneDistance').value+' cm. Recalibrate if you move the phone.';};

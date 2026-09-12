@@ -1,41 +1,32 @@
 import * as T from 'three';
+const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
+// Fixed-length FABRIK: only rotations/positions along rigid links change.
+function reach(chain,lengths,target){const root=chain[0].clone(),total=lengths.reduce((a,b)=>a+b,0);if(root.distanceTo(target)>=total){const d=target.clone().sub(root).normalize();for(let i=1;i<4;i++)chain[i].copy(chain[i-1]).addScaledVector(d,lengths[i-1]);return;}
+ for(let pass=0;pass<18;pass++){chain[3].copy(target);for(let i=2;i>=0;i--){const d=chain[i].clone().sub(chain[i+1]).normalize();chain[i].copy(chain[i+1]).addScaledVector(d,lengths[i]);}chain[0].copy(root);for(let i=1;i<4;i++){const d=chain[i].clone().sub(chain[i-1]).normalize();chain[i].copy(chain[i-1]).addScaledVector(d,lengths[i-1]);}if(chain[3].distanceTo(target)<1e-5)break;}}
 export function directDriver(rig,tips){
- const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let held=null,lastSide=null,contact=null;const calibrated={};
- const fingers=['Thumb','Index','Middle','Ring','Pinky'];
- return function(points,side,palmQ,dt,{smooth=0,threshold=0,contactPixels=0,coupling=0,fixedLengths=false,thickness=1,tipInset=0,lm,width,height}){
-  if(lastSide!==side){held=null;contact=null;lastSide=side;}
-  let p=points.map(v=>v.clone());
-  if(fixedLengths&&!calibrated[side])calibrated[side]=Array.from({length:5},(_,f)=>Array.from({length:3},(_,k)=>Math.max(.005,p[2+f*4+k].distanceTo(p[1+f*4+k]))));
-  const raw=p.map(v=>v.clone());
-  if(fixedLengths)for(let f=0;f<5;f++)for(let k=0;k<3;k++){const i=1+f*4+k,dir=raw[i+1].clone().sub(raw[i]);if(dir.lengthSq()>1e-10)p[i+1].copy(p[i]).addScaledVector(dir.normalize(),calibrated[side][f][k]);}
-
-  if(!held)held=p.map(v=>v.clone());
-  const alpha=smooth>0?1-Math.exp(-dt/(smooth/1000)):1;
-  p=p.map((v,i)=>{if(v.distanceTo(held[i])>threshold/1000)held[i].lerp(v,alpha);return held[i].clone();});
-  // Optional distal coupling. Zero leaves every tracked segment untouched.
-  if(coupling>0)for(const base of [5,9,13,17]){
-   const a=p[base+1].clone().sub(p[base]).normalize(),b=p[base+2].clone().sub(p[base+1]).normalize(),c=p[base+3].clone().sub(p[base+2]);
-   const bend=new T.Quaternion().setFromUnitVectors(a,b),linked=b.clone().applyQuaternion(bend).multiplyScalar(c.length()).add(p[base+2]);p[base+3].lerp(linked,coupling);
+ const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';
+ return function(points,side,palmQ,dt,{contactPixels=0,thickness=1,tipInset=0,lm,width,height}){
+  if(lastSide!==side){contact=null;lastSide=side;lastShape='';}
+  const p=points.map(v=>v.clone()),chains=[],lengths=[];
+  for(let f=0;f<5;f++){
+   const name=side+FINGERS[f],base=rig.rest[name+'1'].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(palmQ).add(p[0]);
+   const chain=[base],lens=[];
+   for(let k=1;k<=3;k++){const rest=k<3?rig.rest[name+(k+1)].world.clone().sub(rig.rest[name+k].world):tips[name].clone();const length=rest.length()+(k===3?tipInset/1000:0),i=1+4*f+k-1;let dir=points[i+1].clone().sub(points[i]);if(dir.lengthSq()<1e-10)dir=rest.clone().applyQuaternion(palmQ);lens.push(length);chain.push(chain[k-1].clone().addScaledVector(dir.normalize(),length));}
+   chains.push(chain);lengths.push(lens);
   }
   const distance=i=>Math.hypot((lm[4].x-lm[i].x)*width,(lm[4].y-lm[i].y)*height);
-  if(!contactPixels)contact=null;
-  else if(contact&&distance(contact)>contactPixels*1.5)contact=null;
-  if(!contact&&contactPixels){const nearest=[8,12,16,20].sort((a,b)=>distance(a)-distance(b))[0];if(distance(nearest)<=contactPixels)contact=nearest;}
-  if(contact){const mid=p[4].clone().add(p[contact]).multiplyScalar(.5);p[4].copy(mid);p[contact].copy(mid);}
-  rig.root.position.set(0,0,0);rig.root.updateMatrixWorld(true);
-  const hand=rig.joints[side+'Hand'];hand.position.copy(hand.parent.worldToLocal(p[0].clone()));rig.setWorldQuat(side+'Hand',palmQ);rig.refresh(hand);
-  for(let fi=0;fi<5;fi++)for(let k=1;k<=3;k++){
-   const name=side+fingers[fi]+k,j=rig.joints[name],index=1+fi*4+k-1;
-   const rest=k<3?rig.rest[side+fingers[fi]+(k+1)].world.clone().sub(rig.rest[name].world):tips[side+fingers[fi]].clone();
-   const target=p[index+1].clone().sub(p[index]),axis=rest.clone().normalize(),length=rest.length();
-   if(target.length()<1e-6||length<1e-6)continue;
-   j.position.copy(j.parent.worldToLocal(p[index].clone()));
-   const facing=axis.clone().applyQuaternion(palmQ),q=new T.Quaternion().setFromUnitVectors(facing,target.clone().normalize()).multiply(palmQ);
-   rig.setWorldQuat(name,q);rig.refresh(j);
-   const basis=new T.Quaternion().setFromUnitVectors(new T.Vector3(0,0,1),axis),rot=new T.Matrix4().makeRotationFromQuaternion(basis);
-   const stretch=rot.clone().multiply(new T.Matrix4().makeScale(thickness,thickness,(target.length()+(k===3?tipInset/1000:0))/length)).multiply(rot.clone().invert());
-   for(const m of rig.parts)if(m.parent===j){m.matrixAutoUpdate=false;m.matrix.copy(stretch).multiply(matrices.get(m));m.matrixWorldNeedsUpdate=true;}
+  if(!contactPixels)contact=null;else if(contact&&distance(contact)>contactPixels*1.5)contact=null;
+  if(!contact&&contactPixels){const i=[8,12,16,20].sort((a,b)=>distance(a)-distance(b))[0];if(distance(i)<=contactPixels)contact=i;}
+  if(contact){const other=contact/4-1,a=chains[0],b=chains[other];let target=a[3].clone().add(b[3]).multiplyScalar(.5);for(let pass=0;pass<8;pass++){reach(a,lengths[0],target);reach(b,lengths[other],target);target=a[3].clone().add(b[3]).multiplyScalar(.5);}}
+  for(let f=0;f<5;f++)for(let k=0;k<4;k++)p[1+4*f+k].copy(chains[f][k]);
+  rig.root.position.set(0,0,0);rig.root.updateMatrixWorld(true);const hand=rig.joints[side+'Hand'];hand.position.copy(hand.parent.worldToLocal(p[0].clone()));rig.setWorldQuat(side+'Hand',palmQ);rig.refresh(hand);
+  const shape=side+':'+thickness+':'+tipInset,shapeChanged=shape!==lastShape;
+  for(let f=0;f<5;f++)for(let k=1;k<=3;k++){
+   const name=side+FINGERS[f]+k,j=rig.joints[name],i=1+4*f+k-1,rest=k<3?rig.rest[side+FINGERS[f]+(k+1)].world.clone().sub(rig.rest[name].world):tips[side+FINGERS[f]].clone(),axis=rest.clone().normalize();
+   const target=p[i+1].clone().sub(p[i]);j.position.copy(j.parent.worldToLocal(p[i].clone()));const facing=axis.clone().applyQuaternion(palmQ),q=new T.Quaternion().setFromUnitVectors(facing,target.normalize()).multiply(palmQ);rig.setWorldQuat(name,q);rig.refresh(j);
+   // Geometry transforms are changed ONLY by the user's thickness/inset controls.
+   if(shapeChanged){const rot=new T.Matrix4().makeRotationFromQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0,0,1),axis));const shapeMatrix=rot.clone().multiply(new T.Matrix4().makeScale(thickness,thickness,1+(k===3?tipInset/1000/rest.length():0))).multiply(rot.clone().invert());for(const m of rig.parts)if(m.parent===j){m.matrixAutoUpdate=false;m.matrix.copy(shapeMatrix).multiply(matrices.get(m));m.matrixWorldNeedsUpdate=true;}}
   }
-  rig.root.updateMatrixWorld(true);return {points:p,contact};
+  lastShape=shape;rig.root.updateMatrixWorld(true);return {points:p,contact};
  };
 }
