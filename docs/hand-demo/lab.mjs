@@ -77,7 +77,7 @@ function rawCameraPoints(world,lm){
  const initialDepth=sharedPalmReference?.depth||.5;
  if(observed>0&&!sharedPalmReference)sharedPalmReference={size:observed,depth:initialDepth};
  let depth=sizeDistance(observed,calibratedPalms[side]||sharedPalmReference,depthStates[side]?.depth||initialDepth,.08);
- if(depthCalibration[side]&&depthCalibration[side].aspect!==captureAspect)resetDepthCalibration();
+ if(depthCalibration[side]&&Math.abs(depthCalibration[side].aspect/captureAspect-1)>.01)resetDepthCalibration();
  const h=allHands.find(h=>(h.label==='Left'?'L':'R')===side),reference=depthCalibration[side];
  const projected=h&&projectivePalmDepth(h,reference?.palm,captureAspect);
  if(projected)depth=projected.depth;
@@ -474,7 +474,7 @@ function collectDepthScan(hands){
  if(!pendingScan)return;
  const now=performance.now();
  if(now-pendingScan.started>6000){pendingScan=null;notice('Scan could not get stable measurements. Keep face and open hands still beside each other, with elbows visible, then retry.');return;}
- if(captureAspect!==pendingScan.aspect){pendingScan=null;return;}
+ if(Math.abs(captureAspect/pendingScan.aspect-1)>.01){pendingScan=null;notice('Camera shape changed during scan. Start the scan again.');return;}
  if(!combined?.group.visible||now-combined.seen>200||!combined.depth)return;
  const face=combined.face.points,left=Math.min(face[234].x,face[454].x),right=Math.max(face[234].x,face[454].x);
  for(const h of hands){
