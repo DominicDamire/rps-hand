@@ -15,7 +15,7 @@ self.onmessage=async({data})=>{try{
    if(task==='hands')Object.assign(out,{landmarks:r.landmarks,worldLandmarks:r.worldLandmarks,handedness:r.handedness});
    // Keep only the outline and calibration anchors; no expression classifier.
    if(task==='face')out.face=r.faceLandmarks?.[0]&&r.facialTransformationMatrixes?.[0]?{matrix:Array.from(r.facialTransformationMatrixes[0].data),points:Object.fromEntries(faceIds.map(i=>[i,{x:round(r.faceLandmarks[0][i].x),y:round(r.faceLandmarks[0][i].y)}]))}:null;
-   if(task==='pose')out.pose=r.landmarks?.[0]?{points:Object.fromEntries((fullBody?Array.from({length:33},(_,i)=>i):[11,12]).map(i=>{const p=r.landmarks[0][i];return [i,{x:round(p.x),y:round(p.y),z:round(p.z),visibility:round(p.visibility),presence:round(p.presence??1)}]})),world:Object.fromEntries((fullBody?Array.from({length:33},(_,i)=>i):[11,12]).map(i=>[i,r.worldLandmarks[0][i]]))}:null;
+   if(task==='pose')out.pose=r.landmarks?.[0]?{points:Object.fromEntries((fullBody?Array.from({length:33},(_,i)=>i):[0,11,12,13,14,15,16,17,18,19,20,21,22]).map(i=>{const p=r.landmarks[0][i];return [i,{x:round(p.x),y:round(p.y),z:round(p.z),visibility:round(p.visibility),presence:round(p.presence??1)}]})),world:Object.fromEntries((fullBody?Array.from({length:33},(_,i)=>i):[0,11,12,13,14,15,16,17,18,19,20,21,22]).map(i=>[i,r.worldLandmarks[0][i]]))}:null;
    out.inferenceMs=performance.now()-start;self.postMessage(out);
   }finally{source.close?.();}
  }

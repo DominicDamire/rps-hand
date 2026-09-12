@@ -20,7 +20,7 @@ export class CombinedHead {
    this.faceDots=new T.Points(geometry,new T.PointsMaterial({color:0x8ee3bf,size:.0018,depthTest:true}));this.faceDots.frustumCulled=false;scene.add(this.faceDots);this.contactDot=new T.Mesh(new T.SphereGeometry(.0025,10,8),new T.MeshBasicMaterial({color:0xffc56e,depthTest:false}));this.contactDot.renderOrder=100;scene.add(this.contactDot);this.loaded=true;
   }).catch(e=>{this.error=e.message;});
  }
- receive(data){if(data.task==='face'){if(data.face?.points && data.face?.matrix){this.face=data.face;this.seen=performance.now();}}if(data.task==='pose'){this.pose=data.pose;this.poseSeen=performance.now();}}
+ receive(data){if(data.task==='face'){if(data.face?.points && data.face?.matrix){this.face=data.face;this.faceTime=data.time;this.seen=performance.now();}}if(data.task==='pose'){this.pose=data.pose;this.poseTime=data.time;this.poseSeen=performance.now();}}
  reset(){this.face=this.pose=null;this.group.visible=false;this.position=null;}
  center(){if(this.face)this.neutral=new T.Quaternion().setFromRotationMatrix(new T.Matrix4().fromArray(this.face.matrix));this.shoulderNeutral=null;}
  calibrate(metres,aspect,viewAspect){
@@ -57,6 +57,9 @@ export class CombinedHead {
   const line=(points,color,closed=false)=>{ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.beginPath();points.forEach((p,i)=>ctx[i?'lineTo':'moveTo']((1-p.x)*w,p.y*h));if(closed)ctx.closePath();ctx.stroke();};
   if(this.face&&o.faceRate>0&&performance.now()-this.seen<(o.faceGrace??1000)){const p=this.face.points;drawFace(ctx,p,w,h,this.face.matrix,this.highlightFaceId);}
 
-  if(this.pose&&o.shoulderRate>0&&performance.now()-this.poseSeen<900)drawShoulders(ctx,this.pose,this.face,w,h,this.highlightBodyId);
+  if(this.pose&&o.shoulderRate>0&&performance.now()-this.poseSeen<250){
+   drawShoulders(ctx,this.pose,this.face,w,h,this.highlightBodyId);
+   for(const ids of [[11,13,15],[12,14,16]]){const points=ids.map(i=>this.pose.points[i]);if(points.every(p=>p&&p.visibility>=.65&&(p.presence??1)>=.65)){line(points,'#8ee3bf');for(const p of points){ctx.beginPath();ctx.arc((1-p.x)*w,p.y*h,2.5,0,Math.PI*2);ctx.fillStyle='#8ee3bf';ctx.fill();}}}
+  }
  }
 }

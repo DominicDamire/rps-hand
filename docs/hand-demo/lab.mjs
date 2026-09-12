@@ -1,3 +1,4 @@
+import {calibratePalm,projectivePalmDepth,armObservation,fuseArmDepth,finishScan} from './arm-depth.mjs?v=alien15.19';
 import {LandmarkNoise} from './landmark-noise.mjs?v=15.12';
 const inputNoise=new Map();
 import {metricPalmDepth} from './depth-experiment.mjs?v=15.1';
@@ -6,9 +7,9 @@ import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {LandmarkJitter} from './landmark-jitter.mjs';
-import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=15.3';
-import {installCombinedUI} from './combined-ui.mjs?v=alien15.18';
-import {CombinedHead} from './head-model.mjs?v=alien15.18';
+import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien15.19';
+import {installCombinedUI} from './combined-ui.mjs?v=alien15.19';
+import {CombinedHead} from './head-model.mjs?v=alien15.19';
 import {directDriver} from './direct.mjs?v=15.17';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
@@ -62,7 +63,7 @@ function cameraPoints(world,lm){
  const points=rawCameraPoints(world,lm);if(cheekOffsets[side])for(const p of points)p.add(cheekOffsets[side]);
  return $('falseDepth')?.checked?reduceFalseDepthBends(points,lm,$('preview').width,$('preview').height,!camera.isOrthographicCamera):points;
 }
-let sharedPalmReference=null;const calibratedPalms={};
+let sharedPalmReference=null;const calibratedPalms={},depthCalibration={};let pendingScan=null;
 function rawCameraPoints(world,lm){
  if(camera.isOrthographicCamera){
   const w=cameraUV(lm[0],captureAspect,camera.aspect),origin=new THREE.Vector3((w.x-.5)*camera.aspect,.5-w.y,-.5),modelLength=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world);
@@ -76,10 +77,20 @@ function rawCameraPoints(world,lm){
  const initialDepth=sharedPalmReference?.depth||.5;
  if(observed>0&&!sharedPalmReference)sharedPalmReference={size:observed,depth:initialDepth};
  let depth=sizeDistance(observed,calibratedPalms[side]||sharedPalmReference,depthStates[side]?.depth||initialDepth,.08);
+ if(depthCalibration[side]&&depthCalibration[side].aspect!==captureAspect)resetDepthCalibration();
+ const h=allHands.find(h=>(h.label==='Left'?'L':'R')===side),reference=depthCalibration[side];
+ const projected=h&&projectivePalmDepth(h,reference?.palm,captureAspect);
+ if(projected)depth=projected.depth;
+ const age=h?Math.abs(h.time-combined?.poseTime):Infinity;
+ const arm=h&&h.confidence>=.7&&performance.now()-combined?.seen<250&&performance.now()-combined?.poseSeen<250?armObservation(h,combined?.pose,captureAspect):null;
+ const fused=fuseArmDepth(depth,arm,reference?.arm,combined?.depth,age);
+ depth=fused.depth;
+ if(depthStatus)depthStatus.textContent=reference?`Estimated depth: ${fused.reason} · ${(depth*100).toFixed(0)} cm${projected?'':' · size fallback'}`:'Scan hands beside face to calibrate depth and arms.';
  if(combined?.group.visible&&combined.face?.points){
  const face=combined.face.points,tip=lm[9],left=Math.min(face[234].x,face[454].x),right=Math.max(face[234].x,face[454].x);
- const peripheral=tip.y<face[10].y||tip.x<left||tip.x>right;
- const backLimit=combined.depth+(peripheral?.06:0);
+ const outside=Math.max(0,face[10].y-tip.y,left-tip.x,tip.x-right);
+ const allowance=.06*Math.min(1,outside/Math.max(.02,(right-left)*.25));
+ const backLimit=combined.depth+allowance;
  const protrusion=Math.max(0,...world.map(p=>(p.z-world[0].z)*scale));
  depth=Math.min(depth,Math.max(.08,backLimit-protrusion));
  }
@@ -141,7 +152,8 @@ function acceptTracking(data,frame,token=epoch){
  if(token!==epoch||editing)return;const desired=$('detected').value;let idx=desired==='first'?0:data.handedness?.findIndex(h=>h[0]?.categoryName===desired);
  if(desired==='first'&&latest&&data.landmarks?.length>1){let best=Infinity;data.landmarks.forEach((points,i)=>{const d=Math.hypot(points[0].x-latest.landmarks[0].x,points[0].y-latest.landmarks[0].y);if(d<best){best=d;idx=i;}});}
 
- allHands=(data.landmarks||[]).map((landmarks,i)=>({landmarks,world:data.worldLandmarks?.[i],label:data.handedness?.[i]?.[0]?.categoryName})).filter(h=>h.world?.length===21).slice(0,2);
+ allHands=(data.landmarks||[]).map((landmarks,i)=>({landmarks,world:data.worldLandmarks?.[i],label:data.handedness?.[i]?.[0]?.categoryName,confidence:data.handedness?.[i]?.[0]?.score??0,time:data.time,seen:performance.now()})).filter(h=>h.world?.length===21).slice(0,2);
+ collectDepthScan(allHands);
  const stamp=performance.now();for(const h of allHands)recentHands.set(h.label,{...h,seen:stamp});
  const grace=+$('trackingGrace').value;for(const [label,h] of recentHands){if(stamp-h.seen>grace)recentHands.delete(label);else if(!allHands.some(v=>v.label===label))allHands.push(h);}allHands=allHands.slice(0,2);
  const primary=allHands.find(h=>h.label===data.handedness?.[idx]?.[0]?.categoryName)||allHands[0];
@@ -150,7 +162,7 @@ function acceptTracking(data,frame,token=epoch){
  if($('bothHands').checked){const label=primary?.label;if(label==='Left'||label==='Right')side=label==='Left'?'L':'R';}latest={landmarks:lm,world};$('captureState').textContent='Direct lines · '+Math.round(data.inferenceMs)+' ms inference';
  $('edit').disabled=true;$('resume').disabled=true;
 }
-function stopCamera(){liveSession?.();liveSession=null;combined?.reset();trackingStats=null;if($('liveFps'))$('liveFps').textContent='CAM — FPS\nHAND — · FACE — · BODY —';allHands=[];recentHands.clear();closureState.reset();if(!editing){thumbReference=0;contactAngles=null;}epoch++;straight={};pinching=false;pinchFinger=null;contactHold=null;for(const f of Object.values(thumbFilters))f.reset();lastTracking=0;smoothPalmQ=previousPalmQ=heldPalmQ=null;palmQuiet=0;for(const f of Object.values(filters))f.reset();positionFilter.reset();curlFilter.reset();posePreview=false;closePhone?.();closePhone=null;phoneActive=false;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
+function stopCamera(){resetDepthCalibration();liveSession?.();liveSession=null;combined?.reset();trackingStats=null;if($('liveFps'))$('liveFps').textContent='CAM — FPS\nHAND — · FACE — · BODY —';allHands=[];recentHands.clear();closureState.reset();if(!editing){thumbReference=0;contactAngles=null;}epoch++;straight={};pinching=false;pinchFinger=null;contactHold=null;for(const f of Object.values(thumbFilters))f.reset();lastTracking=0;smoothPalmQ=previousPalmQ=heldPalmQ=null;palmQuiet=0;for(const f of Object.values(filters))f.reset();positionFilter.reset();curlFilter.reset();posePreview=false;closePhone?.();closePhone=null;phoneActive=false;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
 async function startCamera(){try{stopCamera();editing=false;sampleSource=null;latest=null;notice('Opening camera…');const id=$('cameraSelect').value;stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(id?{deviceId:{exact:id}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:+getCombinedOptions().cameraFps}}});$('video').srcObject=stream;await $('video').play();lastVideo=-1;await listCameras();liveSession=startTracking($('video'),(data,frame)=>{if(data.task==='hands')acceptTracking(data,frame);else{combined?.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('Combined DEMO: hands, face and shoulders share this camera. GPU preferred; actual rates below.');updateMode();}catch(e){stopCamera();notice('Camera could not start: '+e.message);}}
 async function listCameras(){const current=$('cameraSelect').value,devices=await navigator.mediaDevices.enumerateDevices();$('cameraSelect').replaceChildren(new Option('Default camera',''));for(const d of devices.filter(d=>d.kind==='videoinput'))$('cameraSelect').add(new Option(d.label||'Camera '+($('cameraSelect').options.length),d.deviceId));$('cameraSelect').value=current;}
 $('phone').onclick=()=>{stopCamera();editing=false;sampleSource=null;latest=null;updateMode();const token=epoch;try{closePhone=receivePhone(async received=>{if(token!==epoch){received.getTracks().forEach(t=>t.stop());return;}try{stream=received;phoneActive=true;$('video').srcObject=received;$('video').muted=true;await $('video').play();if(token!==epoch)return;liveSession=startTracking($('video'),(data,frame)=>{if(data.task==='hands')acceptTracking(data,frame,token);else{combined?.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('PHONE VIDEO → PC TRACKING → PC RENDERING. Phone does not calculate landmarks.');updateMode();}catch(e){stopCamera();notice('Received video could not start: '+e.message);}},notice,message=>{stopCamera();notice(message);});}catch(e){notice(e.message);}};
@@ -301,7 +313,7 @@ Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
 Scene: ${measuredScene} measured FPS (target ${o.sceneRate})${Object.keys(s.errors||{}).length?' · '+JSON.stringify(s.errors):''}`;}
 window.combinedLab={version:19,get head(){return combined;},get metrics(){return trackingStats;},get handResult(){return directResult;},get scene(){return scene;}};
-notice('DEMO ready: phone tracks hands, face and shoulders over relay; PC renders. Rendering target: 60 FPS; tracking uncapped by default.');
+notice('Alien 15.19 ready: phone sends video; PC tracks hands, face and arms and renders at a 60 FPS target.');
 combined.ready.then(()=>{if(combined.error)notice('Head model failed to load: '+combined.error);});
 
 const fixtureName=new URLSearchParams(location.search).get('fixture');
@@ -453,14 +465,31 @@ if($('captureRestSize'))$('captureRestSize').onclick=()=>{
  $('lockUpper').checked=true;$('falseDepth').checked=true;$('bothHands').checked=true;$('detected').value='first';
 }
 
-const recenterHands=document.createElement('button');recenterHands.textContent='Set current hands as starting depth';recenterHands.onclick=()=>{sharedPalmReference=null;for(const key of Object.keys(depthStates))delete depthStates[key];for(const key of Object.keys(distanceGains))delete distanceGains[key];for(const key of Object.keys(cheekOffsets))delete cheekOffsets[key];};$('directSettings').prepend(recenterHands);
-
-const scanHands=document.createElement('button');scanHands.textContent='Calibrate hands beside face';
-scanHands.onclick=()=>{
- if(!combined?.group.visible||performance.now()-combined.seen>500||!allHands.length)return notice('Show your face and hold visible hands beside it, at the same distance.');
+const depthStatus=document.createElement('p');depthStatus.textContent='Scan hands beside face to calibrate depth and arms.';$('directSettings').prepend(depthStatus);
+function resetDepthCalibration(){pendingScan=null;sharedPalmReference=null;for(const object of [calibratedPalms,depthCalibration,depthStates,distanceGains,cheekOffsets])for(const key of Object.keys(object))delete object[key];}
+const recenterHands=document.createElement('button');recenterHands.textContent='Reset hand depth calibration';recenterHands.onclick=()=>{resetDepthCalibration();notice('Depth calibration cleared. Scan again after changing camera or position.');};$('directSettings').prepend(recenterHands);
+const scanHands=document.createElement('button');scanHands.textContent='Scan hands, face and arms';
+scanHands.onclick=()=>{if(!combined?.group.visible||!allHands.some(h=>performance.now()-h.seen<200))return notice('Connect the camera and show your face and hands first.');pendingScan={started:performance.now(),samples:{},aspect:captureAspect};notice('Hold open hands beside your face at the SAME distance for two seconds. Keep shoulders, elbows and wrists visible.');};$('directSettings').prepend(scanHands);
+function collectDepthScan(hands){
+ if(!pendingScan)return;
+ const now=performance.now();
+ if(now-pendingScan.started>6000){pendingScan=null;notice('Scan could not get stable measurements. Keep face and open hands still beside each other, with elbows visible, then retry.');return;}
+ if(captureAspect!==pendingScan.aspect){pendingScan=null;return;}
+ if(!combined?.group.visible||now-combined.seen>200||!combined.depth)return;
  const face=combined.face.points,left=Math.min(face[234].x,face[454].x),right=Math.max(face[234].x,face[454].x);
- const valid=allHands.filter(h=>{const w=h.landmarks[0];return (w.x<left||w.x>right)&&w.y>face[10].y-.1&&w.y<face[152].y+.2;});
- if(!valid.length)return notice('Place your hand next to the face outline, not in front of it, then calibrate.');
- for(const h of valid){const size=palmSize(h.landmarks,h.world,captureAspect);if(!size)continue;const key=h.label==='Left'?'L':'R';calibratedPalms[key]={size,depth:combined.depth};sharedPalmReference={size,depth:combined.depth};delete depthStates[key];delete distanceGains[key];}
- notice('Stored '+valid.length+' visible hand reference(s) at estimated face depth. This is a calibration estimate, not a measured 3D scan.');
-};$('directSettings').prepend(scanHands);
+ for(const h of hands){
+  if(h.confidence<.7||!Number.isFinite(h.time)||Math.abs(h.time-combined.faceTime)>150)continue;
+  const wrist=h.landmarks[0];if(!(wrist.x<left||wrist.x>right)||wrist.y<face[10].y-.1||wrist.y>face[152].y+.2)continue;
+  const palm=calibratePalm(h,combined.depth,captureAspect);if(!palm)continue;
+  const arm=Math.abs(h.time-combined.poseTime)<150&&now-combined.poseSeen<250?armObservation(h,combined.pose,captureAspect):null;
+  const key=h.label==='Left'?'L':'R',samples=pendingScan.samples[key]??=[];
+  if(samples.at(-1)?.time===h.time)continue;
+  samples.push({time:h.time,poseTime:combined.poseTime,palm,arm,size:palmSize(h.landmarks,h.world,captureAspect)});
+  while(samples.length&&h.time-samples[0].time>1800)samples.shift();
+ }
+ if(now-pendingScan.started<2000)return;
+ const completed=Object.entries(pendingScan.samples).map(([key,samples])=>({key,samples,result:finishScan(samples)})).filter(s=>s.result?.arm);
+ if(!completed.length)return;
+ for(const {key,samples,result} of completed){depthCalibration[key]={...result,aspect:captureAspect};calibratedPalms[key]={size:samples[Math.floor(samples.length/2)].size,depth:result.palm.depth};sharedPalmReference=calibratedPalms[key];delete depthStates[key];delete distanceGains[key];}
+ pendingScan=null;notice(`Calibrated ${completed.length} hand(s), face reference and arm proportions. Depth remains an estimate; rescan for the other hand if needed.`);
+}
