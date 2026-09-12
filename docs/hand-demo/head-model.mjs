@@ -34,7 +34,7 @@ export class CombinedHead {
   const o=this.options(),fresh=this.face&&performance.now()-this.seen<(o.faceGrace??1000)&&o.faceRate>0;this.group.visible=!!(o.showHead&&fresh&&this.loaded);if(this.faceDots)this.faceDots.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false;if(this.contactDot)this.contactDot.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false&&(Number.isInteger(this.highlightFaceId)||Number.isInteger(this.highlightBodyId));if(!this.group.visible)return;
   if(!this.depthRef)this.calibrate(metres,aspect,camera.aspect);
   let depth=o.headDepth===false?this.metres:calibratedDepth(faceReference(this.face),this.depthRef,this.metres,depthGain);if(!depth)return;
-  depth=Math.max(.08,depth-o.faceOffset/100);this.depth=depth;
+  depth=Math.max(.08,depth-o.faceOffset/100+(o.headBack||0)/100);this.depth=depth;
   this.group.scale.setScalar(this.fixedScale*o.headSize);
   const q=new T.Quaternion().setFromRotationMatrix(new T.Matrix4().fromArray(this.face.matrix));if(this.neutral)q.multiply(this.neutral.clone().invert());
   const e=new T.Euler().setFromQuaternion(q,'YXZ');e.x*=o.turnGain;e.y*=o.turnGain;e.z*=o.turnGain;q.setFromEuler(e);
