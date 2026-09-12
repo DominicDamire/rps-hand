@@ -1,0 +1,5 @@
+<!doctype html><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"}}</script><pre id="result">Running</pre><script type="module">
+import * as T from 'three';import {fitHeadGrip} from './head-grip.mjs';
+const chains=Array.from({length:5},(_,f)=>Array.from({length:4},(_,k)=>new T.Vector3(f*.025,k*.03,-.4))),lengths=chains.map(c=>c.slice(1).map((p,i)=>p.distanceTo(c[i]))),p=[new T.Vector3(0,-.04,-.4)],targets=chains.map(c=>c[3].clone().add(new T.Vector3(.01,-.01,.01))),before=chains.map(c=>c[0].clone().sub(p[0]));
+fitHeadGrip(p,chains,lengths,new Map(),targets);let lengthError=0,attachmentError=0;chains.forEach((c,f)=>{for(let k=1;k<4;k++)lengthError=Math.max(lengthError,Math.abs(c[k].distanceTo(c[k-1])-lengths[f][k-1]));attachmentError=Math.max(attachmentError,c[0].clone().sub(p[0]).distanceTo(before[f]));});result.textContent=JSON.stringify({pass:lengthError<1e-9&&attachmentError<1e-9,lengthError,attachmentError});
+</script>

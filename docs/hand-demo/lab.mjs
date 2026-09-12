@@ -1,8 +1,9 @@
+import {fitHeadGrip} from './head-grip.mjs';
 import {LandmarkJitter} from './landmark-jitter.mjs';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=20.1';
-import {installCombinedUI} from './combined-ui.mjs?v=demo6';
-import {CombinedHead} from './head-model.mjs?v=demo6';
-import {directDriver} from './direct.mjs?v=demo6';
+import {installCombinedUI} from './combined-ui.mjs?v=demo7';
+import {CombinedHead} from './head-model.mjs?v=demo7';
+import {directDriver} from './direct.mjs?v=demo7';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
@@ -55,7 +56,9 @@ const landmarkFilters={},filteredFrames={};
 function cameraPoints(world,lm){
  const strength=getCombinedOptions().demoJitter??2,now=performance.now();let cached=filteredFrames[side];
  if(!cached||cached.input!==lm||cached.strength!==strength){if(!cached||now-cached.time>300)landmarkFilters[side]=new LandmarkJitter();const filtered=(landmarkFilters[side]??=new LandmarkJitter()).update(lm,world,strength,captureAspect);cached=filteredFrames[side]={input:lm,strength,time:now,...filtered};}
- return rawCameraPoints(cached.world,cached.lm);
+ const points=rawCameraPoints(cached.world,cached.lm);
+ if(demoNearFace(lm)){const target=new THREE.Vector3().fromArray(cameraPosition(cameraUV(cached.lm[0],captureAspect,camera.aspect),combined.depth,camera.aspect)),delta=target.sub(points[0]);for(const p of points)p.add(delta);}
+ return points;
 }
 
 function rawCameraPoints(world,lm){
@@ -192,7 +195,7 @@ $('png').onclick=()=>{renderDemo();const c=document.createElement('canvas');c.wi
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set(1-(e.clientX-rect.left)/rect.width*2,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children.filter(m=>m.visible))[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
 await rig.ready;
 tips=buildTips(rig);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>drivers[args[1]](...args);let directResult=null;
-function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,confirmDegrees:sampleSource?0:+$('confirmJump').value,noiseDegrees:+$('fingerNoise').value,smoothingMs:+$('directionSmoothing').value,movementThresholdMm:+$('movementThreshold').value,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,contactPixels:attach,contactReleasePixels:Math.max(attach,+$('contactRelease').value),thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm,width:$('preview').width,height:$('preview').height};}
+function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,confirmDegrees:sampleSource?0:+$('confirmJump').value,noiseDegrees:+$('fingerNoise').value,smoothingMs:+$('directionSmoothing').value,movementThresholdMm:+$('movementThreshold').value,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,contactPixels:attach,contactReleasePixels:Math.max(attach,+$('contactRelease').value),thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,headContact:fitDemoGrip,lm,width:$('preview').width,height:$('preview').height};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
@@ -323,4 +326,12 @@ function renderDemo(){
  camera.layers.set(0);renderer.autoClear=true;renderer.render(scene,camera);
  renderer.autoClear=false;renderer.clearDepth();scene.background=null;camera.layers.set(1);renderer.render(scene,camera);
  scene.background=background;camera.layers.mask=oldMask;renderer.autoClear=oldAuto;
+}
+
+function demoNearFace(lm){if(!getCombinedOptions().demoGrip||!combined?.group.visible||!combined.depth||!combined.face)return false;const f=combined.face.points,left=Math.min(f[234].x,f[454].x),right=Math.max(f[234].x,f[454].x),top=f[10].y,bottom=f[152].y,pad=(right-left)*.15;return [4,8,12,16,20].some(i=>lm[i].x>left-pad&&lm[i].x<right+pad&&lm[i].y>top-(right-left)*.65&&lm[i].y<bottom+pad);}
+function fitDemoGrip(p,chains,lengths,hinges,lm){
+ if(!demoNearFace(lm))return;combined.group.updateMatrixWorld(true);combined.group.traverse(m=>{if(m.isSkinnedMesh){m.skeleton.update();m.computeBoundingSphere();}});
+ const ray=new THREE.Raycaster(),zero=new THREE.Vector3(),targets=[];
+ for(let f=0;f<5;f++){const i=4+f*4,uv=cameraUV(lm[i],captureAspect,camera.aspect);let target=null;for(const blend of [0,.08,.16]){const aim=new THREE.Vector3().fromArray(cameraPosition(uv,combined.depth,camera.aspect));if(combined.position)aim.lerp(combined.position,blend);ray.set(zero,aim.normalize());const hit=ray.intersectObject(combined.group,true)[0];if(hit){target=hit.point.clone().addScaledVector(hit.point.clone().normalize(),-.006);break;}}if(!target){let best=.15*.15;const v=new THREE.Vector3();for(const sample of combined.contactSamples||[]){sample.mesh.getVertexPosition(sample.i,v);v.applyMatrix4(sample.mesh.matrixWorld);const d=v.distanceToSquared(chains[f][3]);if(d<best){best=d;target=v.clone().addScaledVector(v.clone().normalize(),-.006);}}}targets.push(target);}
+ fitHeadGrip(p,chains,lengths,hinges,targets,getCombinedOptions().demoGrip);
 }

@@ -11,7 +11,7 @@ export class CombinedHead {
    this.asset=g.scene;this.group.add(g.scene);g.scene.traverse(o=>{if(o.isBone){const n=o.name.toLowerCase();if(n.includes('eye'))(this.bones.eyes??=[]).push(o);else if(n.includes('head'))this.bones.head=o;else if(n.includes('neck'))this.bones.neck=o;else if(n.includes('root'))this.bones.root=o;}if(o.isMesh){o.frustumCulled=false;for(const mat of Array.isArray(o.material)?o.material:[o.material]){mat.color?.set(0xcacaca);mat.map=null;mat.roughness=.65;mat.needsUpdate=true;}}});
    scene.updateMatrixWorld(true);for(const b of [this.bones.root,this.bones.neck,this.bones.head,...(this.bones.eyes||[])])if(b)this.rest.set(b,b.getWorldQuaternion(new T.Quaternion()));
    const eyes=this.bones.eyes;if(!this.bones.head||eyes?.length!==2)throw Error('Alien head/eye bones were not found');
-   this.restEyeSpan=eyes[0].getWorldPosition(new T.Vector3()).distanceTo(eyes[1].getWorldPosition(new T.Vector3()));this.loaded=true;
+   this.restEyeSpan=eyes[0].getWorldPosition(new T.Vector3()).distanceTo(eyes[1].getWorldPosition(new T.Vector3()));this.contactSamples=[];g.scene.traverse(mesh=>{if(!mesh.isSkinnedMesh)return;const ids=mesh.geometry.attributes.skinIndex,w=mesh.geometry.attributes.skinWeight;for(let i=0;i<ids.count;i+=12){let weight=0;for(let k=0;k<4;k++)if(mesh.skeleton.bones[ids.getComponent(i,k)]===this.bones.head)weight+=w.getComponent(i,k);if(weight>.65)this.contactSamples.push({mesh,i});}});this.loaded=true;
   }).catch(e=>{this.error=e.message;});
  }
  receive(data){if(data.task==='face'){this.face=data.face;this.seen=performance.now();}if(data.task==='pose'){this.pose=data.pose;this.poseSeen=performance.now();}}
@@ -21,7 +21,7 @@ export class CombinedHead {
   if(!this.face||performance.now()-this.seen>600||!this.loaded)return false;
   this.depthRef=faceReference(this.face);if(!this.depthRef)return false;this.metres=metres;this.position=null;this.anchor=null;
   const centers=eyeCenters(this.face.points);if(!centers)return false;const eyePoints=centers.map(p=>new T.Vector3().fromArray(cameraPosition(cameraUV(p,aspect,viewAspect),metres,viewAspect)));
-  const m=this.face.matrix,foreshortening=Math.max(.4,Math.hypot(m[0],m[1]));this.fixedScale=eyePoints[0].distanceTo(eyePoints[1])/(this.restEyeSpan*foreshortening);this.fixedScale=Math.max(.01,Math.min(2,this.fixedScale));return true;
+  const m=this.face.matrix,foreshortening=Math.max(.4,Math.hypot(m[0],m[1]));this.fixedScale=.063/this.restEyeSpan;this.metres=T.MathUtils.clamp(.063*foreshortening*metres/Math.max(.001,eyePoints[0].distanceTo(eyePoints[1])),.08,4);return true;
  }
  setWorld(b,q){if(!b)return;b.parent.updateWorldMatrix(true,false);b.quaternion.copy(b.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(q));b.updateWorldMatrix(false,true);}
  update(dt,aspect,camera,metres,depthGain){
