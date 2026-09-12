@@ -10,8 +10,12 @@
 // Measured 2026-09-11 (Edge, this PC, 1.2 KB messages at 15 Hz): broker.hivemq.com 82-102 ms, broker.emqx.io 202-302 ms.
 // Nothing is stored on the broker (no retained messages) and no image ever leaves the phone, but the landmark numbers do
 // pass through a public server, so treat the link as public.
-const BROKERS = ["wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt"];
-const MQTT_JS = "https://cdn.jsdelivr.net/npm/mqtt@5.10.1/dist/mqtt.min.js";
+const BROKERS = [
+  "wss://broker.hivemq.com:8884/mqtt",
+  "wss://broker.emqx.io:8084/mqtt",
+  "wss://test.mosquitto.org:8081/mqtt",
+];
+const MQTT_JS = new URL("../vendor/mqtt.min.js", import.meta.url).href;
 const CODE_KEY = "rpsh_cam3";   // the same code camlink.mjs uses, so a phone that has one keeps it
 const S = 8000;                 // int16 scale: +-4.09 for normalized landmarks and for metres
 
@@ -40,15 +44,31 @@ export async function connectLink(code, { onMessage = () => {}, onStatus = () =>
   const mqtt = await loadMqtt();
   const base = "rpsh1/" + code;
   const clients = new Array(BROKERS.length).fill(null);
-  let dead = false, from = -1, fromAt = -Infinity;
-  onStatus("connecting…");
-  await Promise.all(BROKERS.map((url, i) => new Promise(done => {
-    let settled = false;
-    const finish = () => { if (!settled) { settled = true; done(); } };
+  let dead = false, from = -1, fromAt = -Infinity, connectedCount = 0;
+  let readyResolve, readyReject, finished = 0;
+  const ready = new Promise((resolve, reject) => { readyResolve = resolve; readyReject = reject; });
+  onStatus("connecting to relay…");
+  BROKERS.forEach((url, i) => {
+    let settled = false, everConnected = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      finished++;
+      if (finished === BROKERS.length && !clients.some(Boolean)) readyReject(Error("no relay reachable; check Internet access or try another network"));
+    };
     let c;
     try { c = mqtt.connect(url, { connectTimeout: 8000, keepalive: 20, reconnectPeriod: 3000, clean: true, clientId: "rpsh_" + Math.random().toString(36).slice(2, 10) }); }
     catch { return finish(); }
-    c.on("connect", () => { if (subscribe || subscribeTo !== "#") c.subscribe(base + "/" + subscribeTo, { qos: 0 }); clients[i] = c; finish(); });   // the phone takes only "c", the PC's control topic: subscribing to everything would echo its own frames back
+    c.on("connect", () => {
+      if (dead) { c.end(true); return; }
+      if (subscribe || subscribeTo !== "#") c.subscribe(base + "/" + subscribeTo, { qos: 0 });
+      clients[i] = c;
+      const firstConnection = connectedCount === 0;
+      if (!everConnected) { everConnected = true; connectedCount++; }
+      finish();
+      readyResolve();
+      if (firstConnection) onStatus("relay connected");
+    });   // the phone takes only "c", the PC's control topic: subscribing to everything would echo its own frames back
     c.on("message", (topic, payload) => {
       if (dead) return;
       const now = performance.now();
@@ -59,8 +79,8 @@ export async function connectLink(code, { onMessage = () => {}, onStatus = () =>
     c.on("error", () => finish());
     c.on("close", () => finish());
     setTimeout(finish, 9000);
-  })));
-  if (!clients.some(Boolean)) throw Error("no public broker reachable (check the connection)");
+  });
+  await ready;
   return {
     code, base,
     get connected() { return clients.some(c => c?.connected); },

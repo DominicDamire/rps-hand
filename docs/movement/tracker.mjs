@@ -9,7 +9,8 @@ self.onmessage=async({data})=>{
       try{tracker=await HandLandmarker.createFromOptions(files,options);}catch{options.baseOptions.delegate='CPU';tracker=await HandLandmarker.createFromOptions(files,options);}
       self.postMessage({type:'ready'});
     }else if(data.type==='frame'){
-      try{const started=performance.now();const r=tracker.detectForVideo(data.bitmap,data.time);self.postMessage({type:'result',inferenceMs:performance.now()-started,time:data.time,handedness:r.handedness,landmarks:r.landmarks,worldLandmarks:r.worldLandmarks});}finally{data.bitmap.close();}
+      const source=data.bitmap||data.image;
+      try{const started=performance.now();const r=tracker.detectForVideo(source,data.time);self.postMessage({type:'result',inferenceMs:performance.now()-started,time:data.time,handedness:r.handedness,landmarks:r.landmarks,worldLandmarks:r.worldLandmarks});}finally{source?.close?.();}
     }
   }catch(e){self.postMessage({type:'error',message:String(e)});}
 };
