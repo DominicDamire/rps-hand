@@ -24,12 +24,13 @@ export function receivePhone(onStream,onStatus,onEnd){
 export async function sendPhone(id,video,status,facing='user'){
  if(!/^handlab-[a-f0-9-]{36}$/.test(id))throw Error('Scan a fresh QR code from the PC lab.');
  if(!window.Peer)throw Error('Connection library failed to load. Reload this page.');
- const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}}});
+ const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60,max:60}}});
  let peer,call,closed=false,wake,timer;
  const stop=()=>{if(closed)return;closed=true;clearTimeout(timer);call?.close();peer?.destroy();stream.getTracks().forEach(t=>t.stop());video.srcObject=null;wake?.release().catch(()=>{});};
  try{video.srcObject=stream;await video.play();peer=new Peer(undefined,{config});
   navigator.wakeLock?.request('screen').then(w=>{if(closed)w.release();else wake=w;}).catch(()=>{});
   peer.on('open',()=>{if(closed)return;status('Connecting to PC…');call=peer.call(id,stream);if(!call){status('Could not call the PC. Stop and reconnect.');return;}
+   const tune=async()=>{for(const sender of call.peerConnection?.getSenders()||[]){if(sender.track?.kind!=='video')continue;try{const params=sender.getParameters();if(!params.encodings?.length)continue;for(const encoding of params.encodings){encoding.maxBitrate=10000000;encoding.maxFramerate=60;encoding.scaleResolutionDownBy=1;}await sender.setParameters(params);}catch{}}};call.peerConnection?.addEventListener('connectionstatechange',()=>{if(call.peerConnection.connectionState==='connected')tune();});
    timer=setTimeout(()=>{if(!closed&&call.peerConnection?.connectionState!=='connected')status('Video connection timed out. Try the same Wi-Fi and scan a new QR from the PC.');},15000);
    call.on('close',()=>{if(!closed){stop();status('PC disconnected. Scan a new QR code to reconnect.');}});
    call.on('error',e=>{stop();status('Video error: '+e.message);});
