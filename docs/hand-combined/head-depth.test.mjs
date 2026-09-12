@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {calibratedDepth,faceReference,eyeCenter} from './head-depth.mjs';
+assert.equal(calibratedDepth(.7,.7,.4),.4);
+assert.equal(calibratedDepth(1.4,.7,.4),.8);
+assert.equal(calibratedDepth(1.4,.7,.4,0),.4);
+assert.equal(calibratedDepth(.35,.7,.4),.2);
+assert.equal(calibratedDepth(NaN,.7,.4),null);
+assert.equal(calibratedDepth(.3,0,.4),null);
+assert.equal(faceReference({matrix:Array.from({length:16},(_,i)=>i===14?-40:0)}),.4);
+assert.equal(eyeCenter([]),null);
+console.log('PASS shared depth reference: fixed calibration, near/far movement, zero sensitivity and invalid estimates');
