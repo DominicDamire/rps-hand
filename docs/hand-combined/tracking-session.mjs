@@ -1,12 +1,12 @@
 // One fresh camera frame per task, at most one inference in flight per worker.
-export const defaults = {cameraFps:60,handRate:60,faceRate:30,shoulderRate:4,trackingWidth:480,trackerDelegate:'GPU',overlayRate:60,handPriority:false};
+export const defaults = {cameraFps:30,handRate:60,faceRate:30,shoulderRate:4,trackingWidth:480,trackerDelegate:'GPU',overlayRate:60,handPriority:false};
 export function startTracking(video, onResult, onStats, getOptions=()=>defaults,captureOptions={}) {
  let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0,cameraCallbacks=0,lastPresented=null,handStreak=0,lastAccepted=-Infinity,lastClockProgress=performance.now(),capturePolls=0;
  const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},errors:{}};
  const slots=['hands','face','pose'].map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
  function startWorker(s){
   const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;
-  const url=new URL('./tracker.mjs?v=19.4',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);
+  const url=new URL('./tracker.mjs?v=19.5',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);
   const w=s.worker=new Worker(url,{type:'module'});
   s.timer=setTimeout(()=>{if(!s.ready){stats.errors[s.task]='Tracker initialization timed out';w.terminate();s.busy=false;}},60000);
   w.onerror=e=>{clearTimeout(s.timer);stats.errors[s.task]=e.message;s.busy=false;s.ready=false;};
@@ -53,7 +53,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
  // Original standalone capture pattern: RAF drives work; video callbacks are not a gate.
  function fallbackTick(now){if(stopped)return;
   const stalled=now-lastClockProgress>250;
-  if(now-lastAccepted>=1000/Math.max(1,+getOptions().cameraFps||60)-1)tick(now,undefined,stalled);
+  if(!stalled||now-lastAccepted>=33)tick(now,undefined,stalled);
   rafHandle=requestAnimationFrame(fallbackTick);
  }
  // Initialization and telemetry must not depend on delivery of the first video callback.

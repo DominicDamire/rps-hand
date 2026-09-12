@@ -41,3 +41,5 @@ A live preview with repeated media timestamps could reject every frame while cal
 
 ## V19.4 restore standalone capture scheduling
 Compared original tagirz500/alien-head docs/index.html and standalone hand-lines/phone-link.mjs: both dispatch from RAF, use low-quality bitmap resize and independent worker-busy guards. Restore that capture pattern; disable the shared serial queue by default. Keep fixed-timestamp recovery, sparse drawing and expression classification off. Add Hands only / Face only / Combined buttons using the same camera, detector and inference path for on-device comparison. Combining three neural tasks still has a resource cost; no zero-latency or 60 inference FPS claim.
+
+V19.5 also restores the original face repository camera request: ideal 30 FPS, without a maximum constraint. Capture follows video changes on RAF, without a second target-FPS gate. Comparison buttons remain available.

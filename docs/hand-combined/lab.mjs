@@ -1,12 +1,12 @@
-import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=19.4';
-import {installCombinedUI} from './combined-ui.mjs?v=19.4';
-import {CombinedHead} from './head-model.mjs?v=19.4';
+import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=19.5';
+import {installCombinedUI} from './combined-ui.mjs?v=19.5';
+import {CombinedHead} from './head-model.mjs?v=19.5';
 import {directDriver} from './direct.mjs?v=17';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './phone-link.mjs?v=19.4';
+import {receivePhone} from './phone-link.mjs?v=19.5';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -108,7 +108,7 @@ function drawPreview(source,landmarks){const previewRate=getCombinedOptions().ov
  for(let i=0;i<21;i++){ctx.beginPath();ctx.arc(...point(i),i%4===0?4:2.5,0,Math.PI*2);ctx.fill();}
 }
 }
-function ensureWorker(){if(workerReady)return workerReady;worker=new Worker(new URL('./tracker.mjs?v=19.4&task=hands&delegate=GPU',import.meta.url),{type:'module'});
+function ensureWorker(){if(workerReady)return workerReady;worker=new Worker(new URL('./tracker.mjs?v=19.5&task=hands&delegate=GPU',import.meta.url),{type:'module'});
  workerReady=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out')),45000);worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();return;}if(data.type==='error'){if(request){request.reject(Error(data.message));request=null;}else{clearTimeout(timer);reject(Error(data.message));}return;}if(request&&data.type==='result'){request.resolve(data);request=null;}};worker.onerror=e=>{clearTimeout(timer);if(request){request.reject(Error(e.message));request=null;}reject(Error(e.message));};worker.postMessage({type:'init'});});return workerReady;}
 async function detect(source){if(inflight||editing)return;inflight=true;const token=epoch;
  try{await ensureWorker();if(token!==epoch||editing)return;const frame=document.createElement('canvas'),w=source.videoWidth||source.naturalWidth||source.width,h=source.videoHeight||source.naturalHeight||source.height;if(!w||!h)return;
@@ -132,7 +132,7 @@ function acceptTracking(data,frame,token=epoch){
  $('edit').disabled=true;$('resume').disabled=true;
 }
 function stopCamera(){liveSession?.();liveSession=null;combined?.reset();trackingStats=null;if($('liveFps'))$('liveFps').textContent='CAM — FPS\nHAND — · FACE — · BODY —';allHands=[];recentHands.clear();closureState.reset();if(!editing){thumbReference=0;contactAngles=null;}epoch++;straight={};pinching=false;pinchFinger=null;contactHold=null;for(const f of Object.values(thumbFilters))f.reset();lastTracking=0;smoothPalmQ=previousPalmQ=heldPalmQ=null;palmQuiet=0;for(const f of Object.values(filters))f.reset();positionFilter.reset();curlFilter.reset();posePreview=false;closePhone?.();closePhone=null;phoneActive=false;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
-async function startCamera(){try{stopCamera();editing=false;sampleSource=null;latest=null;notice('Opening camera…');const id=$('cameraSelect').value;stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(id?{deviceId:{exact:id}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:+getCombinedOptions().cameraFps,max:+getCombinedOptions().cameraFps}}});$('video').srcObject=stream;await $('video').play();lastVideo=-1;await listCameras();liveSession=startTracking($('video'),(data,frame)=>{if(data.task==='hands')acceptTracking(data,frame);else{combined?.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('Combined V19.4: hands, face and shoulders share this camera. GPU preferred; actual rates below.');updateMode();}catch(e){stopCamera();notice('Camera could not start: '+e.message);}}
+async function startCamera(){try{stopCamera();editing=false;sampleSource=null;latest=null;notice('Opening camera…');const id=$('cameraSelect').value;stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(id?{deviceId:{exact:id}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:+getCombinedOptions().cameraFps}}});$('video').srcObject=stream;await $('video').play();lastVideo=-1;await listCameras();liveSession=startTracking($('video'),(data,frame)=>{if(data.task==='hands')acceptTracking(data,frame);else{combined?.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('Combined V19.5: hands, face and shoulders share this camera. GPU preferred; actual rates below.');updateMode();}catch(e){stopCamera();notice('Camera could not start: '+e.message);}}
 async function listCameras(){const current=$('cameraSelect').value,devices=await navigator.mediaDevices.enumerateDevices();$('cameraSelect').replaceChildren(new Option('Default camera',''));for(const d of devices.filter(d=>d.kind==='videoinput'))$('cameraSelect').add(new Option(d.label||'Camera '+($('cameraSelect').options.length),d.deviceId));$('cameraSelect').value=current;}
 $('phone').onclick=()=>{stopCamera();editing=false;sampleSource=null;latest=null;updateMode();try{closePhone=receivePhone((data,size)=>{if(!phoneActive){phoneActive=true;notice('Phone tracking connected. Camera images stay on the phone.');updateMode();}phoneFrame.width=480;phoneFrame.height=Math.max(1,Math.round(480*(size.h||480)/(size.w||640)));const ctx=phoneFrame.getContext('2d');ctx.fillStyle='#05080c';ctx.fillRect(0,0,phoneFrame.width,phoneFrame.height);acceptTracking(data,phoneFrame);},notice,message=>{stopCamera();notice(message);},(data,size)=>{phoneActive=true;phoneFrame.width=480;phoneFrame.height=Math.max(1,Math.round(480*(size.h||480)/(size.w||640)));phoneFrame.getContext('2d').fillRect(0,0,phoneFrame.width,phoneFrame.height);combined?.receive(data);drawPreview(phoneFrame,latest?.landmarks);},getCombinedOptions,showTrackingStats);}catch(e){notice(e.message);}};
 $('start').onclick=startCamera;$('stop').onclick=stopCamera;
@@ -273,7 +273,7 @@ Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
 Scene: ${measuredScene} measured FPS (target ${o.sceneRate})${Object.keys(s.errors||{}).length?' · '+JSON.stringify(s.errors):''}`;}
 window.combinedLab={version:19,get head(){return combined;},get metrics(){return trackingStats;},get handResult(){return directResult;},get scene(){return scene;}};
-notice('Combined V19.4 ready: direct-lines hands + black head and shoulders. Connect one camera.');
+notice('Combined V19.5 ready: direct-lines hands + black head and shoulders. Connect one camera.');
 combined.ready.then(()=>{if(combined.error)notice('Head model failed to load: '+combined.error);});
 
 const fixtureName=new URLSearchParams(location.search).get('fixture');

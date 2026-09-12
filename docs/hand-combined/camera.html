@@ -24,7 +24,7 @@
   <video id="video" autoplay playsinline muted></video>
   <p>Keep this page open and the screen awake. The status above shows whether the link, camera, or tracker needs attention.</p>
   <script type="module">
-    import {sendPhone} from './phone-link.mjs?v=19.4';
+    import {sendPhone} from './phone-link.mjs?v=19.5';
     const $=id=>document.getElementById(id),params=new URLSearchParams(location.search);
     let stop=null,epoch=0;
     const initial=(params.get('pair')||'').replace(/\D/g,'').slice(0,6);$('pair').value=initial;$('pair').setAttribute('value',initial);
