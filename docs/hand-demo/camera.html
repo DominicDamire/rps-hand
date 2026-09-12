@@ -13,7 +13,7 @@
 </head>
 <body>
   <h1>Phone camera for your PC lab</h1>
-  <p>This phone tracks the hands and sends landmark numbers to the paired PC. It works across different Wi-Fi networks and mobile data. Camera images stay on this phone.</p>
+  <p id="description">This phone tracks the hands and sends landmark numbers to the paired PC. It works across different Wi-Fi networks and mobile data. Camera images stay on this phone.</p>
   <div class="pair">
     <label>Six-digit code from the PC<input id="pair" inputmode="numeric" autocomplete="off" maxlength="6" pattern="[0-9]{6}" placeholder="123456"></label>
     <button id="useCode" type="button">Use code</button>
@@ -24,8 +24,9 @@
   <video id="video" autoplay playsinline muted></video>
   <p>Keep this page open and the screen awake. The status above shows whether the link, camera, or tracker needs attention.</p>
   <script type="module">
-    import {sendPhone} from './phone-link.mjs?v=demo1';
+    import {sendPhone} from './phone-link.mjs?v=demo9';
     const $=id=>document.getElementById(id),params=new URLSearchParams(location.search);
+    if(params.get('body')==='1'){$('description').textContent='This phone tracks the head and upper body and sends landmark coordinates to the PC. Separate hand tracking is off. Camera images stay on this phone.';document.title='Phone camera · Full upper body';}
     let stop=null,epoch=0;
     const initial=(params.get('pair')||'').replace(/\D/g,'').slice(0,6);$('pair').value=initial;$('pair').setAttribute('value',initial);
     if(initial)$('status').textContent='Code '+initial+' loaded. Tap Start camera and allow access.';
