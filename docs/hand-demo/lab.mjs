@@ -5,14 +5,14 @@ import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {LandmarkJitter} from './landmark-jitter.mjs';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=15.3';
-import {installCombinedUI} from './combined-ui.mjs?v=alien15.7';
-import {CombinedHead} from './head-model.mjs?v=alien15.7';
+import {installCombinedUI} from './combined-ui.mjs?v=alien15.8';
+import {CombinedHead} from './head-model.mjs?v=alien15.8';
 import {directDriver} from './direct.mjs?v=demo9';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './video-link.mjs?v=alien15.7';
+import {receivePhone} from './video-link.mjs?v=alien15.8';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -249,7 +249,7 @@ function restoreStart(values){for(const id of booleanStartFields)if(typeof value
 restoreStart({fingerNoise:0,directionSmoothing:0,confirmJump:0,depthGain:1});
 try{const saved=JSON.parse(localStorage.getItem('brother-demo-start')||'null');if(saved)restoreStart(saved);}catch{}
 $('saveStart').onclick=()=>{try{localStorage.setItem('brother-demo-start',JSON.stringify({...Object.fromEntries(startFields.map(id=>[id,+$(id).value])),...Object.fromEntries(booleanStartFields.map(id=>[id,$(id).checked]))}));$('startStatus').textContent='Starting settings saved in this browser.';}catch{$('startStatus').textContent='Browser storage unavailable.';}};
-$('resetStart').onclick=()=>{restoreStart({fingerNoise:0,directionSmoothing:0,movementThreshold:0,confirmJump:0,upperCoupling:0,contactAttach:8,contactRelease:12,lockUpper:true,falseDepth:true,fingerThickness:1.3,tipInset:2,trackingGrace:1000,eyeX:0,eyeY:0,eyeZ:-1.2,eyeYaw:180,eyePitch:0,eyeFov:60,phoneDistance:40,depthGain:1});$('startStatus').textContent='Defaults restored. Save to use on next visit.';};
+$('resetStart').onclick=()=>{restoreStart({fingerNoise:1,directionSmoothing:35,movementThreshold:.5,confirmJump:12,upperCoupling:0,contactAttach:8,contactRelease:12,lockUpper:true,falseDepth:true,fingerThickness:1.3,tipInset:2,trackingGrace:1000,eyeX:0,eyeY:0,eyeZ:-1.2,eyeYaw:180,eyePitch:0,eyeFov:60,phoneDistance:40,depthGain:1});$('startStatus').textContent='Defaults restored. Save to use on next visit.';};
 
 const secondLineGeometry=new THREE.BufferGeometry();secondLineGeometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(120),3));const secondLines=new THREE.LineSegments(secondLineGeometry,new THREE.LineBasicMaterial({color:0x79bbff,depthTest:false}));secondLines.frustumCulled=false;scene.add(secondLines);
 function renderOtherHand(dt){
@@ -278,6 +278,7 @@ $('depthGain').oninput=()=>{$('depthGain').nextElementSibling.value=$('depthGain
 $('calibrateDistance').onclick=()=>{if(!latest||camera.isOrthographicCamera){$('depthCalibrationStatus').textContent='Use perspective and show a hand next to your face first.';return;}const metres=+$('phoneDistance').value/100;let count=0;for(const s of ['R','L'])if(depthStates[s]?.depth){distanceGains[s]=metres/depthStates[s].depth;count++;}$('eyeZ').value=-metres;$('eyeZ').nextElementSibling.value=-metres;setViewMode();$('depthCalibrationStatus').textContent='Calibrated '+count+' hand(s) at '+$('phoneDistance').value+' cm. Recalibrate if you move the phone.';};
 
 getCombinedOptions=installCombinedUI();
+restoreStart({fingerNoise:1,directionSmoothing:35,movementThreshold:.5,confirmJump:12,lockUpper:true,upperCoupling:0});
 $('trackingGrace').value=1000;$('trackingGrace').nextElementSibling.value=1000;
 for(const id of ['tipContact','contact']){$(id).checked=false;$(id).disabled=true;$(id).closest('label').hidden=true;}
 combined=new CombinedHead(scene,getCombinedOptions);

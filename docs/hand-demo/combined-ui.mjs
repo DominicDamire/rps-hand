@@ -1,4 +1,4 @@
-import {installExperiments} from './experiment-ui.mjs?v=15.1';
+import {installExperiments} from './experiment-ui.mjs?v=15.8';
 export function installCombinedUI(){
  const $=id=>document.getElementById(id),container=$('directSettings');
  const details=(title,open=false)=>{const d=document.createElement('details');d.className='settingTab';d.open=open;const s=document.createElement('summary');s.textContent=title;d.append(s);return d;};
@@ -64,6 +64,7 @@ export function installCombinedUI(){
  $('cameraFps').value=60;$('cameraFps').nextElementSibling.value=60;$('handRate').value=60;$('handRate').nextElementSibling.value=60;$('uncappedTracking').checked=false;
  $('shoulderRate').value=20;$('shoulderRate').nextElementSibling.value=20;$('faceRate').value=20;$('faceRate').nextElementSibling.value=20;$('lockBody').checked=false;$('neckShare').value=.45;$('neckShare').nextElementSibling.value=.45;
  $('headSize').value=1.2;$('headSize').nextElementSibling.value=1.2;
+ for(const [id,value] of Object.entries({demoJitter:1,depthSmooth:40,headSmooth:20})){$(id).value=value;$(id).nextElementSibling.value=value;}
  document.querySelector('header b').textContent='HANDS + ALIEN HEAD · 15.2 · PC TRACKING';
  document.querySelector('header span').textContent='Fixed-size hands · alien head, neck and shoulders';
  for(const id of ['demoGrip','demoContact','demoReach','demoSide','demoPadding']){$(id).value=0;$(id).nextElementSibling.value=0;$(id).closest('label').style.display='none';}
