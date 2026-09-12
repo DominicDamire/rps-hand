@@ -1,5 +1,6 @@
+import {LandmarkJitter} from './landmark-jitter.mjs';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=20.1';
-import {installCombinedUI} from './combined-ui.mjs?v=demo2';
+import {installCombinedUI} from './combined-ui.mjs?v=demo5';
 import {CombinedHead} from './head-model.mjs?v=demo4';
 import {directDriver} from './direct.mjs?v=demo4';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
@@ -50,7 +51,12 @@ function jointBasis(n){const key=side+n;if(basisCache[key])return basisCache[key
  return basisCache[key]=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x,y,z));
 }
 const cheekOffsets={},renderedHands={};
-function cameraPoints(world,lm){return rawCameraPoints(world,lm);}
+const landmarkFilters={},filteredFrames={};
+function cameraPoints(world,lm){
+ const strength=getCombinedOptions().demoJitter??2,now=performance.now();let cached=filteredFrames[side];
+ if(!cached||cached.input!==lm||cached.strength!==strength){if(!cached||now-cached.time>300)landmarkFilters[side]=new LandmarkJitter();const filtered=(landmarkFilters[side]??=new LandmarkJitter()).update(lm,world,strength,captureAspect);cached=filteredFrames[side]={input:lm,strength,time:now,...filtered};}
+ return rawCameraPoints(cached.world,cached.lm);
+}
 
 function rawCameraPoints(world,lm){
  if(camera.isOrthographicCamera){
