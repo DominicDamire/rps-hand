@@ -5,14 +5,14 @@ import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {LandmarkJitter} from './landmark-jitter.mjs';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=15.3';
-import {installCombinedUI} from './combined-ui.mjs?v=alien15.4';
-import {CombinedHead} from './head-model.mjs?v=alien15.4';
+import {installCombinedUI} from './combined-ui.mjs?v=alien15.5';
+import {CombinedHead} from './head-model.mjs?v=alien15.5';
 import {directDriver} from './direct.mjs?v=demo9';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './video-link.mjs?v=alien15.4';
+import {receivePhone} from './video-link.mjs?v=alien15.5';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -122,7 +122,7 @@ function persist(){try{localStorage.setItem(KEY,JSON.stringify(profile));return 
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),20000);}
 function updateMode(){for(const id of ['save','undo','zero','saveLimits','clearLimits','resume'])$(id).disabled=!editing;$('edit').disabled=editing||!latest;$('side').disabled=editing;$('detected').disabled=editing;$('follow').disabled=editing||$('spatial').checked;if($('spatial').checked)$('follow').checked=true;
  $('mode').textContent=editing?'FROZEN / EDITING':stream||phoneActive?'LIVE CAMERA':latest?'IMAGE PREVIEW':'LIVE PREVIEW';$('editHelp').textContent=editing?'Edit the selected joint. Saved corrections affect the fingers, not the wrist.':'Values are movement relative to your saved alignment. Locked sideways and twist read zero.';renderControls();}
-function drawPreview(source,landmarks){const previewRate=getCombinedOptions().overlayRate||30;if(performance.now()-lastPreviewTime<1000/previewRate&&!sampleSource)return;lastPreviewTime=performance.now();const aspect=(source.width||source.naturalWidth)/(source.height||source.naturalHeight);if(aspect!==captureAspect){captureAspect=aspect;updateCameraFrame();}const c=$('preview');c.width=source.width||source.naturalWidth;c.height=source.height||source.naturalHeight;const ctx=c.getContext('2d');ctx.save();ctx.translate(c.width,0);ctx.scale(-1,1);ctx.drawImage(source,0,0,c.width,c.height);ctx.restore();
+function drawPreview(source,landmarks){const previewRate=getCombinedOptions().overlayRate||30;if(performance.now()-lastPreviewTime<1000/previewRate&&!sampleSource)return;lastPreviewTime=performance.now();const aspect=(source.width||source.naturalWidth)/(source.height||source.naturalHeight);if(aspect!==captureAspect){captureAspect=aspect;updateCameraFrame();}const c=$('preview'),previewWidth=480,previewHeight=Math.max(1,Math.round(previewWidth/aspect));if(c.width!==previewWidth)c.width=previewWidth;if(c.height!==previewHeight)c.height=previewHeight;const ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);ctx.save();ctx.translate(c.width,0);ctx.scale(-1,1);ctx.drawImage(source,0,0,c.width,c.height);ctx.restore();
  combined?.overlay(ctx,c.width,c.height);if(!getCombinedOptions().overlayRate||!landmarks)return;for(const current of ($('bothHands').checked&&allHands.length?allHands.map(h=>h.landmarks):[landmarks])){landmarks=current;ctx.lineWidth=2;ctx.strokeStyle='#86edbb';ctx.fillStyle='#f0ffee';const point=i=>[(1-landmarks[i].x)*c.width,landmarks[i].y*c.height];
  for(let f=0;f<5;f++){let prev=0;for(let j=1;j<=4;j++){const idx=1+f*4+j-1;ctx.beginPath();ctx.moveTo(...point(prev));ctx.lineTo(...point(idx));ctx.stroke();prev=idx;}}
  for(let i=0;i<21;i++){ctx.beginPath();ctx.arc(...point(i),i%4===0?4:2.5,0,Math.PI*2);ctx.fill();}
