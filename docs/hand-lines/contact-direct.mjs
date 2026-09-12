@@ -23,15 +23,15 @@ export function fitContact(thumb,finger,thumbLengths,fingerLengths,hinge){
 
 export class ContactLatch{
  constructor(){this.contact=null;this.pending=null;this.misses=0;this.observation=null;}
- update(observation,lm,width,height,enabled,palmFraction=.12,confirm=true){
+ update(observation,lm,width,height,enabled,enterPixels=8,releasePixels=12){
   if(!enabled){this.contact=null;this.pending=null;this.misses=0;this.observation=null;return null;}
   if(observation===this.observation)return this.contact;this.observation=observation;
-  // Restore v9's immediate, predictable fingertip cue: attach at 8 camera
-  // pixels and release beyond 12. The connected fixed-length fitter below is
-  // retained, so contact no longer separates joints or resizes the mesh.
+  // Immediate, adjustable fingertip cue. The connected fixed-length fitter
+  // below is retained, so contact does not separate joints or resize the mesh.
   const distance=i=>Math.hypot((lm[4].x-lm[i].x)*width,(lm[4].y-lm[i].y)*height);
-  if(this.contact&&distance(this.contact)>12)this.contact=null;
-  if(!this.contact){const candidate=[8,12,16,20].sort((a,b)=>distance(a)-distance(b))[0];if(distance(candidate)<=8)this.contact=candidate;}
+  const enter=Math.max(0,enterPixels),release=Math.max(enter,releasePixels);
+  if(this.contact&&distance(this.contact)>release)this.contact=null;
+  if(!this.contact&&enter>0){const candidate=[8,12,16,20].sort((a,b)=>distance(a)-distance(b))[0];if(distance(candidate)<=enter)this.contact=candidate;}
   return this.contact;
  }
 }

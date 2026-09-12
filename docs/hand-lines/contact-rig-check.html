@@ -1,5 +1,5 @@
 <!doctype html><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"}}</script><pre>Loading</pre><script type="module">
-import * as T from 'three';import {DollRig} from '../doll/DollRig.js';import {buildTips} from './contact.mjs';import {directDriver} from './direct.mjs?v=15';
+import * as T from 'three';import {DollRig} from '../doll/DollRig.js';import {buildTips} from './contact.mjs';import {directDriver} from './direct.mjs?v=17';
 try{const rig=new DollRig(new T.Scene(),{url:new URL('../doll.glb',location).href,report:new URL('../doll-report.json',location).href});await rig.ready;const tips=buildTips(rig),names=['Thumb','Index','Middle','Ring','Pinky'];let gap=0,tipError=0,attachmentError=0,planeError=0;
 for(const side of ['R','L'])for(const finger of [1,2])for(const rotation of [0,Math.PI/2]){
 const q=new T.Quaternion().setFromEuler(new T.Euler(.2,rotation,0)),origin=rig.rest[side+'Hand'].world,p=[new T.Vector3(0,0,-.6)];

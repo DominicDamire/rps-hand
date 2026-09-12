@@ -1,21 +1,21 @@
 import * as T from 'three';
-import {DirectionStabilizer,fingerPlane,constrainFinger} from './stability.mjs?v=13';
-import {ContactLatch,fitContact} from './contact-direct.mjs?v=15';
+import {DirectionStabilizer,fingerPlane,constrainFinger} from './stability.mjs?v=17';
+import {ContactLatch,fitContact} from './contact-direct.mjs?v=17';
 const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';
  const stabilizer=new DirectionStabilizer(),contactLatch=new ContactLatch();
- return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,contactFraction=.12,noiseDegrees=1,lockUpper=true,contactPixels=0,thickness=1,tipInset=0,lm,width,height}){
+ return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,upperCoupling=0,lockUpper=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,width,height}){
   if(lastSide!==side){contact=null;lastSide=side;lastShape='';}
   const p=points.map(v=>v.clone()),chains=[],lengths=[],inversePalm=palmQ.clone().invert();
   // Keep rigid attachments; copy only segment directions from the earlier direct tracker.
   for(let f=0;f<5;f++){
    const name=side+FINGERS[f],base=rig.rest[name+'1'].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(palmQ).add(p[0]);
    const chain=[base],lens=[];
-   for(let k=1;k<=3;k++){const rest=k<3?rig.rest[name+(k+1)].world.clone().sub(rig.rest[name+k].world):tips[name].clone();const length=rest.length()+(k===3?tipInset/1000:0),i=1+4*f+k-1;let dir=points[i+1].clone().sub(points[i]);if(dir.lengthSq()<1e-10)dir=rest.clone().applyQuaternion(palmQ);dir=stabilizer.update(name+k,dir.normalize().applyQuaternion(inversePalm),dt,noiseDegrees,{observation:lm,confirmDegrees}).applyQuaternion(palmQ);lens.push(length);chain.push(chain[k-1].clone().addScaledVector(dir,length));}
+   for(let k=1;k<=3;k++){const rest=k<3?rig.rest[name+(k+1)].world.clone().sub(rig.rest[name+k].world):tips[name].clone();const length=rest.length()+(k===3?tipInset/1000:0),i=1+4*f+k-1;let dir=points[i+1].clone().sub(points[i]);if(dir.lengthSq()<1e-10)dir=rest.clone().applyQuaternion(palmQ);const movementNoise=Math.atan2(Math.max(0,movementThresholdMm)/1000,Math.max(.001,length))*180/Math.PI;dir=stabilizer.update(name+k,dir.normalize().applyQuaternion(inversePalm),dt,Math.max(noiseDegrees,movementNoise),{observation:lm,confirmDegrees,smoothingMs}).applyQuaternion(palmQ);lens.push(length);chain.push(chain[k-1].clone().addScaledVector(dir,length));}
    chains.push(chain);lengths.push(lens);
   }
-  contact=contactLatch.update(lm,lm,width,height,contactPixels>0,contactFraction,!staticInput);
+  contact=contactLatch.update(lm,lm,width,height,contactPixels>0,contactPixels,contactReleasePixels);
   // Upper joints of the four fingers are hinges: no added sideways or twist.
   // Establish the allowed plane before solving fingertip contact inside it.
   const restAcross=rig.rest[side+'Index1'].world.clone().sub(rig.rest[side+'Pinky1'].world);
@@ -24,7 +24,7 @@ export function directDriver(rig,tips){
    const chain=chains[f],baseDirection=chain[1].clone().sub(chain[0]).normalize();
    const name=side+FINGERS[f],restDirection=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize();
    const hinge=fingerPlane(restDirection,restAcross,palmQ,baseDirection);hinges.set(f,hinge);
-   constrainFinger(chain,lengths[f],hinge);
+   if(lockUpper)constrainFinger(chain,lengths[f],hinge,upperCoupling);
   }
   const contactGap=contact?fitContact(chains[0],chains[contact/4-1],lengths[0],lengths[contact/4-1],hinges.get(contact/4-1)):null;
   for(let f=0;f<5;f++)for(let k=0;k<4;k++)p[1+4*f+k].copy(chains[f][k]);

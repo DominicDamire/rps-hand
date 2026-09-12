@@ -1,5 +1,5 @@
 <!doctype html><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"}}</script><pre id="result">Loading</pre><script type="module">
-import * as T from 'three';import {DollRig} from '../doll/DollRig.js';import {buildTips} from './contact.mjs';import {directDriver} from './direct.mjs?v=15';import {DirectionStabilizer} from './stability.mjs?v=15';
+import * as T from 'three';import {DollRig} from '../doll/DollRig.js';import {buildTips} from './contact.mjs';import {directDriver} from './direct.mjs?v=17';import {DirectionStabilizer,constrainFinger} from './stability.mjs?v=17';
 const names=['Thumb','Index','Middle','Ring','Pinky'],rad=Math.PI/180;
 try {
  const rig=new DollRig(new T.Scene(),{url:new URL('../doll.glb',location).href,report:new URL('../doll-report.json',location).href});await rig.ready;
@@ -32,6 +32,7 @@ try {
  const filter=new DirectionStabilizer(),up=new T.Vector3(0,1,0),axis=new T.Vector3(1,0,0);filter.update('finger',up,1/30,1);let noiseOutput=0;
  for(let i=0;i<100;i++)noiseOutput=Math.max(noiseOutput,filter.update('finger',up.clone().applyAxisAngle(axis,(i%2?1:-1)*.7*rad),1/30,1).angleTo(up));
  const target=up.clone().applyAxisAngle(axis,60*rad);let response;for(let i=0;i<2;i++)response=filter.update('finger',target,1/30,1);const responseError=response.angleTo(target)/rad;
- document.querySelector('pre').textContent=JSON.stringify({pass:directionError/rad<.3&&attachmentError<1e-8&&geometryError<1e-8&&largestNoiseRotation/rad<2&&noiseOutput<1e-8&&responseError<2,directionErrorDegrees:directionError/rad,attachmentError,geometryError,largestNoiseRotationDegrees:largestNoiseRotation/rad,noiseOutputDegrees:noiseOutput/rad,responseErrorAfter67msDegrees:responseError},null,2);
+ const hinge=new T.Vector3(1,0,0),d0=new T.Vector3(0,1,0),d1=d0.clone().applyAxisAngle(hinge,30*rad),d2=d1.clone().applyAxisAngle(hinge,5*rad),coupled=[new T.Vector3(),d0.clone(),d0.clone().add(d1),d0.clone().add(d1).add(d2)];constrainFinger(coupled,[1,1,1],hinge,1);const coupledSecond=coupled[2].clone().sub(coupled[1]).normalize(),coupledThird=coupled[3].clone().sub(coupled[2]).normalize(),couplingError=Math.abs(coupledSecond.angleTo(coupledThird)/rad-30);
+ document.querySelector('pre').textContent=JSON.stringify({pass:directionError/rad<.3&&attachmentError<1e-8&&geometryError<1e-8&&largestNoiseRotation/rad<2&&noiseOutput<1e-8&&responseError<2&&couplingError<1e-6,directionErrorDegrees:directionError/rad,attachmentError,geometryError,largestNoiseRotationDegrees:largestNoiseRotation/rad,noiseOutputDegrees:noiseOutput/rad,responseErrorAfter67msDegrees:responseError,couplingErrorDegrees:couplingError},null,2);
 }catch(e){document.querySelector('pre').textContent=e.stack;}
 </script>
