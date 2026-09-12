@@ -46,6 +46,14 @@ export function directDriver(rig,tips){
    // Geometry transforms are changed ONLY by the user's thickness/inset controls.
    if(shapeChanged){const rot=new T.Matrix4().makeRotationFromQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0,0,1),axis));const shapeMatrix=rot.clone().multiply(new T.Matrix4().makeScale(thickness,thickness,exactLines?p[i+1].distanceTo(p[i])/rest.length():1+(k===3?tipInset/1000/rest.length():0))).multiply(rot.clone().invert());for(const m of rig.parts)if(m.parent===j){m.matrixAutoUpdate=false;m.matrix.copy(shapeMatrix).multiply(matrices.get(m));m.matrixWorldNeedsUpdate=true;}}
   }
+  if(exactLines){
+   const key=side+'HandTrackedPalm';let palm=rig.root.getObjectByName(key);
+   if(!palm){const source=rig.parts.find(m=>m.parent===hand&&m.isMesh);const geometry=new T.BufferGeometry();geometry.setAttribute('position',new T.BufferAttribute(new Float32Array(14*3),3));const indices=[];for(let k=0;k<6;k++){const n=(k+1)%6;indices.push(12,k,n,13,n+6,k+6,k,k+6,n,n,k+6,n+6);}geometry.setIndex(indices);const material=source?.material.clone()||new T.MeshStandardMaterial({color:0xcacaca});material.side=T.DoubleSide;palm=new T.Mesh(geometry,material);palm.name=key;palm.frustumCulled=false;rig.root.add(palm);rig.parts.push(palm);}
+   for(const m of rig.parts)if(m.parent===hand)m.visible=false;
+   palm.visible=true;const ids=[0,1,5,9,13,17],normal=new T.Vector3().crossVectors(p[5].clone().sub(p[0]),p[17].clone().sub(p[0])).normalize().multiplyScalar(.005),center=new T.Vector3();
+   for(const i of ids)center.add(p[i]);center.multiplyScalar(1/6);const pos=palm.geometry.attributes.position;
+   for(let k=0;k<6;k++){const a=p[ids[k]].clone().add(normal),b=p[ids[k]].clone().sub(normal);pos.setXYZ(k,a.x,a.y,a.z);pos.setXYZ(k+6,b.x,b.y,b.z);}pos.setXYZ(12,center.x+normal.x,center.y+normal.y,center.z+normal.z);pos.setXYZ(13,center.x-normal.x,center.y-normal.y,center.z-normal.z);pos.needsUpdate=true;palm.geometry.computeVertexNormals();
+  }
   lastShape=shape;rig.root.updateMatrixWorld(true);return {points:p,contact,contactGap};
  };
 }

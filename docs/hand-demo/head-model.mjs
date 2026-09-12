@@ -11,7 +11,7 @@ export class CombinedHead {
    this.asset=g.scene;this.group.add(g.scene);g.scene.traverse(o=>{if(o.isBone){const n=o.name.toLowerCase();if(n.includes('eye'))(this.bones.eyes??=[]).push(o);else if(n.includes('head'))this.bones.head=o;else if(n.includes('neck'))this.bones.neck=o;else if(n.includes('root'))this.bones.root=o;}if(o.isMesh){o.frustumCulled=false;for(const mat of Array.isArray(o.material)?o.material:[o.material]){mat.color?.set(0xcacaca);mat.map=null;mat.roughness=.65;mat.needsUpdate=true;}}});
    scene.updateMatrixWorld(true);for(const b of [this.bones.root,this.bones.neck,this.bones.head,...(this.bones.eyes||[])])if(b)this.rest.set(b,b.getWorldQuaternion(new T.Quaternion()));
    const eyes=this.bones.eyes;if(!this.bones.head||eyes?.length!==2)throw Error('Alien head/eye bones were not found');
-   this.restEyeSpan=eyes[0].getWorldPosition(new T.Vector3()).distanceTo(eyes[1].getWorldPosition(new T.Vector3()));this.loaded=true;
+   this.restEyeSpan=eyes[0].getWorldPosition(new T.Vector3()).distanceTo(eyes[1].getWorldPosition(new T.Vector3()));this.faceSamples=[];g.scene.traverse(mesh=>{if(!mesh.isSkinnedMesh)return;const ids=mesh.geometry.attributes.skinIndex,weights=mesh.geometry.attributes.skinWeight;if(!ids||!weights)return;for(let i=0;i<ids.count;i+=8){let weight=0;for(let k=0;k<4;k++)if(mesh.skeleton.bones[ids.getComponent(i,k)]===this.bones.head)weight+=weights.getComponent(i,k);if(weight>.65)this.faceSamples.push({mesh,i});}});this.fitX=this.fitY=1;this.loaded=true;
   }).catch(e=>{this.error=e.message;});
  }
  receive(data){if(data.task==='face'){this.face=data.face;this.seen=performance.now();}if(data.task==='pose'){this.pose=data.pose;this.poseSeen=performance.now();}}
@@ -30,7 +30,7 @@ export class CombinedHead {
   let depth=calibratedDepth(faceReference(this.face),this.depthRef,this.metres,depthGain);if(!depth)return;
   if(o.demoHeadMatch>0){const centers=eyeCenters(this.face.points);if(centers){const a=cameraUV(centers[0],aspect,camera.aspect),b=cameraUV(centers[1],aspect,camera.aspect),span=Math.hypot((b.x-a.x)*camera.aspect,b.y-a.y),m=this.face.matrix,foreshortening=Math.max(.35,Math.hypot(m[0],m[1]));const estimate=this.restEyeSpan*this.fixedScale*o.headSize*foreshortening/(2*Math.tan(Math.PI/6)*Math.max(.001,span));depth=T.MathUtils.lerp(depth,T.MathUtils.clamp(estimate,.08,4),o.demoHeadMatch);}}
   depth=Math.max(.08,depth-o.faceOffset/100);this.depth=depth;
-  this.group.scale.setScalar(this.fixedScale*o.headSize);
+  this.group.scale.set(this.fixedScale*o.headSize*(this.fitX||1),this.fixedScale*o.headSize*(this.fitY||1),this.fixedScale*o.headSize);
   const q=new T.Quaternion().setFromRotationMatrix(new T.Matrix4().fromArray(this.face.matrix));if(this.neutral)q.multiply(this.neutral.clone().invert());
   const e=new T.Euler().setFromQuaternion(q,'YXZ');e.x*=o.turnGain;e.y*=o.turnGain;e.z*=o.turnGain;q.setFromEuler(e);
   const alpha=o.headSmooth>0?1-Math.exp(-dt/(o.headSmooth/1000)):1;this.smoothed.slerp(q,alpha);
@@ -43,6 +43,13 @@ export class CombinedHead {
   const uv=cameraUV(eyeCenter(this.face.points),aspect,camera.aspect),target=camera.isOrthographicCamera?new T.Vector3((uv.x-.5)*camera.aspect,.5-uv.y,-depth):new T.Vector3().fromArray(cameraPosition(uv,depth,camera.aspect));
   this.anchor??=target.clone();target.sub(this.anchor).multiplyScalar(o.moveGain).add(this.anchor);this.position??=target.clone();this.position.lerp(target,alpha);
   this.group.updateMatrixWorld(true);const midpoint=this.bones.eyes.reduce((v,b)=>v.add(b.getWorldPosition(new T.Vector3())),new T.Vector3()).multiplyScalar(.5);this.group.position.add(this.position.clone().sub(midpoint));this.group.updateMatrixWorld(true);
+  if(this.faceSamples?.length&&o.demoHeadMatch>0&&this.fitObservation!==this.face){
+   this.fitObservation=this.face;const bounds=new T.Box2(),cheeks=new T.Box2(),v=new T.Vector3(),cheekY=cameraUV(this.face.points[234],aspect,camera.aspect).y,faceHeight=Math.abs(cameraUV(this.face.points[152],aspect,camera.aspect).y-cameraUV(this.face.points[10],aspect,camera.aspect).y);this.group.traverse(m=>{if(m.isSkinnedMesh)m.skeleton.update();});
+   for(const {mesh,i} of this.faceSamples){mesh.getVertexPosition(i,v);v.applyMatrix4(mesh.matrixWorld).project(camera);const screen=new T.Vector2((v.x+1)/2,(1-v.y)/2);bounds.expandByPoint(screen);if(Math.abs(screen.y-cheekY)<faceHeight*.09)cheeks.expandByPoint(screen);}
+   const p=this.face.points,a=cameraUV(p[234],aspect,camera.aspect),b=cameraUV(p[454],aspect,camera.aspect),top=cameraUV(p[10],aspect,camera.aspect),chin=cameraUV(p[152],aspect,camera.aspect),size=bounds.getSize(new T.Vector2());
+   if(size.x>.001&&size.y>.001){this.fitX=T.MathUtils.clamp(this.fitX*T.MathUtils.lerp(1,Math.abs(b.x-a.x)/(cheeks.isEmpty()?size.x:Math.max(.001,cheeks.getSize(new T.Vector2()).x)),.25),.5,2);this.fitY=T.MathUtils.clamp(this.fitY*T.MathUtils.lerp(1,Math.abs(chin.y-top.y)/size.y,.25),.5,2);}
+  }
+
  }
  overlay(ctx,w,h){const o=this.options();if(!o.overlayRate)return;
   const line=(points,color,closed=false)=>{ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.beginPath();points.forEach((p,i)=>ctx[i?'lineTo':'moveTo']((1-p.x)*w,p.y*h));if(closed)ctx.closePath();ctx.stroke();};

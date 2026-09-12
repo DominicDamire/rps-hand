@@ -1,7 +1,7 @@
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=20.1';
 import {installCombinedUI} from './combined-ui.mjs?v=demo2';
-import {CombinedHead} from './head-model.mjs?v=demo3';
-import {directDriver} from './direct.mjs?v=demo3-17';
+import {CombinedHead} from './head-model.mjs?v=demo4';
+import {directDriver} from './direct.mjs?v=demo4';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
