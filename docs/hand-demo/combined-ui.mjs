@@ -57,8 +57,9 @@ export function installCombinedUI(){
  container.parentElement.append(container);
  document.title='Combined Hands + Head Lab DEMO';document.querySelector('header b').textContent='HANDS + HEAD · DEMO';document.querySelector('header span').textContent='Direct-lines hands · grey head and shoulders · one camera';
  for(const p of container.querySelectorAll('p'))if(p.textContent.includes('It does not track your head.'))p.textContent='Mirror uses the camera view. First person uses the opposite viewpoint; head and hands share calibrated scene coordinates.';
- $('shoulderRate').value=30;
- document.querySelector('header b').textContent='HANDS + ALIEN HEAD · 13';
- document.querySelector('header span').textContent='Fixed-size hands · size-based distance · alien head only';
+ $('shoulderRate').value=30;$('lockBody').checked=false;$('neckShare').value=.45;$('neckShare').nextElementSibling.value=.45;
+ $('headSize').value=1.2;$('headSize').nextElementSibling.value=1.2;
+ document.querySelector('header b').textContent='HANDS + ALIEN HEAD · 14';
+ document.querySelector('header span').textContent='Fixed-size hands · alien head, neck and shoulders';
  return ()=>({...Object.fromEntries(extraIds.map(id=>{const e=$(id);return [id,e.type==='checkbox'?e.checked:e.tagName==='SELECT'?e.value:+e.value];})),demoMatch:0,demoGrip:0,demoContact:0,demoJitter:0,depthSmooth:0});
 }

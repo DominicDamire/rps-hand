@@ -4,8 +4,8 @@ import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {LandmarkJitter} from './landmark-jitter.mjs';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=demo9';
-import {installCombinedUI} from './combined-ui.mjs?v=alien13';
-import {CombinedHead} from './head-model.mjs?v=alien13';
+import {installCombinedUI} from './combined-ui.mjs?v=alien14';
+import {CombinedHead} from './head-model.mjs?v=alien14';
 import {directDriver} from './direct.mjs?v=demo9';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
@@ -82,7 +82,7 @@ function rawCameraPoints(world,lm){
  }
  if(combined?.group.visible&&combined.depth){
   const protrusion=Math.max(0,...world.map(p=>(p.z-world[0].z)*scale));
-  depth=Math.min(depth,Math.max(.08,combined.depth-.04-protrusion));
+  depth=Math.min(depth,Math.max(.08,combined.depth-protrusion));
  }
  const now=performance.now(),state=depthStates[side];
  if(!state)depthStates[side]={depth,scale,time:now};
