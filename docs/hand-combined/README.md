@@ -46,3 +46,6 @@ V19.5 also restores the original face repository camera request: ideal 30 FPS, w
 
 ## V19.6 face dots and shoulder-only output
 Restore 468 green face dots, omit orientation arrows and expression classification. Shoulder overlay/output contains only points 11/12, linked to chin; no arm/elbow/wrist pose output. Independent pose tracker uses every second capture opportunity like the original face app, with a 15 Hz default. Pose Landmarker still internally computes its full pose. Grey head and torso material. Original V14 archived separately at hand-lines-v14.
+
+## V19.8 decorative face dots
+Transmit 8 calibration/head anchors instead of 468 mesh coordinates. Draw 56 fixed green dots as a head-shaped outline, eyes/nose/closed mouth. No lip/eyelid/iris points drive the drawing; expression scoring remains off. This saves serialization, transport and overlay work, not the internal Face Landmarker inference. The standard model still infers its full face geometry.

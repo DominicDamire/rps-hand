@@ -1,7 +1,14 @@
-// Sparse orange face guide; expression classification is disabled in the tracker.
-export const outline=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10];
-export const faceIds=Array.from({length:468},(_,i)=>i);
-export function drawFace(ctx,points,w,h){if(!points)return;ctx.fillStyle='#8ee3bf';for(const p of Object.values(points))ctx.fillRect((1-p.x)*w-1,p.y*h-1,2,2);}
+// Fixed decorative face dots; no expression landmarks are drawn or transmitted.
+export const faceIds=[10,152,234,454,33,133,263,362];
+const template=Array.from({length:40},(_,i)=>{const t=i*Math.PI*2/40;return [Math.cos(t)*.5,Math.sin(t)*.5];});
+// Fixed eyes, nose and closed mouth. These never use eye/lip expression positions.
+for(const x of [-.23,-.18,-.13,.13,.18,.23])template.push([x,-.12]);
+for(const p of [[0,-.05],[0,.02],[0,.09],[-.05,.12],[.05,.12],[-.15,.25],[-.075,.25],[0,.25],[.075,.25],[.15,.25]])template.push(p);
+export function drawFace(ctx,points,w,h){
+ const top=points?.[10],chin=points?.[152],left=points?.[234],right=points?.[454];if(!top||!chin||!left||!right)return;
+ const cx=(top.x+chin.x)/2,cy=(top.y+chin.y)/2,dx=right.x-left.x,dy=right.y-left.y,vx=chin.x-top.x,vy=chin.y-top.y;
+ ctx.fillStyle='#8ee3bf';for(const [x,y] of template)ctx.fillRect((1-(cx+dx*x+vx*y))*w-1,(cy+dy*x+vy*y)*h-1,2,2);
+}
 export function drawShoulders(ctx,pose,face,w,h){
  const a=pose?.points?.[11],b=pose?.points?.[12];if(!a||!b||a.visibility<.4||b.visibility<.4)return;
  const mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2},chin=face?.points?.[152];ctx.strokeStyle='#8ee3bf';ctx.fillStyle='#8ee3bf';ctx.lineWidth=1.5;
