@@ -1,5 +1,5 @@
 // One fresh camera frame per task, at most one inference in flight per worker.
-export const defaults = {cameraFps:30,handRate:30,faceRate:30,shoulderRate:30,trackingWidth:480,trackerDelegate:'GPU',overlayRate:30,handPriority:false};
+export const defaults = {cameraFps:30,handRate:30,faceRate:30,shoulderRate:30,trackingWidth:480,trackerDelegate:'GPU',overlayRate:30,handPriority:false,uncappedTracking:true};
 export function startTracking(video, onResult, onStats, getOptions=()=>defaults,captureOptions={}) {
  let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0,cameraCallbacks=0,lastPresented=null,handStreak=0,lastAccepted=-Infinity,lastClockProgress=performance.now(),capturePolls=0;
  const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},errors:{}};
@@ -39,7 +39,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
    if(!s.worker)startWorker(s);
    const rate=+(s.task==='hands'?opts.handRate:s.task==='face'?opts.faceRate:opts.shoulderRate);
    if(s.rate!==rate){s.rate=rate;s.next=now;}
-   if(s.ready&&!s.busy&&now>=s.next-1)due.push(s);
+   if(s.ready&&!s.busy&&(opts.uncappedTracking||now>=s.next-1))due.push(s);
   }
   if(opts.handPriority&&slots.some(s=>s.busy))return;
   let chosen=due;if(opts.handPriority){
