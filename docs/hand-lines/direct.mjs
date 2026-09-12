@@ -1,6 +1,6 @@
 import * as T from 'three';
 import {DirectionStabilizer,fingerPlane,constrainFinger} from './stability.mjs?v=13';
-import {ContactLatch,fitContact} from './contact-direct.mjs?v=13';
+import {ContactLatch,fitContact} from './contact-direct.mjs?v=14';
 const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';

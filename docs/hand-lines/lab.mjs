@@ -1,5 +1,5 @@
-import {directDriver} from './direct.mjs?v=13';
-import {reduceFalseDepthBends} from './depth-lines.mjs?v=13';
+import {directDriver} from './direct.mjs?v=14';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -109,6 +109,7 @@ async function detect(source){if(inflight||editing)return;inflight=true;const to
  try{await ensureWorker();if(token!==epoch||editing)return;const frame=document.createElement('canvas'),w=source.videoWidth||source.naturalWidth||source.width,h=source.videoHeight||source.naturalHeight||source.height;if(!w||!h)return;
  frame.width=480;frame.height=Math.round(h/w*480);frame.getContext('2d').drawImage(source,0,0,frame.width,frame.height);const bitmap=await createImageBitmap(frame);if(token!==epoch||editing){bitmap.close();return;}
  const data=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{request=null;reject(Error('Tracker response timed out'));},10000);request={resolve:d=>{clearTimeout(timer);resolve(d);},reject:e=>{clearTimeout(timer);reject(e);}};worker.postMessage({type:'frame',bitmap,time:performance.now()},[bitmap]);});
+ if(diagnostic){diagnostic.frames.push({elapsedMs:performance.now()-diagnostic.started,width:frame.width,height:frame.height,inferenceMs:data.inferenceMs,landmarks:data.landmarks,worldLandmarks:data.worldLandmarks,handedness:data.handedness,projection:$('cameraProjection').value,view:$('viewMode').value,contactEnabled:$('tipContact').checked,depthCorrectionEnabled:$('falseDepth').checked});}
  if(token!==epoch||editing)return;const desired=$('detected').value;let idx=desired==='first'?0:data.handedness?.findIndex(h=>h[0]?.categoryName===desired);
  if(desired==='first'&&latest&&data.landmarks?.length>1){let best=Infinity;data.landmarks.forEach((points,i)=>{const d=Math.hypot(points[0].x-latest.landmarks[0].x,points[0].y-latest.landmarks[0].y);if(d<best){best=d;idx=i;}});}
 
@@ -202,6 +203,13 @@ stabilityControls.innerHTML='<h2>Finger stability</h2><label>Ignore tiny directi
 $('directSettings').prepend(stabilityControls);
 const depthControl=document.createElement('div');depthControl.innerHTML='<label><input id="falseDepth" type="checkbox" checked> Reduce false depth bends on visibly straight fingers</label><p>Uses clear, extended image lines to stabilize finger depth. Curled or foreshortened fingers keep their depth estimates. This is an estimate; turn it off to compare.</p>';stabilityControls.append(depthControl);
 const startFields=['confirmJump','contactRange','fingerNoise','fingerThickness','tipInset','trackingGrace','eyeX','eyeY','eyeZ','eyeYaw','eyePitch','eyeFov','phoneDistance','depthGain'];
+let diagnostic=null,diagnosticTimer=null;
+const recordingControls=document.createElement('section');
+recordingControls.innerHTML='<h2>Report a tracking problem</h2><label>What went wrong?<input id="recordSymptom" placeholder="Which finger, pose and camera view?"></label><button id="recordTracking">Record 12 seconds</button> <button id="finishRecording" disabled>Stop and download</button><p id="recordStatus">Records tracking coordinates and settings, without camera images or audio. Hold the difficult pose and slowly turn front → side → front.</p>';
+$('directSettings').append(recordingControls);
+function finishDiagnostic(){if(!diagnostic)return;clearTimeout(diagnosticTimer);const result=diagnostic;diagnostic=null;delete result.started;download(new Blob([JSON.stringify(result)],{type:'application/json'}),'hand-tracking-v14.json');$('recordTracking').disabled=false;$('finishRecording').disabled=true;$('recordStatus').textContent='Downloaded '+result.frames.length+' camera measurements. Send the JSON with the symptom you observed.';}
+$('recordTracking').onclick=()=>{if(!stream||sampleSource){$('recordStatus').textContent='Connect the live phone or computer camera first.';return;}diagnostic={version:14,started:performance.now(),symptom:$('recordSymptom').value,settings:Object.fromEntries(startFields.map(id=>[id,$(id).value])),falseDepth:$('falseDepth').checked,view:$('viewMode').value,frames:[]};$('recordTracking').disabled=true;$('finishRecording').disabled=false;$('recordStatus').textContent='Recording for 12 seconds… Hold the pose, then slowly turn the hand.';diagnosticTimer=setTimeout(finishDiagnostic,12000);};
+$('finishRecording').onclick=finishDiagnostic;
 function restoreStart(values){if(typeof values.falseDepth==='boolean')$('falseDepth').checked=values.falseDepth;for(const id of startFields){const el=$(id),value=Number(values[id]);if(Number.isFinite(value)&&value>=Number(el.min)&&value<=Number(el.max)){el.value=value;el.nextElementSibling.value=value;}}}
 try{const saved=JSON.parse(localStorage.getItem('direct-lines-start-v2')||'null');if(saved)restoreStart(saved);}catch{}
 $('saveStart').onclick=()=>{try{localStorage.setItem('direct-lines-start-v2',JSON.stringify({...Object.fromEntries(startFields.map(id=>[id,+$(id).value])),falseDepth:$('falseDepth').checked}));$('startStatus').textContent='Starting settings saved in this browser.';}catch{$('startStatus').textContent='Browser storage unavailable.';}};

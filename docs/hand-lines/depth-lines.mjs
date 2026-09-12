@@ -7,7 +7,7 @@ export function reduceFalseDepthBends(points,lm,width,height,perspective=true){
   const directions=[0,1,2].map(k=>screen[base+k+1].clone().sub(screen[base+k])),lengths=directions.map(v=>v.length());
   if(Math.min(...lengths)<1)continue;
   const bend=Math.max(...[0,1].map(k=>Math.acos(T.MathUtils.clamp(directions[k].dot(directions[k+1])/lengths[k]/lengths[k+1],-1,1))));
-  const weight=(1-T.MathUtils.smoothstep(bend,4*Math.PI/180,12*Math.PI/180))*T.MathUtils.smoothstep(Math.min(...lengths)/palm,.07,.15)*T.MathUtils.smoothstep(screen[base].distanceTo(screen[base+3])/palm,.45,.75);
+  const weight=(1-T.MathUtils.smoothstep(bend,8*Math.PI/180,18*Math.PI/180))*T.MathUtils.smoothstep(Math.min(...lengths)/palm,.07,.15)*T.MathUtils.smoothstep(screen[base].distanceTo(screen[base+3])/palm,.45,.75);
   if(weight<=0)continue;
   const start=points[base].z,end=points[base+3].z,total=lengths.reduce((a,b)=>a+b,0);let distance=0;
   for(let k=1;k<3;k++){
