@@ -29,3 +29,6 @@ Fresh V19 preferences disable direction/head/depth smoothing and jump confirmati
 After shared distance calibration, index-fingertip cheek alignment can set a fixed per-hand depth offset using a ray intersection with the animated alien surface. It never resizes bones and does not guarantee metric accuracy at every distance. Recalibrating distance clears this offset.
 
 Validation: session tests cover newest-frame processing, lost video callbacks, hand-priority fairness and no overlapping inference. Face transport test covers all 478 points. Real iPhone throughput/contact still requires a device check.
+
+## V19.1 head size and scheduling
+Correct head calibration to compare tracked eye centres (averaged inner/outer corners) with model eye centres. Previously the outer-corner span overestimated scale. Model size remains fixed after calibration; screen location and depth continue to use face tracking. Give the face a turn after two hands, raise its target to 20, and reserve an occasional shoulder turn. Actual hand throughput may trade off against face updates; no device-specific FPS guarantee. Camera telemetry now distinguishes presented-frame deltas from callbacks and configured camera rate.

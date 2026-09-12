@@ -1,8 +1,8 @@
-import {drawFace} from './face-overlay.mjs?v=19';
+import {drawFace} from './face-overlay.mjs?v=19.1';
 import * as T from 'three';
 import {GLTFLoader} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js';
 import {cameraUV,cameraPosition} from './projection.mjs';
-import {faceReference,calibratedDepth,eyeCenter} from './head-depth.mjs';
+import {faceReference,calibratedDepth,eyeCenter,eyeCenters} from './head-depth.mjs?v=19.1';
 const outline=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10];
 export class CombinedHead {
  constructor(scene,options){
@@ -20,7 +20,7 @@ export class CombinedHead {
  calibrate(metres,aspect,viewAspect){
   if(!this.face||performance.now()-this.seen>600||!this.loaded)return false;
   this.depthRef=faceReference(this.face);if(!this.depthRef)return false;this.metres=metres;this.position=null;this.anchor=null;
-  const eyePoints=[33,263].map(i=>new T.Vector3().fromArray(cameraPosition(cameraUV(this.face.points[i],aspect,viewAspect),metres,viewAspect)));
+  const centers=eyeCenters(this.face.points);if(!centers)return false;const eyePoints=centers.map(p=>new T.Vector3().fromArray(cameraPosition(cameraUV(p,aspect,viewAspect),metres,viewAspect)));
   const m=this.face.matrix,foreshortening=Math.max(.4,Math.hypot(m[0],m[1]));this.fixedScale=eyePoints[0].distanceTo(eyePoints[1])/(this.restEyeSpan*foreshortening);this.fixedScale=Math.max(.01,Math.min(2,this.fixedScale));return true;
  }
  setWorld(b,q){if(!b)return;b.parent.updateWorldMatrix(true,false);b.quaternion.copy(b.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(q));b.updateWorldMatrix(false,true);}
