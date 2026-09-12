@@ -1,5 +1,5 @@
 import {drawFace,drawShoulders,drawUpperBody,encodeAux,decodeAux} from './face-overlay.mjs?v=demo9';
-import {startTracking,defaults} from './tracking-session.mjs?v=demo9';
+import {startTracking,defaults} from './tracking-session.mjs?v=demo10';
 // Cross-device link: the phone runs hand tracking and sends landmark numbers.
 // This avoids peer-to-peer video, which commonly fails across NATs and guest Wi-Fi.
 import {connectLink,packHands,unpackHands} from '../movement/link.mjs?v=91';
@@ -13,7 +13,7 @@ export function receivePhone(onResult,onStatus,onEnd,onAux=()=>{},getOptions=()=
  const id=newCode();let link=null,closed=false,connected=false,heartbeat=null,size={w:640,h:480},trackerDetail='';
  const box=document.createElement('dialog');box.className='phonePair';
  box.innerHTML='<h2>Use your phone camera</h2><p>Scan this QR on the other phone, then tap <b>Start camera</b>.<br>Different Wi-Fi or mobile data is supported.</p><div class="qr"></div><p class="code"></p><p><a target="_blank" rel="noopener">Open phone camera page</a></p><div class="row"><button type="button" data-copy>Copy phone link</button><button type="button" data-cancel>Cancel</button></div><p class="pairStatus" role="status">Connecting PC to relay…</p>';
- const url=new URL('camera.html',import.meta.url);url.searchParams.set('pair',id);url.searchParams.set('v','demo9');if(getOptions().fullBody)url.searchParams.set('body','1');
+ const url=new URL('camera.html',import.meta.url);url.searchParams.set('pair',id);url.searchParams.set('v','demo9');if(getOptions().fullBody)url.searchParams.set('body','1');if(getOptions().fullBody&&getOptions().handRate>0)url.searchParams.set('connected','1');
  box.querySelector('a').href=url.href;box.querySelector('.code').textContent='Pairing code: '+id;
  new QRCode(box.querySelector('.qr'),{text:url.href,width:220,height:220,correctLevel:QRCode.CorrectLevel.M});
  const status=text=>{if(closed||(connected&&/^relay connected/.test(text)))return;const el=box.querySelector('.pairStatus');if(el)el.textContent=text;onStatus(text);};
@@ -43,7 +43,7 @@ export async function sendPhone(id,video,status,facing='user'){
  const overlay=document.createElement('canvas');overlay.style.cssText='width:100%;max-width:640px;display:block;margin:auto;background:#05080c';video.after(overlay);video.hidden=false;video.style.cssText='display:block;width:100%;max-height:none;margin:0;transform:scaleX(-1)';
  const badge=document.createElement('div');badge.style.cssText='position:absolute;top:8px;right:8px;color:#96ffd1;background:#000c;padding:7px;border-radius:6px;font:12px monospace;white-space:pre;pointer-events:none';const wrap=document.createElement('div');wrap.style.cssText='position:relative;max-width:640px;margin:auto';video.before(wrap);wrap.append(video,overlay,badge);overlay.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;background:transparent';badge.textContent='CAM — FPS';
  let receivedSettings=false;
- if(new URLSearchParams(location.search).get('body')==='1')settings={...settings,fullBody:true,handRate:0,faceRate:0};
+ if(new URLSearchParams(location.search).get('body')==='1')settings={...settings,fullBody:true,handRate:new URLSearchParams(location.search).get('connected')==='1'?30:0,faceRate:new URLSearchParams(location.search).get('connected')==='1'?30:0};
  const recent={hands:null,face:null,pose:null};
  const paint=(source)=>{overlay.width=source.width;overlay.height=source.height;const c=overlay.getContext('2d'),w=overlay.width,h=overlay.height;c.clearRect(0,0,w,h);
   const seg=(a,b,color)=>{c.strokeStyle=color;c.lineWidth=2;c.beginPath();c.moveTo((1-a.x)*w,a.y*h);c.lineTo((1-b.x)*w,b.y*h);c.stroke();};
@@ -53,7 +53,7 @@ export async function sendPhone(id,video,status,facing='user'){
  };
  const stop=()=>{if(stopped)return;stopped=true;session?.();link?.close();stream?.getTracks().forEach(track=>track.stop());video.srcObject=null;video.style.cssText='';wrap.before(video);wrap.remove();wake?.release().catch(()=>{});};
  try{
-  link=await connectLink(id,{onStatus:status,subscribeTo:'c',onMessage:(kind,payload)=>{if(kind==='c'){try{const msg=JSON.parse(payloadText(payload));if(msg.settings){receivedSettings=true;for(const k of Object.keys(defaults)){const v=msg.settings[k];if(['handPriority','uncappedTracking','fullBody'].includes(k)&&typeof v==='boolean')settings[k]=v;else if(k==='trackerDelegate'&&['GPU','CPU'].includes(v))settings[k]=v;else if(Number.isFinite(v))settings[k]=Math.max(k==='trackingWidth'?192:0,Math.min(k==='trackingWidth'?640:60,v));}}}catch{}link?.sendJSON('p',{stage,w:video.videoWidth||0,h:video.videoHeight||0});}}});
+  link=await connectLink(id,{onStatus:status,subscribeTo:'c',onMessage:(kind,payload)=>{if(kind==='c'){try{const msg=JSON.parse(payloadText(payload));if(msg.settings){receivedSettings=true;for(const k of Object.keys(defaults)){const v=msg.settings[k];if(['handPriority','uncappedTracking','fullBody'].includes(k)&&typeof v==='boolean')settings[k]=v;else if(k==='poseModel'&&['lite','full','heavy'].includes(v))settings[k]=v;else if(k==='trackerDelegate'&&['GPU','CPU'].includes(v))settings[k]=v;else if(Number.isFinite(v))settings[k]=Math.max(k==='trackingWidth'?192:0,Math.min(k==='trackingWidth'?640:60,v));}}}catch{}link?.sendJSON('p',{stage,w:video.videoWidth||0,h:video.videoHeight||0});}}});
   link.sendJSON('p',{stage});for(let i=0;i<20&&!receivedSettings;i++)await new Promise(r=>setTimeout(r,100));status('Opening camera — requesting '+settings.cameraFps+' FPS, GPU preferred');
   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:640},height:{ideal:480},frameRate:{ideal:settings.cameraFps}}});video.srcObject=stream;video.muted=true;await video.play();stage='camera';link.sendJSON('p',{stage,w:video.videoWidth,h:video.videoHeight});
   navigator.wakeLock?.request('screen').then(lock=>{if(stopped)lock.release();else wake=lock;}).catch(()=>{});

@@ -24,7 +24,7 @@
   <video id="video" autoplay playsinline muted></video>
   <p>Keep this page open and the screen awake. The status above shows whether the link, camera, or tracker needs attention.</p>
   <script type="module">
-    import {sendPhone} from './phone-link.mjs?v=demo9';
+    import {sendPhone} from './phone-link.mjs?v=demo10';
     const $=id=>document.getElementById(id),params=new URLSearchParams(location.search);
     if(params.get('body')==='1'){$('description').textContent='This phone tracks the head and upper body and sends landmark coordinates to the PC. Separate hand tracking is off. Camera images stay on this phone.';document.title='Phone camera · Full upper body';}
     let stop=null,epoch=0;
@@ -40,6 +40,7 @@
       try{const close=await sendPhone(value,$('video'),text=>$('status').textContent=text,$('facing').value);if(token!==epoch)close();else stop=close;}
       catch(error){if(token===epoch){end();$('status').textContent='Could not start: '+error.message;}}
     };
+    if(new URLSearchParams(location.search).has('connected')){document.querySelector('h1').textContent='Connected hands and upper-body camera';$('description').textContent='This phone tracks hands, head and upper body and sends coordinates to the PC for rendering. Camera images stay on this phone.';}
     $('stop').onclick=()=>{end();$('status').textContent='Camera stopped. You can reconnect with the same code while the PC window remains open.';};
     addEventListener('pagehide',()=>stop?.());
   </script>

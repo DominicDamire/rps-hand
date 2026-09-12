@@ -6,7 +6,7 @@ const round=n=>Math.round(n*100000)/100000;
 self.onmessage=async({data})=>{try{
  if(data.type==='init'){
   const api=await import(MP+'/vision_bundle.mjs'),files=await api.FilesetResolver.forVisionTasks(MP+'/wasm',true);
-  const spec=task==='hands'?['HandLandmarker','hand_landmarker/hand_landmarker',{numHands:2,minHandDetectionConfidence:.6,minHandPresenceConfidence:.6,minTrackingConfidence:.45}]:task==='face'?['FaceLandmarker','face_landmarker/face_landmarker',{numFaces:1,outputFacialTransformationMatrixes:true,outputFaceBlendshapes:false}]:['PoseLandmarker','pose_landmarker/pose_landmarker_lite',{numPoses:1}];
+  const spec=task==='hands'?['HandLandmarker','hand_landmarker/hand_landmarker',{numHands:2,minHandDetectionConfidence:.6,minHandPresenceConfidence:.6,minTrackingConfidence:.45}]:task==='face'?['FaceLandmarker','face_landmarker/face_landmarker',{numFaces:1,outputFacialTransformationMatrixes:true,outputFaceBlendshapes:false}]:['PoseLandmarker','pose_landmarker/pose_landmarker_'+(['lite','full','heavy'].includes(params.get('poseModel'))?params.get('poseModel'):'lite'),{numPoses:1}];
   let delegate;for(delegate of preferred==='CPU'?['CPU']:['GPU','CPU']){try{tracker=await api[spec[0]].createFromOptions(files,{baseOptions:{modelAssetPath:base+spec[1]+'/float16/1/'+spec[1].split('/')[1]+'.task',delegate},runningMode:'VIDEO',...spec[2]});break;}catch(e){if(delegate==='CPU')throw e;}}
   self.postMessage({type:'ready',task,delegate});
  }else if(data.type==='frame'){
