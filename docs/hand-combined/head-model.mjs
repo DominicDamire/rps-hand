@@ -1,8 +1,8 @@
-import {drawFace,drawShoulders} from './face-overlay.mjs?v=19.8';
+import {drawFace,drawShoulders} from './face-overlay.mjs?v=19.9';
 import * as T from 'three';
 import {GLTFLoader} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js';
 import {cameraUV,cameraPosition} from './projection.mjs';
-import {faceReference,calibratedDepth,eyeCenter,eyeCenters} from './head-depth.mjs?v=19.8';
+import {faceReference,calibratedDepth,eyeCenter,eyeCenters} from './head-depth.mjs?v=19.9';
 const outline=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10];
 export class CombinedHead {
  constructor(scene,options){
@@ -45,7 +45,7 @@ export class CombinedHead {
  }
  overlay(ctx,w,h){const o=this.options();if(!o.overlayRate)return;
   const line=(points,color,closed=false)=>{ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.beginPath();points.forEach((p,i)=>ctx[i?'lineTo':'moveTo']((1-p.x)*w,p.y*h));if(closed)ctx.closePath();ctx.stroke();};
-  if(this.face&&o.faceRate>0&&performance.now()-this.seen<900){const p=this.face.points;drawFace(ctx,p,w,h);}
+  if(this.face&&o.faceRate>0&&performance.now()-this.seen<900){const p=this.face.points;drawFace(ctx,p,w,h,this.face.matrix);}
 
   if(this.pose&&o.shoulderRate>0&&performance.now()-this.poseSeen<900)drawShoulders(ctx,this.pose,this.face,w,h);
  }

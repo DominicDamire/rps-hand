@@ -49,3 +49,6 @@ Restore 468 green face dots, omit orientation arrows and expression classificati
 
 ## V19.8 decorative face dots
 Transmit 8 calibration/head anchors instead of 468 mesh coordinates. Draw 56 fixed green dots as a head-shaped outline, eyes/nose/closed mouth. No lip/eyelid/iris points drive the drawing; expression scoring remains off. This saves serialization, transport and overlay work, not the internal Face Landmarker inference. The standard model still infers its full face geometry.
+
+## V19.9 dense neutral face and baseline telemetry
+Project MediaPipe canonical neutral 3D face vertices using tracked head rotation and eye anchors. All 468 decorative points retain a fixed neutral expression, with inner lips closed; no live expression deforms the mesh. Add completed hand-measurement and render FPS to the V14 archive, without changing its tracking. Original tagirz500/alien-head receives independent face/shoulder/render FPS counters only.

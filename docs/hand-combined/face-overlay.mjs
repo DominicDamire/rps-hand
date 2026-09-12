@@ -1,13 +1,16 @@
+import neutral from './neutral-face.mjs';
 // Fixed decorative face dots; no expression landmarks are drawn or transmitted.
 export const faceIds=[10,152,234,454,33,133,263,362];
-const template=Array.from({length:40},(_,i)=>{const t=i*Math.PI*2/40;return [Math.cos(t)*.5,Math.sin(t)*.5];});
-// Fixed eyes, nose and closed mouth. These never use eye/lip expression positions.
-for(const x of [-.23,-.18,-.13,.13,.18,.23])template.push([x,-.12]);
-for(const p of [[0,-.05],[0,.02],[0,.09],[-.05,.12],[.05,.12],[-.15,.25],[-.075,.25],[0,.25],[.075,.25],[.15,.25]])template.push(p);
-export function drawFace(ctx,points,w,h){
- const top=points?.[10],chin=points?.[152],left=points?.[234],right=points?.[454];if(!top||!chin||!left||!right)return;
- const cx=(top.x+chin.x)/2,cy=(top.y+chin.y)/2,dx=right.x-left.x,dy=right.y-left.y,vx=chin.x-top.x,vy=chin.y-top.y;
- ctx.fillStyle='#8ee3bf';for(const [x,y] of template)ctx.fillRect((1-(cx+dx*x+vx*y))*w-1,(cy+dy*x+vy*y)*h-1,2,2);
+// Project a fixed neutral 3D mesh; tracked expressions never deform it.
+export function drawFace(ctx,points,w,h,matrix){
+ if(!points?.[33]||!points?.[133]||!points?.[263]||!points?.[362]||!matrix)return;
+ const m=matrix,project=([x,y,z])=>[m[0]*x+m[4]*y+m[8]*z,-(m[1]*x+m[5]*y+m[9]*z)];
+ const pts=neutral.map(project),avg=(a,b)=>[(a[0]+b[0])/2,(a[1]+b[1])/2];
+ const a=avg(pts[33],pts[133]),b=avg(pts[263],pts[362]);
+ const target=i=>[points[i].x*w,points[i].y*h],ta=avg(target(33),target(133)),tb=avg(target(263),target(362));
+ const dx=b[0]-a[0],dy=b[1]-a[1],tx=tb[0]-ta[0],ty=tb[1]-ta[1],den=dx*dx+dy*dy;if(den<1e-6)return;
+ const c=(dx*tx+dy*ty)/den,s=(dx*ty-dy*tx)/den;ctx.fillStyle='#8ee3bf';
+ for(const p of pts){const x=p[0]-a[0],y=p[1]-a[1];ctx.fillRect(w-(ta[0]+c*x-s*y)-1,ta[1]+s*x+c*y-1,2,2);}
 }
 export function drawShoulders(ctx,pose,face,w,h){
  const a=pose?.points?.[11],b=pose?.points?.[12];if(!a||!b||a.visibility<.4||b.visibility<.4)return;
