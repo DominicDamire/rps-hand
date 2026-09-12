@@ -7,14 +7,14 @@ import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {LandmarkJitter} from './landmark-jitter.mjs';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=15.3';
-import {installCombinedUI} from './combined-ui.mjs?v=alien15.16';
-import {CombinedHead} from './head-model.mjs?v=alien15.16';
-import {directDriver} from './direct.mjs?v=15.16';
+import {installCombinedUI} from './combined-ui.mjs?v=alien15.17';
+import {CombinedHead} from './head-model.mjs?v=alien15.17';
+import {directDriver} from './direct.mjs?v=15.17';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './video-link.mjs?v=alien15.16';
+import {receivePhone} from './video-link.mjs?v=alien15.17';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -72,12 +72,10 @@ function rawCameraPoints(world,lm){
  }
 
  const modelLength=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world),humanLength=Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z),scale=modelLength/Math.max(.01,humanLength);
- let depth=(depthEstimate(lm,world,captureAspect)||.5)*scale/cameraFrame(captureAspect,camera.aspect).height,pts;
- for(let pass=0;pass<2;pass++){pts=liftCameraLandmarks(lm,world,captureAspect,camera.aspect,depth,scale).map(p=>new THREE.Vector3().fromArray(p));const q=new THREE.Quaternion().setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));const samples=[['Index1',5],['Middle1',9],['Ring1',13],['Pinky1',17]].map(([n,i])=>({uv:cameraUV(lm[i],captureAspect,camera.aspect),offset:rig.rest[side+n].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(q).toArray()}));depth=fitPalmDepth(cameraUV(lm[0],captureAspect,camera.aspect),samples,camera.aspect,depth);}
  const observed=palmSize(lm,world,captureAspect);
- if(observed>0){sharedPalmReference??={size:observed,depth};depth=sizeDistance(observed,sharedPalmReference,depth,.08);}
- const face=combined?.face?.points;
- if(combined?.group.visible&&face){const above=Math.max(...lm.map(p=>p.y))<face[10].y;const relativeMax=Math.max(0,...world.map(p=>(p.z-world[0].z)*scale));depth=Math.min(depth,combined.depth+(above?.08:0)-relativeMax);}
+ const initialDepth=.5;
+ if(observed>0&&!sharedPalmReference)sharedPalmReference={size:observed,depth:initialDepth};
+ const depth=Math.min(initialDepth,sizeDistance(observed,sharedPalmReference,depthStates[side]?.depth||initialDepth,.08));
  const now=performance.now(),state=depthStates[side];
  if(!state)depthStates[side]={depth,scale,time:now};
  else {const dt=Math.min(.05,(now-state.time)/1000);const desired=Math.max(state.depth*.85,Math.min(state.depth*1.15,depth));const ms=getCombinedOptions().depthSmooth||0;state.depth=ms?state.depth+(desired-state.depth)*(1-Math.exp(-dt/(ms/1000))):depth;state.time=now;}
@@ -439,10 +437,12 @@ if($('captureRestSize'))$('captureRestSize').onclick=()=>{
  for(const [id,max,value] of [['fingerNoise',15,1],['directionSmoothing',500,25],['confirmJump',90,0],['depthSmooth',500,25],['headSmooth',500,0]]){const e=$(id);e.max=max;e.value=value;e.nextElementSibling.value=value;const label=e.closest('label');label.style.display='block';jiggle.append(label);}
  const view=document.createElement('button');view.textContent='Explore in 3D — rotate / pan / zoom';let explore=false;
  view.onclick=()=>{explore=!explore;controls.enabled=explore;controls.enablePan=true;controls.maxDistance=8;if(explore){controls.target.set(0,0,-(combined?.depth||.5));$('scene').style.transform='none';$('cameraFrame').style.display='none';}else setViewMode();view.textContent=explore?'Return to camera mirror':'Explore in 3D — rotate / pan / zoom';};panel.prepend(view,jiggle);
- const allowed=new Set(['headSize','headBack','fingerThickness','tipInset','lockBody','turnGain','moveGain','neckShare','trackingGrace','faceGrace','showHead','mappedFaceDots','fingerNoise','directionSmoothing','confirmJump','depthSmooth','headSmooth']);
+ const allowed=new Set(['headHeight','headSize','headBack','fingerThickness','tipInset','lockBody','turnGain','moveGain','neckShare','trackingGrace','faceGrace','showHead','mappedFaceDots','fingerNoise','directionSmoothing','confirmJump','depthSmooth','headSmooth']);
  for(const label of panel.querySelectorAll('label')){const input=label.querySelector('input,select');if(input&&!allowed.has(input.id))label.style.display='none';}
  for(const el of panel.querySelectorAll('p,small,button'))if(el!==view&&!jiggle.contains(el)&&el.id!=='calculationTiming')el.style.display='none';
  for(const d of panel.querySelectorAll('details')){if(d===jiggle)continue;const visible=[...d.querySelectorAll('label')].some(l=>l.style.display!=='none');if(!visible)d.style.setProperty('display','none','important');}
  for(const id of ['detected','side'])$(id).closest('label').style.setProperty('display','none','important');
  $('lockUpper').checked=true;$('falseDepth').checked=true;$('bothHands').checked=true;$('detected').value='first';
 }
+
+const recenterHands=document.createElement('button');recenterHands.textContent='Set current hands as starting depth';recenterHands.onclick=()=>{sharedPalmReference=null;for(const key of Object.keys(depthStates))delete depthStates[key];for(const key of Object.keys(distanceGains))delete distanceGains[key];for(const key of Object.keys(cheekOffsets))delete cheekOffsets[key];};$('directSettings').prepend(recenterHands);
