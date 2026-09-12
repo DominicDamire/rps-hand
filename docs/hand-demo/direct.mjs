@@ -23,6 +23,15 @@ export function directDriver(rig,tips){
   if(lockUpper)for(let f=1;f<5;f++){
    const chain=chains[f],baseDirection=chain[1].clone().sub(chain[0]).normalize();
    const name=side+FINGERS[f],restDirection=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize();
+   // Prevent proximal segments extending through the back of the palm.
+   // Handedness reverses the normal because the rest hands are mirrored.
+   const palmForward=rig.rest[side+'Middle1'].world.clone().sub(rig.rest[side+'Hand'].world).normalize();
+   const inward=new T.Vector3().crossVectors(restAcross,palmForward).normalize().multiplyScalar(side==='R'?1:-1).applyQuaternion(palmQ);
+   if(baseDirection.dot(inward)<0){
+    baseDirection.addScaledVector(inward,-baseDirection.dot(inward)).normalize();
+    const delta=chain[0].clone().addScaledVector(baseDirection,lengths[f][0]).sub(chain[1]);
+    for(let k=1;k<4;k++)chain[k].add(delta);
+   }
    const hinge=fingerPlane(restDirection,restAcross,palmQ,baseDirection);hinges.set(f,hinge);
    if(lockUpper)constrainFinger(chain,lengths[f],hinge,upperCoupling);
   }
