@@ -1,3 +1,4 @@
+import {installExperiments} from './experiment-ui.mjs?v=15.1';
 export function installCombinedUI(){
  const $=id=>document.getElementById(id),container=$('directSettings');
  const details=(title,open=false)=>{const d=document.createElement('details');d.className='settingTab';d.open=open;const s=document.createElement('summary');s.textContent=title;d.append(s);return d;};
@@ -45,6 +46,8 @@ export function installCombinedUI(){
  row('demoThumbDepth','Thumb depth strength',0,2,.05,1,'Adjusts estimated thumb depth relative to its base. One uses tracked 3D depth; zero flattens it onto the camera view. Useful when a thumb points toward the camera.');container.prepend(demo);for(const id of ['demoMatch','demoHeadMatch','demoContact','demoReach','demoSide','demoPadding','demoThumbDepth','demoThumbTwist'])$(id).disabled=true;
  const sizePanel=details('Hand distance from camera size',true);
  sizePanel.innerHTML='<label><input id="sizeDepth" type="checkbox" checked> Size-based hand distance</label><small>Larger palm means closer. Finger spread is excluded; palm rotation is approximately compensated.</small>'+row('restGap','Resting hand in front of face/body reference (cm)',0,40,1,15,'Hold your hand at this offset and press Capture. Uses estimated face distance as the reference.')+row('nearDistance','Nearest camera distance (cm)',5,30,1,8,'Measured closest hand-to-camera distance. Limits depth; does not measure arm length.')+'<button id="captureRestSize">Capture resting hand size</button><p id="sizeStatus">Automatic initial reference; capture a measured resting pose for better distance.</p>';
+ container.prepend(sizePanel);
+ const experiment=installExperiments();
  const extraIds=['faceGrace','mappedFaceDots','demoGrip','demoJitter','demoMatch','demoHeadMatch','demoContact','demoReach','demoSide','demoPadding','demoThumbDepth','demoThumbTwist','uncappedTracking','handPriority','trackerDelegate','cameraFps','handRate','faceRate','shoulderRate','trackingWidth','sceneRate','renderScale','overlayRate','showHead','lockBody','turnGain','moveGain','neckShare','headSmooth','headSize','faceOffset','depthSmooth'];
  try{const values=JSON.parse(localStorage.getItem('brother-demo-options')||'{}');if(values.uncappedTracking===undefined){values.uncappedTracking=true;values.sceneRate=60;}for(const id of extraIds){const e=$(id),v=values[id];if(e.type==='checkbox'&&typeof v==='boolean')e.checked=v;else if(e.tagName==='SELECT'&&['GPU','CPU'].includes(v))e.value=v;else if(Number.isFinite(v)&&v>=+e.min&&v<=+e.max)e.value=v;}}catch{}
  for(const id of extraIds){const e=$(id);if(e.type==='range')e.nextElementSibling.value=e.value;e.addEventListener('input',()=>{if(e.type==='range')e.nextElementSibling.value=e.value;const state={};for(const key of extraIds){const c=$(key);state[key]=c.type==='checkbox'?c.checked:c.tagName==='SELECT'?c.value:+c.value;}try{localStorage.setItem('brother-demo-options',JSON.stringify(state));}catch{}});}
@@ -62,6 +65,7 @@ export function installCombinedUI(){
  $('headSize').value=1.2;$('headSize').nextElementSibling.value=1.2;
  document.querySelector('header b').textContent='HANDS + ALIEN HEAD · 15';
  document.querySelector('header span').textContent='Fixed-size hands · alien head, neck and shoulders';
- for(const id of ['demoGrip','demoContact','demoReach','demoSide','demoPadding'])$(id).closest('label').hidden=true;
- return ()=>({...Object.fromEntries(extraIds.map(id=>{const e=$(id);return [id,e.type==='checkbox'?e.checked:e.tagName==='SELECT'?e.value:+e.value];})),demoMatch:0,demoGrip:0,demoContact:0,demoJitter:0,depthSmooth:0});
+ for(const id of ['demoGrip','demoContact','demoReach','demoSide','demoPadding']){$(id).value=0;$(id).nextElementSibling.value=0;$(id).closest('label').style.display='none';}
+ for(const id of ['demoMatch','demoHeadMatch'])$(id).closest('label').style.display='none';
+ return ()=>({...Object.fromEntries(extraIds.map(id=>{const e=$(id);return [id,e.type==='checkbox'?e.checked:e.tagName==='SELECT'?e.value:+e.value];})),demoMatch:0,demoGrip:0,demoContact:0,demoJitter:experiment().jitterCalc?+$('demoJitter').value:0,depthSmooth:+$('depthSmooth').value,...experiment()});
 }

@@ -1,11 +1,12 @@
+import {metricPalmDepth} from './depth-experiment.mjs?v=15.1';
 import {palmSize,sizeDistance} from './palm-distance.mjs?v=alien13';
 import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {LandmarkJitter} from './landmark-jitter.mjs';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=demo9';
-import {installCombinedUI} from './combined-ui.mjs?v=alien15';
-import {CombinedHead} from './head-model.mjs?v=alien15';
+import {installCombinedUI} from './combined-ui.mjs?v=alien15.1';
+import {CombinedHead} from './head-model.mjs?v=alien15.1';
 import {directDriver} from './direct.mjs?v=demo9';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
@@ -56,7 +57,8 @@ function jointBasis(n){const key=side+n;if(basisCache[key])return basisCache[key
 const cheekOffsets={},renderedHands={},sizeReferences={};
 const landmarkFilters={},filteredFrames={};
 function cameraPoints(world,lm){
- const strength=getCombinedOptions().demoJitter??2,now=performance.now();let cached=filteredFrames[side];
+ if(!getCombinedOptions().jitterCalc)return rawCameraPoints(world,lm);
+ const strength=getCombinedOptions().demoJitter??0,now=performance.now();let cached=filteredFrames[side];
  if(!cached||cached.input!==lm||cached.strength!==strength){if(!cached||now-cached.time>300)landmarkFilters[side]=new LandmarkJitter();const filtered=(landmarkFilters[side]??=new LandmarkJitter()).update(lm,world,strength,captureAspect);cached=filteredFrames[side]={input:lm,strength,time:now,...filtered};}
  const points=rawCameraPoints(cached.world,cached.lm);
  if(!$('sizeDepth')?.checked&&demoNearFace(lm)){const target=new THREE.Vector3().fromArray(cameraPosition(cameraUV(cached.lm[0],captureAspect,camera.aspect),combined.depth,camera.aspect)),delta=target.sub(points[0]);for(const p of points)p.add(delta);}
@@ -64,6 +66,7 @@ function cameraPoints(world,lm){
 }
 
 function rawCameraPoints(world,lm){
+ const options=getCombinedOptions();
  if(camera.isOrthographicCamera){
   const w=cameraUV(lm[0],captureAspect,camera.aspect),origin=new THREE.Vector3((w.x-.5)*camera.aspect,.5-w.y,-.5),modelLength=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world);
   const humanLength=Math.max(.01,Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z)),depthScale=modelLength/humanLength;
@@ -71,10 +74,12 @@ function rawCameraPoints(world,lm){
   const factor=modelLength/Math.max(.01,relative[9].length());return relative.map(v=>v.multiplyScalar(factor).add(origin));
  }
 
+ if(options.handDepth===false)return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,+$('phoneDistance').value/100,options.worldDepth?1:0).map(p=>new THREE.Vector3().fromArray(p));
  const modelLength=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world),humanLength=Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z),scale=modelLength/Math.max(.01,humanLength);
  let depth=(depthEstimate(lm,world,captureAspect)||.5)*scale/cameraFrame(captureAspect,camera.aspect).height,pts;
- for(let pass=0;pass<2;pass++){pts=liftCameraLandmarks(lm,world,captureAspect,camera.aspect,depth,scale).map(p=>new THREE.Vector3().fromArray(p));const q=new THREE.Quaternion().setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));const samples=[['Index1',5],['Middle1',9],['Ring1',13],['Pinky1',17]].map(([n,i])=>({uv:cameraUV(lm[i],captureAspect,camera.aspect),offset:rig.rest[side+n].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(q).toArray()}));depth=fitPalmDepth(cameraUV(lm[0],captureAspect,camera.aspect),samples,camera.aspect,depth);}
- if($('sizeDepth')?.checked){
+ for(let pass=0;options.palmFit&&pass<2;pass++){pts=liftCameraLandmarks(lm,world,captureAspect,camera.aspect,depth,scale).map(p=>new THREE.Vector3().fromArray(p));const q=new THREE.Quaternion().setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));const samples=[['Index1',5],['Middle1',9],['Ring1',13],['Pinky1',17]].map(([n,i])=>({uv:cameraUV(lm[i],captureAspect,camera.aspect),offset:rig.rest[side+n].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(q).toArray()}));depth=fitPalmDepth(cameraUV(lm[0],captureAspect,camera.aspect),samples,camera.aspect,depth);}
+ if(options.metricDepth)depth=metricPalmDepth(lm,world,captureAspect,depth)/cameraFrame(captureAspect,camera.aspect).height;
+ if(!options.metricDepth&&$('sizeDepth')?.checked){
   const size=palmSize(lm,world,captureAspect);
   if(size&&!sizeReferences[side])sizeReferences[side]={size,depth};
   depth=sizeDistance(size,sizeReferences[side],depth,+$('nearDistance').value/100);
@@ -84,7 +89,7 @@ function rawCameraPoints(world,lm){
  if(!state)depthStates[side]={depth,scale,time:now};
  else {const dt=Math.min(.05,(now-state.time)/1000);const desired=Math.max(state.depth*.85,Math.min(state.depth*1.15,depth));const ms=getCombinedOptions().depthSmooth||0;state.depth=ms?state.depth+(desired-state.depth)*(1-Math.exp(-dt/(ms/1000))):depth;state.time=now;}
  const stable=depthStates[side],gain=$('sizeDepth')?.checked?1:(distanceGains[side]||1);
- return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,Math.max(.05,+$('phoneDistance').value/100+(stable.depth*gain-+$('phoneDistance').value/100)*($('sizeDepth')?.checked?1:+$('depthGain').value)),stable.scale*gain).map(p=>new THREE.Vector3().fromArray(p));
+ return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,Math.max(.05,+$('phoneDistance').value/100+(stable.depth*gain-+$('phoneDistance').value/100)*($('sizeDepth')?.checked?1:+$('depthGain').value)),(options.worldDepth?stable.scale*gain:0)).map(p=>new THREE.Vector3().fromArray(p));
 }
 function solveRaw(world,lm){const pts=cameraPoints(world,lm);
  palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));
@@ -203,13 +208,14 @@ $('png').onclick=()=>{renderDemo();const c=document.createElement('canvas');c.wi
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set(1-(e.clientX-rect.left)/rect.width*2,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children.filter(m=>m.visible))[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
 await rig.ready;
 tips=buildTips(rig);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>drivers[args[1]](...args);let directResult=null;
-function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,confirmDegrees:sampleSource?0:+$('confirmJump').value,noiseDegrees:+$('fingerNoise').value,smoothingMs:+$('directionSmoothing').value,movementThresholdMm:+$('movementThreshold').value,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,contactPixels:0,contactReleasePixels:Math.max(attach,+$('contactRelease').value),thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,headContact:null,meshContact:null,lm,width:$('preview').width,height:$('preview').height};}
+function directOptions(lm){const enabled=getCombinedOptions().jointFilters;const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,confirmDegrees:!enabled||sampleSource?0:+$('confirmJump').value,noiseDegrees:enabled?+$('fingerNoise').value:0,smoothingMs:enabled?+$('directionSmoothing').value:0,movementThresholdMm:enabled?+$('movementThreshold').value:0,upperCoupling:+$('upperCoupling').value,lockUpper:enabled&&$('lockUpper').checked,contactPixels:0,contactReleasePixels:Math.max(attach,+$('contactRelease').value),thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,headContact:null,meshContact:null,lm,width:$('preview').width,height:$('preview').height};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
 configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready. Connect camera or Phone camera · QR. Connected rigid hand. Original tracked directions; no automatic resizing.');
+let timingAt=0,timingTotal=0,timingCount=0;
 let sceneFrames=0,sceneWindow=performance.now(),measuredScene=0,lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(+getCombinedOptions().handRate===0){latest=null;allHands=[];}
- if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Fixed hand proportions · tracked segment directions';}renderOtherHand(renderDt);if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&!!latest;
+ if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;const calculationStart=performance.now();if(getCombinedOptions().rawOnly){measuredScene=0;sceneFrames=0;sceneWindow=now;$('scene').style.visibility='hidden';$('calculationTiming').textContent='RAW: model calculations and 3D rendering OFF. Read tracking FPS on camera preview.';return;}$('scene').style.visibility='';combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Fixed hand proportions · tracked segment directions';}renderOtherHand(renderDt);if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&!!latest;
  for(const n of JOINTS){const dot=jointDots[n];dot.visible=true;dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  for(const [i,f] of FINGERS.entries())tipDots[f].position.copy(directResult?directResult.points[4+i*4]:tipWorld(rig,tips,side,f));
  modelLines.visible=false;let lineIndex=0;const linePoints=lineGeometry.attributes.position;
@@ -217,7 +223,7 @@ let sceneFrames=0,sceneWindow=performance.now(),measuredScene=0,lastPaint=0,last
 
  if(!editing&&now-lastControls>100){lastControls=now;renderControls();}
  if(pinching&&!editing)$('contactState').textContent=(contactHold?'Contact held · ':'Closing contact · ')+'thumb–'+pinchFinger.toLowerCase()+' gap '+(tipDots.Thumb.position.distanceTo(tipDots[pinchFinger].position)*1000).toFixed(1)+' mm';
- const j=rig.joints[side+selected];gizmo.position.setFromMatrixPosition(j.matrixWorld);gizmo.quaternion.copy(j.parent.getWorldQuaternion(new THREE.Quaternion())).multiply(jointBasis(selected));renderDemo();
+ const j=rig.joints[side+selected];gizmo.position.setFromMatrixPosition(j.matrixWorld);gizmo.quaternion.copy(j.parent.getWorldQuaternion(new THREE.Quaternion())).multiply(jointBasis(selected));const modelMs=performance.now()-calculationStart;const submitStart=performance.now();renderDemo();timingTotal+=modelMs;timingCount++;if(now-timingAt>500){$('calculationTiming').textContent='PC model CPU: '+(timingTotal/timingCount).toFixed(2)+' ms/frame · render submission CPU: '+(performance.now()-submitStart).toFixed(2)+' ms (not GPU time)';timingAt=now;timingTotal=timingCount=0;}
 }requestAnimationFrame(loop);addEventListener('pagehide',()=>{stopCamera();worker?.terminate();});
 
 const stabilityControls=document.createElement('section');

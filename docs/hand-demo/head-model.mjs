@@ -31,16 +31,16 @@ export class CombinedHead {
  }
  setWorld(b,q){if(!b)return;b.parent.updateWorldMatrix(true,false);b.quaternion.copy(b.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(q));b.updateWorldMatrix(false,true);}
  update(dt,aspect,camera,metres,depthGain){
-  const o=this.options(),fresh=this.face&&performance.now()-this.seen<(o.faceGrace??1000)&&o.faceRate>0;this.group.visible=!!(o.showHead&&fresh&&this.loaded);if(this.faceDots)this.faceDots.visible=this.group.visible&&!!o.mappedFaceDots;if(this.contactDot)this.contactDot.visible=this.group.visible&&!!o.mappedFaceDots&&(Number.isInteger(this.highlightFaceId)||Number.isInteger(this.highlightBodyId));if(!this.group.visible)return;
+  const o=this.options(),fresh=this.face&&performance.now()-this.seen<(o.faceGrace??1000)&&o.faceRate>0;this.group.visible=!!(o.showHead&&fresh&&this.loaded);if(this.faceDots)this.faceDots.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false;if(this.contactDot)this.contactDot.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false&&(Number.isInteger(this.highlightFaceId)||Number.isInteger(this.highlightBodyId));if(!this.group.visible)return;
   if(!this.depthRef)this.calibrate(metres,aspect,camera.aspect);
-  let depth=calibratedDepth(faceReference(this.face),this.depthRef,this.metres,depthGain);if(!depth)return;
+  let depth=o.headDepth===false?this.metres:calibratedDepth(faceReference(this.face),this.depthRef,this.metres,depthGain);if(!depth)return;
   depth=Math.max(.08,depth-o.faceOffset/100);this.depth=depth;
   this.group.scale.setScalar(this.fixedScale*o.headSize);
   const q=new T.Quaternion().setFromRotationMatrix(new T.Matrix4().fromArray(this.face.matrix));if(this.neutral)q.multiply(this.neutral.clone().invert());
   const e=new T.Euler().setFromQuaternion(q,'YXZ');e.x*=o.turnGain;e.y*=o.turnGain;e.z*=o.turnGain;q.setFromEuler(e);
-  const alpha=o.headSmooth>0?1-Math.exp(-dt/(o.headSmooth/1000)):1;this.smoothed.slerp(q,alpha);
+  const alpha=o.headFilter!==false&&o.headSmooth>0?1-Math.exp(-dt/(o.headSmooth/1000)):1;this.smoothed.slerp(q,alpha);
   let roll=0,yaw=0;
-  if(!o.lockBody&&o.shoulderRate>0&&this.pose&&performance.now()-this.poseSeen<900){const p=this.pose.points,w=this.pose.world,a=p[12],b=p[11];if(a.visibility>.4&&b.visibility>.4){const s={roll:-Math.atan2(b.y-a.y,b.x-a.x),yaw:Math.atan2(w[11].z-w[12].z,w[11].x-w[12].x)};this.shoulderNeutral??=s;roll=s.roll-this.shoulderNeutral.roll;yaw=s.yaw-this.shoulderNeutral.yaw;}}
+  if(o.shoulderMotion!==false&&!o.lockBody&&o.shoulderRate>0&&this.pose&&performance.now()-this.poseSeen<900){const p=this.pose.points,w=this.pose.world,a=p[12],b=p[11];if(a.visibility>.4&&b.visibility>.4){const s={roll:-Math.atan2(b.y-a.y,b.x-a.x),yaw:Math.atan2(w[11].z-w[12].z,w[11].x-w[12].x)};this.shoulderNeutral??=s;roll=s.roll-this.shoulderNeutral.roll;yaw=s.yaw-this.shoulderNeutral.yaw;}}
   const rootQ=new T.Quaternion().setFromEuler(new T.Euler(0,yaw,roll,'YXZ'));if(this.bones.root)this.setWorld(this.bones.root,rootQ.multiply(this.rest.get(this.bones.root)));
   const neckQ=new T.Quaternion().identity().slerp(this.smoothed,o.neckShare);this.setWorld(this.bones.neck,neckQ.multiply(this.rest.get(this.bones.neck)));this.setWorld(this.bones.head,this.smoothed.clone().multiply(this.rest.get(this.bones.head)));
   const eyes=this.face.eyes||{},gx=((eyes.eyeLookInLeft||0)-(eyes.eyeLookOutLeft||0)+(eyes.eyeLookOutRight||0)-(eyes.eyeLookInRight||0))*.2,gy=-((eyes.eyeLookUpLeft||0)+(eyes.eyeLookUpRight||0)-(eyes.eyeLookDownLeft||0)-(eyes.eyeLookDownRight||0))*.12;
@@ -48,6 +48,7 @@ export class CombinedHead {
   const uv=cameraUV(eyeCenter(this.face.points),aspect,camera.aspect),target=camera.isOrthographicCamera?new T.Vector3((uv.x-.5)*camera.aspect,.5-uv.y,-depth):new T.Vector3().fromArray(cameraPosition(uv,depth,camera.aspect));
   this.anchor??=target.clone();target.sub(this.anchor).multiplyScalar(o.moveGain).add(this.anchor);this.position??=target.clone();this.position.lerp(target,alpha);
   this.group.updateMatrixWorld(true);const midpoint=this.bones.eyes.reduce((v,b)=>v.add(b.getWorldPosition(new T.Vector3())),new T.Vector3()).multiplyScalar(.5);this.group.position.add(this.position.clone().sub(midpoint));this.group.updateMatrixWorld(true);
+  if(o.faceMapping===false)return;
   this.mappedLandmarks=updateFaceDots(this.faceBindings);this.cameraLandmarks=projectFaceDots(this.face.points,this.face.matrix,aspect);
   const attribute=this.faceDots.geometry.attributes.position;for(let i=0;i<this.mappedLandmarks.length;i++){const p=this.mappedLandmarks[i];attribute.setXYZ(i,p.x,p.y,p.z+.0003);}this.mappedShoulders={};for(let i=0;i<2;i++){const b=this.shoulderBindings[i];if(!b)continue;const p=b.mesh.getVertexPosition(b.i,new T.Vector3()).applyMatrix4(b.mesh.matrixWorld);this.mappedShoulders[i===0?12:11]=p;attribute.setXYZ(this.mappedLandmarks.length+i,p.x,p.y,p.z+.0003);}attribute.needsUpdate=true;
   if(this.contactDot.visible){const point=this.mappedLandmarks[this.highlightFaceId]||this.mappedShoulders[this.highlightBodyId];if(point)this.contactDot.position.copy(point);}
