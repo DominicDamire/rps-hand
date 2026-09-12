@@ -53,7 +53,7 @@ function solve(now){
    // One world frame: pose wrist depth anchors the hand; finger offsets stay wrist-relative.
    const wristDepth=target?target.z+2:depth;target=projection(lm[0],wristDepth);points=world.map((p,i)=>projection(lm[i],Math.max(.1,wristDepth+p.z-world[0].z)));if($('straightDepth').checked)points=reduceFalseDepthBends(points,lm,480,480/aspect,false);
   }
-  if(!target){grips[S].clear();continue;}
+  if(!target){if(!points)diagnostics.untrackedHands.push(S);grips[S].clear();continue;}
   rig.reach(S+'UpperArm',S+'Forearm',S+'Hand',target,hint);rig.root.updateMatrixWorld(true);if(points){poseHand(rig,S,points);
    // Fit distance to the observed palm size using fixed model offsets. This is
    // perspective translation only; never scale the palm or finger bones.
@@ -67,8 +67,8 @@ function solve(now){
    if([0,4,8,12,16,20].some(i=>inside(lm[i]))){
     const palmPoint=rig.joints[S+'Middle1'].getWorldPosition(V()).lerp(wrist,.45),palmLm={x:[0,5,9,13,17].reduce((sum,i)=>sum+lm[i].x,0)/5,y:[0,5,9,13,17].reduce((sum,i)=>sum+lm[i].y,0)/5},scalp=palmLm.y<fp[10].y+.025;
     let from=null,to=null,support=null;
-    if(palmLm.y>fp[152].y-.025&&pi?.[11]&&pi?.[12]){const shoulderY=(pi[11].y+pi[12].y)/2,t=T.MathUtils.clamp((palmLm.y-fp[152].y)/Math.max(.03,shoulderY-fp[152].y),0,1),chin=mappedFace[152],bottom=rig.joints.Neck.getWorldPosition(V()).lerp(rig.joints.Chest.getWorldPosition(V()),.5),query=chin.clone().lerp(bottom,t);query.x+=(fp[152].x-palmLm.x)*.3;query.z=head.eye().z-.07;const hit=headSurface.closest(query);support=hit;from=palmPoint;to=hit.point.clone().addScaledVector(hit.normal,.012);}
-    else if(scalp){const forehead=mappedFace[10],eyes=head.eye(),dy=(fp[10].y-palmLm.y)/Math.max(.01,fp[152].y-fp[10].y),query=forehead.clone().add(new T.Vector3(0,dy*.18,-.025));const hit=headSurface.closest(query);support=hit;from=palmPoint;to=hit.point.clone().addScaledVector(hit.normal,.012);}
+    if(palmLm.y>fp[152].y-.025&&pi?.[11]&&pi?.[12]){const shoulderY=(pi[11].y+pi[12].y)/2,t=T.MathUtils.clamp((palmLm.y-fp[152].y)/Math.max(.03,shoulderY-fp[152].y),0,1),chin=mappedFace[152],bottom=rig.joints.Neck.getWorldPosition(V()).lerp(rig.joints.Chest.getWorldPosition(V()),.5),query=chin.clone().lerp(bottom,t);query.x+=(fp[152].x-palmLm.x)*.3;query.z=head.eye().z-.07;const hit=headSurface.closest(query);if(hit){support=hit;from=palmPoint;to=hit.point.clone().addScaledVector(hit.normal,.012);}}
+    else if(scalp){const forehead=mappedFace[10],eyes=head.eye(),dy=(fp[10].y-palmLm.y)/Math.max(.01,fp[152].y-fp[10].y),query=forehead.clone().add(new T.Vector3(0,dy*.18,-.025));const hit=headSurface.closest(query);if(hit){support=hit;from=palmPoint;to=hit.point.clone().addScaledVector(hit.normal,.012);}}
     else{const cameraDots=projectFaceDots(fp,face.matrix,aspect);let best=Infinity;
      for(let f=0;f<5;f++){const p=lm[f*4+4];for(let i=0;i<cameraDots.length;i++){const q=cameraDots[i],d=Math.hypot((p.x-q.x)*aspect,p.y-q.y);if(d<best){best=d;from=fingerTip(rig,S,fingers[f]);to=mappedFace[i].clone();}}}
      if(best>.045){from=to=null;}
@@ -87,7 +87,7 @@ function solve(now){
   for(const candidate of surfaces)for(const f of ['Thumb','Index','Middle']){const hit=candidate.closest(fingerTip(rig,S,f));if(hit&&(!nearest||hit.distance<nearest.distance)){nearest=hit;surface=candidate;}}
   const curl=fingers.slice(1).reduce((sum,f,i)=>sum+points[(i+1)*4+4].distanceTo(points[0])/Math.max(.001,points[(i+1)*4+1].distanceTo(points[0])),0)/4;
   let supported=false;
-  for(const candidate of surfaces){const contacts=fingers.map(f=>({...candidate.closest(fingerTip(rig,S,f)),finger:f})).filter(c=>c.normal);if(hasGripSupport(contacts,range)){const hit=candidate.closest(palm);if(!supported||hit.distance<nearest.distance){supported=true;surface=candidate;nearest=contacts.reduce((a,b)=>a.distance<b.distance?a:b);}}}
+  for(const candidate of surfaces){const contacts=fingers.map(f=>({...candidate.closest(fingerTip(rig,S,f)),finger:f})).filter(c=>c.normal);if(hasGripSupport(contacts,range)){const hit=candidate.closest(palm);if(hit&&(!supported||hit.distance<nearest.distance)){supported=true;surface=candidate;nearest=contacts.reduce((a,b)=>a.distance<b.distance?a:b);}}}
   const held=grips[S].update({object:nearest&&range>0&&nearest.distance<range?surface.object:null,point:wrist,contact:nearest,closing:curl<1.75&&(supported||grips[S].held),now,enabled:$('magnet').checked,dwell:+$('dwell').value,range,movable:surface?.object===can});
   if(held){const grip=grips[S],hand=rig.joints[S+'Hand'];if(grip.object===can){grip.relative??=hand.matrixWorld.clone().invert().multiply(can.matrixWorld);const matrix=hand.matrixWorld.clone().multiply(grip.relative);matrix.decompose(can.position,can.quaternion,new T.Vector3());can.updateMatrixWorld(true);}else{const locked=grip.anchorWorld();rig.reach(S+'UpperArm',S+'Forearm',S+'Hand',locked,hint);rig.root.updateMatrixWorld(true);}}
   if($('assist').checked&&range>0){for(const f of fingers){const tip=fingerTip(rig,S,f);let closest=null;for(const c of surfaces){const hit=c.closest(tip);if(hit&&(!closest||hit.distance<closest.distance))closest=hit;}
