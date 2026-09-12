@@ -61,8 +61,8 @@ export function installCombinedUI(){
  container.parentElement.append(container);
  document.title='Combined Hands + Head Lab DEMO';document.querySelector('header b').textContent='HANDS + HEAD · DEMO';document.querySelector('header span').textContent='Direct-lines hands · grey head and shoulders · one camera';
  for(const p of container.querySelectorAll('p'))if(p.textContent.includes('It does not track your head.'))p.textContent='Mirror uses the camera view. First person uses the opposite viewpoint; head and hands share calibrated scene coordinates.';
- $('cameraFps').value=60;$('cameraFps').nextElementSibling.value=60;$('handRate').value=30;$('handRate').nextElementSibling.value=30;$('uncappedTracking').checked=false;
- $('shoulderRate').value=30;$('lockBody').checked=false;$('neckShare').value=.45;$('neckShare').nextElementSibling.value=.45;
+ $('cameraFps').value=60;$('cameraFps').nextElementSibling.value=60;$('handRate').value=60;$('handRate').nextElementSibling.value=60;$('uncappedTracking').checked=false;
+ $('shoulderRate').value=20;$('shoulderRate').nextElementSibling.value=20;$('faceRate').value=20;$('faceRate').nextElementSibling.value=20;$('lockBody').checked=false;$('neckShare').value=.45;$('neckShare').nextElementSibling.value=.45;
  $('headSize').value=1.2;$('headSize').nextElementSibling.value=1.2;
  document.querySelector('header b').textContent='HANDS + ALIEN HEAD · 15.2 · PC TRACKING';
  document.querySelector('header span').textContent='Fixed-size hands · alien head, neck and shoulders';
