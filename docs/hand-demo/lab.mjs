@@ -7,14 +7,14 @@ import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {LandmarkJitter} from './landmark-jitter.mjs';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=15.3';
-import {installCombinedUI} from './combined-ui.mjs?v=alien15.14';
-import {CombinedHead} from './head-model.mjs?v=alien15.14';
-import {directDriver} from './direct.mjs?v=15.14';
+import {installCombinedUI} from './combined-ui.mjs?v=alien15.15';
+import {CombinedHead} from './head-model.mjs?v=alien15.15';
+import {directDriver} from './direct.mjs?v=15.15';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './video-link.mjs?v=alien15.14';
+import {receivePhone} from './video-link.mjs?v=alien15.15';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -431,3 +431,18 @@ if($('captureRestSize'))$('captureRestSize').onclick=()=>{
  }
  notice('Resting hand size captured. Move toward the camera to reduce distance; physical model size stays fixed.');
 };
+
+// Keep legacy inputs for internal compatibility; present only active controls.
+{
+ const panel=$('directSettings');
+ const jiggle=document.createElement('details');jiggle.className='settingTab';jiggle.open=true;jiggle.innerHTML='<summary>Jiggle</summary><p>Zero follows estimates immediately. High values hold small changes or add delay.</p>';
+ for(const [id,max,value] of [['fingerNoise',15,1],['directionSmoothing',500,25],['confirmJump',90,0],['depthSmooth',500,25],['headSmooth',500,0]]){const e=$(id);e.max=max;e.value=value;e.nextElementSibling.value=value;const label=e.closest('label');label.style.display='block';jiggle.append(label);}
+ const view=document.createElement('button');view.textContent='Explore in 3D — rotate / pan / zoom';let explore=false;
+ view.onclick=()=>{explore=!explore;controls.enabled=explore;controls.enablePan=true;controls.maxDistance=8;if(explore){controls.target.set(0,0,-(combined?.depth||.5));$('scene').style.transform='none';$('cameraFrame').style.display='none';}else setViewMode();view.textContent=explore?'Return to camera mirror':'Explore in 3D — rotate / pan / zoom';};panel.prepend(view,jiggle);
+ const allowed=new Set(['headSize','headBack','fingerThickness','tipInset','lockBody','turnGain','moveGain','neckShare','trackingGrace','faceGrace','showHead','mappedFaceDots','fingerNoise','directionSmoothing','confirmJump','depthSmooth','headSmooth']);
+ for(const label of panel.querySelectorAll('label')){const input=label.querySelector('input,select');if(input&&!allowed.has(input.id))label.style.display='none';}
+ for(const el of panel.querySelectorAll('p,small,button'))if(el!==view&&!jiggle.contains(el)&&el.id!=='calculationTiming')el.style.display='none';
+ for(const d of panel.querySelectorAll('details')){if(d===jiggle)continue;const visible=[...d.querySelectorAll('label')].some(l=>l.style.display!=='none');if(!visible)d.style.setProperty('display','none','important');}
+ for(const id of ['detected','side'])$(id).closest('label').style.setProperty('display','none','important');
+ $('lockUpper').checked=true;$('falseDepth').checked=true;$('bothHands').checked=true;$('detected').value='first';
+}
