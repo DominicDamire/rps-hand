@@ -21,10 +21,11 @@ export function receivePhone(onStream,onStatus,onEnd){
  peer.on('error',e=>status('Connection error: '+e.type+'. Cancel and try again.'));
  return close;
 }
-export async function sendPhone(id,video,status,facing='user'){
+export async function sendPhone(id,video,status,facing='user',resolution='720'){
  if(!/^handlab-[a-f0-9-]{36}$/.test(id))throw Error('Scan a fresh QR code from the PC lab.');
  if(!window.Peer)throw Error('Connection library failed to load. Reload this page.');
- const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:60,max:60}}});
+ const sizes={'480':[854,480],'720':[1280,720],'1080':[1920,1080]},[width,height]=sizes[resolution]||sizes['720'];
+ const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:width},height:{ideal:height},frameRate:{ideal:60,max:60}}});
  let peer,call,closed=false,wake,timer;
  const stop=()=>{if(closed)return;closed=true;clearTimeout(timer);call?.close();peer?.destroy();stream.getTracks().forEach(t=>t.stop());video.srcObject=null;wake?.release().catch(()=>{});};
  try{video.srcObject=stream;await video.play();peer=new Peer(undefined,{config});
