@@ -7,14 +7,14 @@ import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {LandmarkJitter} from './landmark-jitter.mjs';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=15.3';
-import {installCombinedUI} from './combined-ui.mjs?v=alien15.17';
-import {CombinedHead} from './head-model.mjs?v=alien15.17';
+import {installCombinedUI} from './combined-ui.mjs?v=alien15.18';
+import {CombinedHead} from './head-model.mjs?v=alien15.18';
 import {directDriver} from './direct.mjs?v=15.17';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './video-link.mjs?v=alien15.17';
+import {receivePhone} from './video-link.mjs?v=alien15.18';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -62,7 +62,7 @@ function cameraPoints(world,lm){
  const points=rawCameraPoints(world,lm);if(cheekOffsets[side])for(const p of points)p.add(cheekOffsets[side]);
  return $('falseDepth')?.checked?reduceFalseDepthBends(points,lm,$('preview').width,$('preview').height,!camera.isOrthographicCamera):points;
 }
-let sharedPalmReference=null;
+let sharedPalmReference=null;const calibratedPalms={};
 function rawCameraPoints(world,lm){
  if(camera.isOrthographicCamera){
   const w=cameraUV(lm[0],captureAspect,camera.aspect),origin=new THREE.Vector3((w.x-.5)*camera.aspect,.5-w.y,-.5),modelLength=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world);
@@ -73,9 +73,17 @@ function rawCameraPoints(world,lm){
 
  const modelLength=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world),humanLength=Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z),scale=modelLength/Math.max(.01,humanLength);
  const observed=palmSize(lm,world,captureAspect);
- const initialDepth=.5;
+ const initialDepth=sharedPalmReference?.depth||.5;
  if(observed>0&&!sharedPalmReference)sharedPalmReference={size:observed,depth:initialDepth};
- const depth=Math.min(initialDepth,sizeDistance(observed,sharedPalmReference,depthStates[side]?.depth||initialDepth,.08));
+ let depth=sizeDistance(observed,calibratedPalms[side]||sharedPalmReference,depthStates[side]?.depth||initialDepth,.08);
+ if(combined?.group.visible&&combined.face?.points){
+ const face=combined.face.points,tip=lm[9],left=Math.min(face[234].x,face[454].x),right=Math.max(face[234].x,face[454].x);
+ const peripheral=tip.y<face[10].y||tip.x<left||tip.x>right;
+ const backLimit=combined.depth+(peripheral?.06:0);
+ const protrusion=Math.max(0,...world.map(p=>(p.z-world[0].z)*scale));
+ depth=Math.min(depth,Math.max(.08,backLimit-protrusion));
+ }
+
  const now=performance.now(),state=depthStates[side];
  if(!state)depthStates[side]={depth,scale,time:now};
  else {const dt=Math.min(.05,(now-state.time)/1000);const desired=Math.max(state.depth*.85,Math.min(state.depth*1.15,depth));const ms=getCombinedOptions().depthSmooth||0;state.depth=ms?state.depth+(desired-state.depth)*(1-Math.exp(-dt/(ms/1000))):depth;state.time=now;}
@@ -446,3 +454,13 @@ if($('captureRestSize'))$('captureRestSize').onclick=()=>{
 }
 
 const recenterHands=document.createElement('button');recenterHands.textContent='Set current hands as starting depth';recenterHands.onclick=()=>{sharedPalmReference=null;for(const key of Object.keys(depthStates))delete depthStates[key];for(const key of Object.keys(distanceGains))delete distanceGains[key];for(const key of Object.keys(cheekOffsets))delete cheekOffsets[key];};$('directSettings').prepend(recenterHands);
+
+const scanHands=document.createElement('button');scanHands.textContent='Calibrate hands beside face';
+scanHands.onclick=()=>{
+ if(!combined?.group.visible||performance.now()-combined.seen>500||!allHands.length)return notice('Show your face and hold visible hands beside it, at the same distance.');
+ const face=combined.face.points,left=Math.min(face[234].x,face[454].x),right=Math.max(face[234].x,face[454].x);
+ const valid=allHands.filter(h=>{const w=h.landmarks[0];return (w.x<left||w.x>right)&&w.y>face[10].y-.1&&w.y<face[152].y+.2;});
+ if(!valid.length)return notice('Place your hand next to the face outline, not in front of it, then calibrate.');
+ for(const h of valid){const size=palmSize(h.landmarks,h.world,captureAspect);if(!size)continue;const key=h.label==='Left'?'L':'R';calibratedPalms[key]={size,depth:combined.depth};sharedPalmReference={size,depth:combined.depth};delete depthStates[key];delete distanceGains[key];}
+ notice('Stored '+valid.length+' visible hand reference(s) at estimated face depth. This is a calibration estimate, not a measured 3D scan.');
+};$('directSettings').prepend(scanHands);
