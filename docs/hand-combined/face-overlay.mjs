@@ -8,6 +8,7 @@ export function drawFace(ctx,points,w,h){
  // Nose and closed mouth are a schematic attached to the face, not tracked expressions.
  const a=points[10],b=points[152],left=points[234],right=points[454];if(!a||!b||!left||!right)return;
  const at=(x,y)=>({x:a.x+(b.x-a.x)*y+(right.x-left.x)*x,y:a.y+(b.y-a.y)*y+(right.y-left.y)*x});
+ path([at(-.3,.36),at(-.13,.36)]);path([at(.13,.36),at(.3,.36)]);
  path([at(0,.38),at(-.06,.61),at(.07,.61)]);path([at(-.17,.76),at(0,.79),at(.17,.76)]);
 }
 export function encodeAux(data){if(!data.face)return data;const {points,...face}=data.face;return {...data,face:{...face,indexedPoints:Object.entries(points).flatMap(([id,p])=>[+id,Math.round(p.x*65535),Math.round(p.y*65535)])}};}
