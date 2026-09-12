@@ -1,12 +1,12 @@
 // One fresh camera frame per task, at most one inference in flight per worker.
-export const defaults = {cameraFps:60,handRate:60,faceRate:20,shoulderRate:4,trackingWidth:480,trackerDelegate:'GPU',overlayRate:60,handPriority:true};
+export const defaults = {cameraFps:60,handRate:60,faceRate:30,shoulderRate:4,trackingWidth:480,trackerDelegate:'GPU',overlayRate:60,handPriority:false};
 export function startTracking(video, onResult, onStats, getOptions=()=>defaults,captureOptions={}) {
  let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0,cameraCallbacks=0,lastPresented=null,handStreak=0,lastAccepted=-Infinity,lastClockProgress=performance.now(),capturePolls=0;
  const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},errors:{}};
  const slots=['hands','face','pose'].map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
  function startWorker(s){
   const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;
-  const url=new URL('./tracker.mjs?v=19.3',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);
+  const url=new URL('./tracker.mjs?v=19.4',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);
   const w=s.worker=new Worker(url,{type:'module'});
   s.timer=setTimeout(()=>{if(!s.ready){stats.errors[s.task]='Tracker initialization timed out';w.terminate();s.busy=false;}},60000);
   w.onerror=e=>{clearTimeout(s.timer);stats.errors[s.task]=e.message;s.busy=false;s.ready=false;};
@@ -22,7 +22,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
   s.busy=true;s.sent=now;const w=s.worker,width=s.task==='hands'?+opts.trackingWidth:Math.min(320,+opts.trackingWidth);
   try{const c=s.canvas;c.width=width;c.height=Math.max(1,Math.round(width*video.videoHeight/video.videoWidth));if(captureOptions.copyPreview!==false)c.getContext('2d').drawImage(video,0,0,c.width,c.height);
    const time=Math.max(now,s.last+.001);s.last=time;
-   let bitmap;try{bitmap=await createImageBitmap(captureOptions.copyPreview===false?video:c,{resizeWidth:c.width,resizeHeight:c.height});}catch{}
+   let bitmap;try{bitmap=await createImageBitmap(captureOptions.copyPreview===false?video:c,{resizeWidth:c.width,resizeHeight:c.height,resizeQuality:'low'});}catch{}
    if(stopped||s.worker!==w){bitmap?.close();return;}
    if(bitmap)w.postMessage({type:'frame',bitmap,time},[bitmap]);else{if(captureOptions.copyPreview===false)c.getContext('2d').drawImage(video,0,0,c.width,c.height);const image=c.getContext('2d').getImageData(0,0,c.width,c.height);w.postMessage({type:'frame',image,time},[image.data.buffer]);}
   }catch(e){s.busy=false;stats.errors[s.task]=String(e);}
@@ -50,16 +50,18 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
   }
   for(const s of chosen){s.next=Math.max(s.next+1000/s.rate,now);handStreak=s.task==='hands'?handStreak+1:0;dispatch(s,now,opts);}
  }
- function videoTick(now,metadata){if(stopped)return;lastCallback=now;tick(now,metadata);handle=video.requestVideoFrameCallback(videoTick);}
- function watchdog(now){if(stopped)return;const stalled=now-lastClockProgress>250;if(stalled&&now-lastAccepted>=1000/Math.max(1,+getOptions().cameraFps||60)-1)tick(now,undefined,true);else if(now-lastCallback>150)tick(now);}
- function fallbackTick(now){if(stopped)return;watchdog(now);rafHandle=requestAnimationFrame(fallbackTick);}
- const frameWatchdog=setInterval(()=>watchdog(performance.now()),16);
+ // Original standalone capture pattern: RAF drives work; video callbacks are not a gate.
+ function fallbackTick(now){if(stopped)return;
+  const stalled=now-lastClockProgress>250;
+  if(now-lastAccepted>=1000/Math.max(1,+getOptions().cameraFps||60)-1)tick(now,undefined,stalled);
+  rafHandle=requestAnimationFrame(fallbackTick);
+ }
  // Initialization and telemetry must not depend on delivery of the first video callback.
  for(const s of slots)if(enabled(s,{...defaults,...getOptions()}))startWorker(s);
  const reportTimer=setInterval(()=>{const now=performance.now(),opts={...defaults,...getOptions()};
-  if(now-windowStart>=950){const seconds=(now-windowStart)/1000;stats.camera=Math.round(cameraFrames/seconds);stats.cameraCallbacks=Math.round(cameraCallbacks/seconds);stats.capturePolls=capturePolls;capturePolls=0;stats.cameraCounter=lastPresented===null?'callbacks':'presented frames';cameraFrames=0;cameraCallbacks=0;for(const s of slots){stats[s.task]=Math.round(s.count/seconds);s.count=0;}windowStart=now;onStats({...stats,requested:opts.cameraFps,cameraSettings:video.srcObject?.getVideoTracks()[0]?.getSettings()});}
+  if(now-windowStart>=950){const seconds=(now-windowStart)/1000;stats.camera=Math.round(cameraFrames/seconds);stats.cameraCallbacks=Math.round(cameraCallbacks/seconds);stats.capturePolls=capturePolls;capturePolls=0;stats.cameraCounter='video-clock updates';cameraFrames=0;cameraCallbacks=0;for(const s of slots){stats[s.task]=Math.round(s.count/seconds);s.count=0;}windowStart=now;onStats({...stats,requested:opts.cameraFps,cameraSettings:video.srcObject?.getVideoTracks()[0]?.getSettings()});}
  },1000);
- if(video.requestVideoFrameCallback)handle=video.requestVideoFrameCallback(videoTick);
+
  rafHandle=requestAnimationFrame(fallbackTick);
- return ()=>{stopped=true;clearInterval(reportTimer);clearInterval(frameWatchdog);if(video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(handle);cancelAnimationFrame(rafHandle);for(const s of slots){clearTimeout(s.timer);s.worker?.terminate();}};
+ return ()=>{stopped=true;clearInterval(reportTimer);if(video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(handle);cancelAnimationFrame(rafHandle);for(const s of slots){clearTimeout(s.timer);s.worker?.terminate();}};
 }

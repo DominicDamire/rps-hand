@@ -7,7 +7,7 @@ globalThis.document={hidden:false,createElement:()=>({getContext:()=>({drawImage
 globalThis.createImageBitmap=async()=>({close(){closes++;}});
 const video={readyState:2,videoWidth:640,videoHeight:480,requestVideoFrameCallback(fn){callback=fn;return 1;},cancelVideoFrameCallback(){callback=null;}};
 let received=0,opts={...defaults,handPriority:false};const stop=startTracking(video,()=>received++,()=>{},()=>opts);
-const frame=async(n)=>{callback(n*17,{mediaTime:n/60});await new Promise(r=>setImmediate(r));};
+const frame=async(n)=>{video.currentTime=n/60;fallback(n*17);await new Promise(r=>setImmediate(r));};
 await frame(0);await frame(1);
 assert.equal(workers.length,3);for(const w of workers)assert.equal(w.frames.length,1);
 for(let n=2;n<20;n++)await frame(n);
@@ -29,7 +29,7 @@ stalledStop();assert.equal(fallback,null);
 console.log('PASS missing video callback regression: initialization and frame processing remain live');
 
 workers.length=0;video.currentTime=0;
-const priorityStop=startTracking(video,()=>{},()=>{},()=>defaults,{copyPreview:false});
+const priorityStop=startTracking(video,()=>{},()=>{},()=>({...defaults,handPriority:true}),{copyPreview:false});
 await new Promise(r=>setImmediate(r));
 const seen=[];let consumed=new Map();
 for(let i=1;i<80;i++){video.currentTime=i/60;await frame(i);let active=workers.filter(w=>w.frames.length>(consumed.get(w)||0));assert.ok(active.length<=1,'Priority mode never overlaps inference');for(const w of active){seen.push(w.task);consumed.set(w,w.frames.length);w.onmessage({data:{type:'result',task:w.task,inferenceMs:8}});}}
@@ -40,6 +40,6 @@ workers.length=0;video.currentTime=0;
 const clockStop=startTracking(video,()=>{},()=>{},()=>defaults);
 await new Promise(r=>setImmediate(r));
 let completed=0;const base=performance.now();
-for(let i=0;i<90;i++){const now=base+i*17;callback(now,{mediaTime:0,presentedFrames:0});fallback(now);await new Promise(r=>setImmediate(r));for(const w of workers){if(w.frames.length){completed+=w.frames.length;w.frames=[];w.onmessage({data:{type:'result',task:w.task,inferenceMs:5}});}}}
+for(let i=0;i<90;i++){const now=base+i*17;fallback(now);await new Promise(r=>setImmediate(r));for(const w of workers){if(w.frames.length){completed+=w.frames.length;w.frames=[];w.onmessage({data:{type:'result',task:w.task,inferenceMs:5}});}}}
 assert.ok(completed>10,'A stalled media clock must not freeze tracking even when video callbacks keep arriving');clockStop();
 console.log('PASS constant Safari media clock: live image capture continues without relying on timestamps');

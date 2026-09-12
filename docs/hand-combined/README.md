@@ -38,3 +38,6 @@ Disable face blendshape classification (eye/lip expressions). Keep fewer than 50
 
 ## V19.3 stalled video clock recovery
 A live preview with repeated media timestamps could reject every frame while callbacks continued arriving, preventing the old no-callback watchdog from recovering. Add a rate-bounded image-read fallback after 250ms without clock progress, driven by both RAF and an independent timer. Keep one inference in flight and report fallback reads separately from observed camera FPS. Regression test covers repeated mediaTime=0 callbacks through worker startup and subsequent tracking. Physical iPhone recovery remains to be verified.
+
+## V19.4 restore standalone capture scheduling
+Compared original tagirz500/alien-head docs/index.html and standalone hand-lines/phone-link.mjs: both dispatch from RAF, use low-quality bitmap resize and independent worker-busy guards. Restore that capture pattern; disable the shared serial queue by default. Keep fixed-timestamp recovery, sparse drawing and expression classification off. Add Hands only / Face only / Combined buttons using the same camera, detector and inference path for on-device comparison. Combining three neural tasks still has a resource cost; no zero-latency or 60 inference FPS claim.
