@@ -1,3 +1,4 @@
+import {sharedWrists} from './shared-wrists.mjs?v=demo12.2';
 import {poseDirectArm} from './direct-arms.mjs?v=demo12';
 import * as T from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
@@ -26,7 +27,7 @@ for(const el of document.querySelectorAll('input,select'))el.addEventListener('i
 function resetView(){$('scene').style.transform=$('viewMode').value==='front'?'scaleX(-1)':'';orbit.enabled=true;camera.layers.enable(1);const mode=$('viewMode').value;camera.position.set(mode==='side'?.9:mode==='left'?-.9:mode==='rear'?.8:0,.48,mode==='front'?-2.65:mode==='rear'?-.4:-1.5);orbit.target.set(0,.32,-1.5);camera.lookAt(orbit.target);orbit.update();}resetView();$('viewMode').onchange=resetView;
 const options=()=>({...defaults,fullBody:true,poseModel:$('poseModel').value,handRate:30,faceRate:30,shoulderRate:30,uncappedTracking:true,trackerDelegate:$('trackerDelegate').value,trackingWidth:+$('trackingWidth').value});
 function accept(data,frame){if(frame){source=frame;aspect=(frame.width||frame.w)/(frame.height||frame.h);}const now=performance.now();if(data.task==='pose'){pose=data.pose;poseSeen=now;}else if(data.task==='face'){face=data.face;faceSeen=now;}else if(data.landmarks){hands=data;handSeen=now;}dirty=true;paint();}
-function paint(){const c=$('preview');c.width=480;c.height=Math.round(480/aspect);const ctx=c.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,c.width,c.height);if(source&&!remote&&source.getContext){ctx.save();ctx.translate(c.width,0);ctx.scale(-1,1);ctx.drawImage(source,0,0,c.width,c.height);ctx.restore();}drawUpperBody(ctx,pose,c.width,c.height);if(face)drawFace(ctx,face.points,c.width,c.height,face.matrix);ctx.strokeStyle='#8ee3bf';ctx.fillStyle='#effff5';for(const lm of hands?.landmarks||[]){for(let f=0;f<5;f++){ctx.beginPath();ctx.moveTo((1-lm[0].x)*c.width,lm[0].y*c.height);for(let k=1;k<=4;k++){const p=lm[f*4+k];ctx.lineTo((1-p.x)*c.width,p.y*c.height);}ctx.stroke();}for(const p of lm){ctx.beginPath();ctx.arc((1-p.x)*c.width,p.y*c.height,2.5,0,7);ctx.fill();}}}
+function paint(){const c=$('preview');c.width=480;c.height=Math.round(480/aspect);const ctx=c.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,c.width,c.height);if(source&&!remote&&source.getContext){ctx.save();ctx.translate(c.width,0);ctx.scale(-1,1);ctx.drawImage(source,0,0,c.width,c.height);ctx.restore();}drawUpperBody(ctx,sharedWrists(pose,performance.now()-handSeen<300?hands:null).pose,c.width,c.height);if(face)drawFace(ctx,face.points,c.width,c.height,face.matrix);ctx.strokeStyle='#8ee3bf';ctx.fillStyle='#effff5';for(const lm of hands?.landmarks||[]){for(let f=0;f<5;f++){ctx.beginPath();ctx.moveTo((1-lm[0].x)*c.width,lm[0].y*c.height);for(let k=1;k<=4;k++){const p=lm[f*4+k];ctx.lineTo((1-p.x)*c.width,p.y*c.height);}ctx.stroke();}for(const p of lm){ctx.beginPath();ctx.arc((1-p.x)*c.width,p.y*c.height,2.5,0,7);ctx.fill();}}}
 function stats(s){$('fps').textContent=`CAM ${s.camera}\nHAND ${s.hands} · FACE ${s.face} · BODY ${s.pose}\nRENDER ${fps}`;$('metrics').textContent=`Hands ${s.hands} FPS · ${s.delegate?.hands||'loading'}; face ${s.face}; body ${s.pose}. ${Object.values(s.errors||{}).join(' · ')}`;}
 function stop(){stopTracker?.();closePhone?.();stopTracker=closePhone=null;stream?.getTracks().forEach(t=>t.stop());stream=null;pose=face=hands=null;faceSpan=null;captureFov=60;smoothHead=null;shoulderAnchor=null;dirty=true;grips.L.clear();grips.R.clear();}
 $('stop').onclick=()=>{stop();notice('Camera disconnected');};$('start').onclick=async()=>{stop();remote=false;try{stream=await navigator.mediaDevices.getUserMedia({video:{...($('cameraSelect').value?{deviceId:{exact:$('cameraSelect').value}}:{facingMode:'user'}),width:{ideal:640},frameRate:{ideal:30}},audio:false});$('video').srcObject=stream;await $('video').play();stopTracker=startTracking($('video'),accept,stats,options);notice('Local inference. Connected fixed-size skeleton.');const devices=await navigator.mediaDevices.enumerateDevices();$('cameraSelect').replaceChildren(new Option('Default camera',''),...devices.filter(d=>d.kind==='videoinput').map(d=>new Option(d.label||'Camera',d.deviceId)));}catch(e){notice(e.message);}};
@@ -51,7 +52,8 @@ function solve(now){
  rig.reset();let depth=+$('distance').value,eyePosition=new T.Vector3(0,.5,-2+depth),rotation=new T.Quaternion();
  if(face&&now-faceSeen<700){const avg=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});const a=avg(face.points[33],face.points[133]),b=avg(face.points[263],face.points[362]);if(a&&b){const span=Math.hypot((a.x-b.x)*aspect,a.y-b.y);faceSpan??=span;const foreshortening=Math.max(.45,Math.hypot(face.matrix[0],face.matrix[1]));depth=Math.max(.2,Math.min(3,.063*foreshortening/(2*Math.tan(captureFov*Math.PI/360)*Math.max(.01,span))));eyePosition=projection({x:(a.x+b.x)/2,y:(a.y+b.y)/2},depth);}rotation.setFromRotationMatrix(new T.Matrix4().fromArray(face.matrix));}
  rig.placeEyes(new T.Vector3(0,.5,-2+ +$('distance').value),0);
- const pw=pose&&now-poseSeen<700?pose.world:null,pi=pose?.points,origin=pw?.[2]&&pw?.[5]?{x:(pw[2].x+pw[5].x)/2,y:(pw[2].y+pw[5].y)/2,z:(pw[2].z+pw[5].z)/2}:pw?.[0];
+ const fused=sharedWrists(pose,now-handSeen<300?hands:null);
+ const pw=pose&&now-poseSeen<700?pose.world:null,pi=fused.pose?.points,origin=pw?.[2]&&pw?.[5]?{x:(pw[2].x+pw[5].x)/2,y:(pw[2].y+pw[5].y)/2,z:(pw[2].z+pw[5].z)/2}:pw?.[0];
  const visibleShoulders=pi?.[11]&&pi?.[12]&&(pi[11].visibility??1)>.45&&(pi[12].visibility??1)>.45&&now-poseSeen<700;
  if(visibleShoulders){
   const span=Math.hypot((pi[12].x-pi[11].x)*aspect,pi[12].y-pi[11].y);
@@ -79,10 +81,7 @@ function solve(now){
   const chestInverse=rig.joints.Chest.getWorldQuaternion(new T.Quaternion()).invert();
   const faceFront=head.eye().applyQuaternion(chestInverse).z-.03;
   poseDirectArm(rig,S,shoulder,elbow,wrist,faceFront);
-  const hi=fresh?.landmarks?.findIndex((lm,i)=>{
-   if(pi?.[15]&&pi?.[16]){const d=j=>Math.hypot(lm[0].x-pi[j].x,lm[0].y-pi[j].y);return (d(15)<d(16)?'L':'R')===S;}
-   return (fresh.handedness[i][0]?.categoryName==='Right'?'R':'L')===S;
-  })??-1;
+  const hi=fused.map[S];
   if(hi>=0){
    const lm=fresh.landmarks[hi],world=fresh.worldLandmarks[hi];
    const points=world.map((p,i)=>projection(lm[i],Math.max(.1,wrist.z+2+p.z-world[0].z)));
@@ -103,5 +102,5 @@ function loop(now){requestAnimationFrame(loop);if(now-lastRender<15)return;lastR
  if($('viewMode').value==='eyes'){orbit.enabled=false;camera.layers.disable(1);camera.position.copy(head.eye());camera.quaternion.copy(head.viewQuaternion());}else{orbit.enabled=true;camera.layers.enable(1);orbit.update();}
  renderer.render(scene,camera);frames++;if(now-fpsStart>1000){fps=Math.round(frames*1000/(now-fpsStart));frames=0;fpsStart=now;}
 }requestAnimationFrame(loop);window.addEventListener('pagehide',stop);
-$('savePng').onclick=()=>{const a=document.createElement('a');a.href=renderer.domElement.toDataURL();a.download='connected-view.png';a.click();};notice('Demo 12.1: direct arm directions; forward-only limits; no contact assistance or smoothing. Fixed dimensions.');
+$('savePng').onclick=()=>{const a=document.createElement('a');a.href=renderer.domElement.toDataURL();a.download='connected-view.png';a.click();};notice('Demo 12.2: direct arm directions; forward-only limits; no contact assistance or smoothing. Fixed dimensions.');
 if(new URLSearchParams(location.search).has('fixture')){const button=document.createElement('button');button.textContent='Run connected photo test';$('start').parentElement.append(button);const report=document.createElement('pre');report.id='diagnostics';$('metrics').after(report);button.onclick=async()=>{stop();remote=false;const image=new Image();image.src='./references/'+(['cheek','scalp','neck','temple','forward','mug'].includes(new URLSearchParams(location.search).get('fixture'))?new URLSearchParams(location.search).get('fixture'):'scalp')+'.jpg';await image.decode();const canvas=document.createElement('canvas');canvas.width=640;canvas.height=Math.round(640*image.height/image.width);canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);stream=canvas.captureStream(30);$('video').srcObject=stream;await $('video').play();stopTracker=startTracking($('video'),accept,stats,options);notice('Internet photo test. Static input is not a live FPS benchmark.');};}
