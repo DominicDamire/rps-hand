@@ -1,12 +1,12 @@
 // One fresh camera frame per task, at most one inference in flight per worker.
 export const defaults = {cameraFps:60,handRate:60,faceRate:20,shoulderRate:4,trackingWidth:480,trackerDelegate:'GPU',overlayRate:60,handPriority:true};
 export function startTracking(video, onResult, onStats, getOptions=()=>defaults,captureOptions={}) {
- let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0,cameraCallbacks=0,lastPresented=null,handStreak=0;
+ let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0,cameraCallbacks=0,lastPresented=null,handStreak=0,lastAccepted=-Infinity,lastClockProgress=performance.now(),capturePolls=0;
  const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},errors:{}};
  const slots=['hands','face','pose'].map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
  function startWorker(s){
   const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;
-  const url=new URL('./tracker.mjs?v=19.2',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);
+  const url=new URL('./tracker.mjs?v=19.3',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);
   const w=s.worker=new Worker(url,{type:'module'});
   s.timer=setTimeout(()=>{if(!s.ready){stats.errors[s.task]='Tracker initialization timed out';w.terminate();s.busy=false;}},60000);
   w.onerror=e=>{clearTimeout(s.timer);stats.errors[s.task]=e.message;s.busy=false;s.ready=false;};
@@ -27,11 +27,11 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
    if(bitmap)w.postMessage({type:'frame',bitmap,time},[bitmap]);else{if(captureOptions.copyPreview===false)c.getContext('2d').drawImage(video,0,0,c.width,c.height);const image=c.getContext('2d').getImageData(0,0,c.width,c.height);w.postMessage({type:'frame',image,time},[image.data.buffer]);}
   }catch(e){s.busy=false;stats.errors[s.task]=String(e);}
  }
- function tick(now,metadata){
+ function tick(now,metadata,force=false){
   if(stopped)return;
   if(video.readyState<2||!video.videoWidth||document.hidden)return;
   const frameTime=metadata?.mediaTime??video.currentTime;
-  if(frameTime===lastTime)return;lastTime=frameTime;cameraCallbacks++;const presented=metadata?.presentedFrames;cameraFrames+=Number.isFinite(presented)&&lastPresented!==null?Math.max(1,presented-lastPresented):1;if(Number.isFinite(presented))lastPresented=presented;serial++;
+  if(frameTime===lastTime&&!force)return;if(frameTime!==lastTime){lastClockProgress=now;lastTime=frameTime;}lastAccepted=now;if(force)capturePolls++;else cameraCallbacks++;const presented=metadata?.presentedFrames;if(!force)cameraFrames+=Number.isFinite(presented)&&lastPresented!==null?Math.max(1,presented-lastPresented):1;if(Number.isFinite(presented))lastPresented=presented;serial++;
   const opts={...defaults,...getOptions()},due=[];
   for(const s of slots){
    if(!enabled(s,opts)){if(s.worker){s.worker.terminate();clearTimeout(s.timer);s.worker=null;s.ready=s.busy=false;}stats[s.task]=0;continue;}
@@ -51,13 +51,15 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
   for(const s of chosen){s.next=Math.max(s.next+1000/s.rate,now);handStreak=s.task==='hands'?handStreak+1:0;dispatch(s,now,opts);}
  }
  function videoTick(now,metadata){if(stopped)return;lastCallback=now;tick(now,metadata);handle=video.requestVideoFrameCallback(videoTick);}
- function fallbackTick(now){if(stopped)return;if(now-lastCallback>150)tick(now);rafHandle=requestAnimationFrame(fallbackTick);}
+ function watchdog(now){if(stopped)return;const stalled=now-lastClockProgress>250;if(stalled&&now-lastAccepted>=1000/Math.max(1,+getOptions().cameraFps||60)-1)tick(now,undefined,true);else if(now-lastCallback>150)tick(now);}
+ function fallbackTick(now){if(stopped)return;watchdog(now);rafHandle=requestAnimationFrame(fallbackTick);}
+ const frameWatchdog=setInterval(()=>watchdog(performance.now()),16);
  // Initialization and telemetry must not depend on delivery of the first video callback.
  for(const s of slots)if(enabled(s,{...defaults,...getOptions()}))startWorker(s);
  const reportTimer=setInterval(()=>{const now=performance.now(),opts={...defaults,...getOptions()};
-  if(now-windowStart>=950){const seconds=(now-windowStart)/1000;stats.camera=Math.round(cameraFrames/seconds);stats.cameraCallbacks=Math.round(cameraCallbacks/seconds);stats.cameraCounter=lastPresented===null?'callbacks':'presented frames';cameraFrames=0;cameraCallbacks=0;for(const s of slots){stats[s.task]=Math.round(s.count/seconds);s.count=0;}windowStart=now;onStats({...stats,requested:opts.cameraFps,cameraSettings:video.srcObject?.getVideoTracks()[0]?.getSettings()});}
+  if(now-windowStart>=950){const seconds=(now-windowStart)/1000;stats.camera=Math.round(cameraFrames/seconds);stats.cameraCallbacks=Math.round(cameraCallbacks/seconds);stats.capturePolls=capturePolls;capturePolls=0;stats.cameraCounter=lastPresented===null?'callbacks':'presented frames';cameraFrames=0;cameraCallbacks=0;for(const s of slots){stats[s.task]=Math.round(s.count/seconds);s.count=0;}windowStart=now;onStats({...stats,requested:opts.cameraFps,cameraSettings:video.srcObject?.getVideoTracks()[0]?.getSettings()});}
  },1000);
  if(video.requestVideoFrameCallback)handle=video.requestVideoFrameCallback(videoTick);
  rafHandle=requestAnimationFrame(fallbackTick);
- return ()=>{stopped=true;clearInterval(reportTimer);if(video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(handle);cancelAnimationFrame(rafHandle);for(const s of slots){clearTimeout(s.timer);s.worker?.terminate();}};
+ return ()=>{stopped=true;clearInterval(reportTimer);clearInterval(frameWatchdog);if(video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(handle);cancelAnimationFrame(rafHandle);for(const s of slots){clearTimeout(s.timer);s.worker?.terminate();}};
 }

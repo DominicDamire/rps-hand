@@ -35,3 +35,6 @@ Correct head calibration to compare tracked eye centres (averaged inner/outer co
 
 ## V19.2 simple face guide
 Disable face blendshape classification (eye/lip expressions). Keep fewer than 50 outline/calibration coordinates for phone transport, draw an orange outline and a schematic nose/closed mouth without dots. Face Landmarker still internally infers the face mesh to estimate head rotation; this is not a replacement head-only neural model and is not a 60 FPS guarantee. Hands retain the same detector and solver.
+
+## V19.3 stalled video clock recovery
+A live preview with repeated media timestamps could reject every frame while callbacks continued arriving, preventing the old no-callback watchdog from recovering. Add a rate-bounded image-read fallback after 250ms without clock progress, driven by both RAF and an independent timer. Keep one inference in flight and report fallback reads separately from observed camera FPS. Regression test covers repeated mediaTime=0 callbacks through worker startup and subsequent tracking. Physical iPhone recovery remains to be verified.

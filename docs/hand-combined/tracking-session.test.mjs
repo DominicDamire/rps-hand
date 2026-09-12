@@ -35,3 +35,11 @@ const seen=[];let consumed=new Map();
 for(let i=1;i<80;i++){video.currentTime=i/60;await frame(i);let active=workers.filter(w=>w.frames.length>(consumed.get(w)||0));assert.ok(active.length<=1,'Priority mode never overlaps inference');for(const w of active){seen.push(w.task);consumed.set(w,w.frames.length);w.onmessage({data:{type:'result',task:w.task,inferenceMs:8}});}}
 assert.ok(seen.filter(x=>x==='hands').length>seen.filter(x=>x==='face').length);assert.ok(seen.includes('face')&&seen.includes('pose'),'Auxiliary trackers are not starved');priorityStop();
 console.log('PASS hand-priority scheduling: no overlap, hands favored, face and shoulders remain active');
+
+workers.length=0;video.currentTime=0;
+const clockStop=startTracking(video,()=>{},()=>{},()=>defaults);
+await new Promise(r=>setImmediate(r));
+let completed=0;const base=performance.now();
+for(let i=0;i<90;i++){const now=base+i*17;callback(now,{mediaTime:0,presentedFrames:0});fallback(now);await new Promise(r=>setImmediate(r));for(const w of workers){if(w.frames.length){completed+=w.frames.length;w.frames=[];w.onmessage({data:{type:'result',task:w.task,inferenceMs:5}});}}}
+assert.ok(completed>10,'A stalled media clock must not freeze tracking even when video callbacks keep arriving');clockStop();
+console.log('PASS constant Safari media clock: live image capture continues without relying on timestamps');
