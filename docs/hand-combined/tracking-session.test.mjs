@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {startTracking,defaults} from './tracking-session.mjs';
-const workers=[];let callback,closes=0;
+const workers=[];let callback,fallback,closes=0;
+globalThis.requestAnimationFrame=fn=>{fallback=fn;return 2;};globalThis.cancelAnimationFrame=()=>fallback=null;
 globalThis.Worker=class{constructor(url){this.task=new URL(url).searchParams.get('task');this.frames=[];workers.push(this);}postMessage(d){if(d.type==='init')queueMicrotask(()=>this.onmessage({data:{type:'ready',delegate:'GPU'}}));else this.frames.push(d);}terminate(){this.dead=true;}};
 globalThis.document={hidden:false,createElement:()=>({getContext:()=>({drawImage(){}})})};
 globalThis.createImageBitmap=async()=>({close(){closes++;}});
@@ -17,3 +18,12 @@ opts={...opts,faceRate:0};await frame(21);assert.equal(workers.find(w=>w.task===
 opts={...opts,faceRate:20};await frame(22);assert.equal(workers.filter(w=>w.task==='face').length,2,'Re-enable restarts that tracker');
 stop();assert.equal(callback,null);assert.ok(workers.every(w=>w.dead));
 console.log('PASS GPU-default session: no inference queue, newest frame after completion, per-task stop/restart and cleanup');
+
+workers.length=0;video.currentTime=0;
+const stalledStop=startTracking(video,()=>{},()=>{},()=>defaults);
+await new Promise(r=>setImmediate(r));
+assert.equal(workers.length,3,'Workers initialize before any video-frame callback');
+for(let i=1;i<=10;i++){video.currentTime=i/60;fallback(i*17);await new Promise(r=>setImmediate(r));}
+for(const w of workers)assert.equal(w.frames.length,1,'RAF fallback sends a fresh frame even when video callbacks never arrive, without queuing');
+stalledStop();assert.equal(fallback,null);
+console.log('PASS missing video callback regression: initialization and frame processing remain live');

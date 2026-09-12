@@ -15,3 +15,8 @@ Existing V17 hand controls remain under collapsible sections. New performance co
 Shared calibration requires perspective, a detected face, and hands beside the face at the entered phone distance. It calibrates the existing hand depth gains and the head distance reference together. The head model scale is captured once, and stays fixed until explicit size adjustment or calibration. Hands keep V17 fixed joint lengths. This does not guarantee physical skin-to-skin contact: monocular depth and alien/human proportions differ. Face depth offset allows measured visual correction; orthographic view is a diagnostic view, not exact pixel alignment.
 
 Validation: node head-depth.test.mjs, tracking-session.test.mjs and projection.test.mjs. Browser reference-frame test runs all three real MediaPipe GPU workers with both hands and the black head visible in one scene; face rate zero stops face measurements while hands continue. Moving gesture fixture is available with ?v=18&fixture=gesture, seated two-hand reference with &fixture=seated. No user iPhone performance or real cheek-contact accuracy is claimed by these tests.
+
+
+## V18.1 phone startup repair
+
+Phone video now stays visible beneath a transparent landmark overlay. Trackers initialize independently of video callbacks; a requestAnimationFrame watchdog polls distinct video times if requestVideoFrameCallback stops. Telemetry runs independently and reports zero delivered frames or worker errors to the PC instead of remaining on a generic loading message. Regression tests simulate a browser that exposes video-frame callbacks but never invokes them. This is a tested startup-path fix; a physical iPhone run still requires user confirmation.

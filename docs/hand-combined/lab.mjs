@@ -1,4 +1,4 @@
-import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=18';
+import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=18.1';
 import {installCombinedUI} from './combined-ui.mjs?v=18';
 import {CombinedHead} from './head-model.mjs?v=18';
 import {directDriver} from './direct.mjs?v=17';
@@ -6,7 +6,7 @@ import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './phone-link.mjs?v=18';
+import {receivePhone} from './phone-link.mjs?v=18.1';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';

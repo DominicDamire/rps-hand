@@ -1,12 +1,12 @@
 // One fresh camera frame per task, at most one inference in flight per worker.
 export const defaults = {cameraFps:60,handRate:60,faceRate:20,shoulderRate:10,trackingWidth:480,trackerDelegate:'GPU',overlayRate:20};
 export function startTracking(video, onResult, onStats, getOptions=()=>defaults) {
- let stopped=false,handle=null,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0;
+ let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0;
  const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},errors:{}};
  const slots=['hands','face','pose'].map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
  function startWorker(s){
   const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;
-  const url=new URL('./tracker.mjs?v=18',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);
+  const url=new URL('./tracker.mjs?v=18.1',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);
   const w=s.worker=new Worker(url,{type:'module'});
   s.timer=setTimeout(()=>{if(!s.ready){stats.errors[s.task]='Tracker initialization timed out';w.terminate();s.busy=false;}},60000);
   w.onerror=e=>{clearTimeout(s.timer);stats.errors[s.task]=e.message;s.busy=false;s.ready=false;};
@@ -29,9 +29,8 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults)
  }
  function tick(now,metadata){
   if(stopped)return;
-  handle=video.requestVideoFrameCallback?video.requestVideoFrameCallback(tick):requestAnimationFrame(tick);
   if(video.readyState<2||!video.videoWidth||document.hidden)return;
-  const frameTime=metadata?.mediaTime??video.currentTime;
+  const frameTime=video.currentTime??metadata?.mediaTime;
   if(frameTime===lastTime)return;lastTime=frameTime;cameraFrames++;serial++;
   const opts={...defaults,...getOptions()};
   for(const s of slots){
@@ -42,8 +41,16 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults)
    if(s.rate!==rate){s.rate=rate;s.next=now;}
    if(s.ready&&!s.busy&&now>=s.next-1){s.next=Math.max(s.next+1000/rate,now);dispatch(s,now,opts);}
   }
-  if(now-windowStart>=1000){const seconds=(now-windowStart)/1000;stats.camera=Math.round(cameraFrames/seconds);cameraFrames=0;for(const s of slots){stats[s.task]=Math.round(s.count/seconds);s.count=0;}windowStart=now;onStats({...stats,requested:opts.cameraFps,cameraSettings:video.srcObject?.getVideoTracks()[0]?.getSettings()});}
+
  }
- handle=video.requestVideoFrameCallback?video.requestVideoFrameCallback(tick):requestAnimationFrame(tick);
- return ()=>{stopped=true;if(video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(handle);else cancelAnimationFrame(handle);for(const s of slots){clearTimeout(s.timer);s.worker?.terminate();}};
+ function videoTick(now,metadata){if(stopped)return;lastCallback=now;tick(now,metadata);handle=video.requestVideoFrameCallback(videoTick);}
+ function fallbackTick(now){if(stopped)return;if(now-lastCallback>150)tick(now);rafHandle=requestAnimationFrame(fallbackTick);}
+ // Initialization and telemetry must not depend on delivery of the first video callback.
+ for(const s of slots)if(enabled(s,{...defaults,...getOptions()}))startWorker(s);
+ const reportTimer=setInterval(()=>{const now=performance.now(),opts={...defaults,...getOptions()};
+  if(now-windowStart>=950){const seconds=(now-windowStart)/1000;stats.camera=Math.round(cameraFrames/seconds);cameraFrames=0;for(const s of slots){stats[s.task]=Math.round(s.count/seconds);s.count=0;}windowStart=now;onStats({...stats,requested:opts.cameraFps,cameraSettings:video.srcObject?.getVideoTracks()[0]?.getSettings()});}
+ },1000);
+ if(video.requestVideoFrameCallback)handle=video.requestVideoFrameCallback(videoTick);
+ rafHandle=requestAnimationFrame(fallbackTick);
+ return ()=>{stopped=true;clearInterval(reportTimer);if(video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(handle);cancelAnimationFrame(rafHandle);for(const s of slots){clearTimeout(s.timer);s.worker?.terminate();}};
 }
