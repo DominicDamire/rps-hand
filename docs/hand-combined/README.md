@@ -32,3 +32,6 @@ Validation: session tests cover newest-frame processing, lost video callbacks, h
 
 ## V19.1 head size and scheduling
 Correct head calibration to compare tracked eye centres (averaged inner/outer corners) with model eye centres. Previously the outer-corner span overestimated scale. Model size remains fixed after calibration; screen location and depth continue to use face tracking. Give the face a turn after two hands, raise its target to 20, and reserve an occasional shoulder turn. Actual hand throughput may trade off against face updates; no device-specific FPS guarantee. Camera telemetry now distinguishes presented-frame deltas from callbacks and configured camera rate.
+
+## V19.2 simple face guide
+Disable face blendshape classification (eye/lip expressions). Keep fewer than 50 outline/calibration coordinates for phone transport, draw an orange outline and a schematic nose/closed mouth without dots. Face Landmarker still internally infers the face mesh to estimate head rotation; this is not a replacement head-only neural model and is not a 60 FPS guarantee. Hands retain the same detector and solver.
