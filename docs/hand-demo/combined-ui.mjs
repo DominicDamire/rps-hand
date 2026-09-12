@@ -48,7 +48,8 @@ export function installCombinedUI(){
  const sizePanel=details('Hand distance from camera size',true);
  sizePanel.innerHTML='<label><input id="sizeDepth" type="checkbox" checked> Size-based hand distance</label><small>Larger palm means closer. Finger spread is excluded; palm rotation is approximately compensated.</small>'+row('restGap','Resting hand in front of face/body reference (cm)',0,40,1,15,'Hold your hand at this offset and press Capture. Uses estimated face distance as the reference.')+row('nearDistance','Nearest camera distance (cm)',5,30,1,8,'Measured closest hand-to-camera distance. Limits depth; does not measure arm length.')+'<button id="captureRestSize">Capture resting hand size</button><p id="sizeStatus">Automatic initial reference; capture a measured resting pose for better distance.</p>';
  container.prepend(sizePanel);
- const experiment=installExperiments();
+ const experiment=()=>({rawOnly:false,jointFilters:true,headDepth:true,headFilter:true,shoulderMotion:true,faceMapping:true});
+ const timing=document.createElement('p');timing.id='calculationTiming';container.prepend(timing);
  const extraIds=['faceGrace','mappedFaceDots','demoGrip','demoJitter','demoMatch','demoHeadMatch','demoContact','demoReach','demoSide','demoPadding','demoThumbDepth','demoThumbTwist','uncappedTracking','handPriority','trackerDelegate','cameraFps','handRate','faceRate','shoulderRate','trackingWidth','sceneRate','renderScale','overlayRate','showHead','lockBody','turnGain','moveGain','neckShare','headSmooth','headSize','faceOffset','depthSmooth'];
  try{const values=JSON.parse(localStorage.getItem('brother-demo-options')||'{}');if(values.uncappedTracking===undefined){values.uncappedTracking=true;values.sceneRate=60;}for(const id of extraIds){const e=$(id),v=values[id];if(e.type==='checkbox'&&typeof v==='boolean')e.checked=v;else if(e.tagName==='SELECT'&&['GPU','CPU'].includes(v))e.value=v;else if(Number.isFinite(v)&&v>=+e.min&&v<=+e.max)e.value=v;}}catch{}
  for(const id of extraIds){const e=$(id);if(e.type==='range')e.nextElementSibling.value=e.value;e.addEventListener('input',()=>{if(e.type==='range')e.nextElementSibling.value=e.value;const state={};for(const key of extraIds){const c=$(key);state[key]=c.type==='checkbox'?c.checked:c.tagName==='SELECT'?c.value:+c.value;}try{localStorage.setItem('brother-demo-options',JSON.stringify(state));}catch{}});}
@@ -65,7 +66,7 @@ export function installCombinedUI(){
  $('cameraFps').value=60;$('cameraFps').nextElementSibling.value=60;$('handRate').value=120;$('handRate').nextElementSibling.value=120;$('uncappedTracking').checked=false;
  $('shoulderRate').value=20;$('shoulderRate').nextElementSibling.value=20;$('faceRate').value=20;$('faceRate').nextElementSibling.value=20;$('lockBody').checked=false;$('neckShare').value=.45;$('neckShare').nextElementSibling.value=.45;
  $('headSize').value=1.2;$('headSize').nextElementSibling.value=1.2;
- for(const [id,value] of Object.entries({demoJitter:1,depthSmooth:40,headSmooth:20})){$(id).value=value;$(id).nextElementSibling.value=value;}
+ for(const [id,value] of Object.entries({demoJitter:0,depthSmooth:0,headSmooth:0,turnGain:1,moveGain:1,neckShare:.45,headSize:1.2,faceOffset:0})){$(id).value=value;$(id).nextElementSibling.value=value;}
  document.querySelector('header b').textContent='HANDS + ALIEN HEAD · 15.2 · PC TRACKING';
  document.querySelector('header span').textContent='Fixed-size hands · alien head, neck and shoulders';
  for(const id of ['demoGrip','demoContact','demoReach','demoSide','demoPadding']){$(id).value=0;$(id).nextElementSibling.value=0;$(id).closest('label').style.display='none';}

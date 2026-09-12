@@ -5,14 +5,14 @@ import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {LandmarkJitter} from './landmark-jitter.mjs';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=15.3';
-import {installCombinedUI} from './combined-ui.mjs?v=alien15.10';
-import {CombinedHead} from './head-model.mjs?v=alien15.10';
+import {installCombinedUI} from './combined-ui.mjs?v=alien15.11';
+import {CombinedHead} from './head-model.mjs?v=alien15.11';
 import {directDriver} from './direct.mjs?v=demo9';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './video-link.mjs?v=alien15.10';
+import {receivePhone} from './video-link.mjs?v=alien15.11';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -57,8 +57,7 @@ function jointBasis(n){const key=side+n;if(basisCache[key])return basisCache[key
 const cheekOffsets={},renderedHands={},sizeReferences={};
 const landmarkFilters={},filteredFrames={};
 function cameraPoints(world,lm){
- if(!getCombinedOptions().jitterCalc)return rawCameraPoints(world,lm);
- const strength=getCombinedOptions().demoJitter??0,now=performance.now();let cached=filteredFrames[side];
+ const strength=getCombinedOptions().demoJitter??2,now=performance.now();let cached=filteredFrames[side];
  if(!cached||cached.input!==lm||cached.strength!==strength){if(!cached||now-cached.time>300)landmarkFilters[side]=new LandmarkJitter();const filtered=(landmarkFilters[side]??=new LandmarkJitter()).update(lm,world,strength,captureAspect);cached=filteredFrames[side]={input:lm,strength,time:now,...filtered};}
  const points=rawCameraPoints(cached.world,cached.lm);
  if(!$('sizeDepth')?.checked&&demoNearFace(lm)){const target=new THREE.Vector3().fromArray(cameraPosition(cameraUV(cached.lm[0],captureAspect,camera.aspect),combined.depth,camera.aspect)),delta=target.sub(points[0]);for(const p of points)p.add(delta);}
@@ -66,7 +65,6 @@ function cameraPoints(world,lm){
 }
 
 function rawCameraPoints(world,lm){
- const options=getCombinedOptions();
  if(camera.isOrthographicCamera){
   const w=cameraUV(lm[0],captureAspect,camera.aspect),origin=new THREE.Vector3((w.x-.5)*camera.aspect,.5-w.y,-.5),modelLength=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world);
   const humanLength=Math.max(.01,Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z)),depthScale=modelLength/humanLength;
@@ -74,22 +72,24 @@ function rawCameraPoints(world,lm){
   const factor=modelLength/Math.max(.01,relative[9].length());return relative.map(v=>v.multiplyScalar(factor).add(origin));
  }
 
- if(options.handDepth===false)return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,+$('phoneDistance').value/100,options.worldDepth?1:0).map(p=>new THREE.Vector3().fromArray(p));
  const modelLength=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world),humanLength=Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z),scale=modelLength/Math.max(.01,humanLength);
  let depth=(depthEstimate(lm,world,captureAspect)||.5)*scale/cameraFrame(captureAspect,camera.aspect).height,pts;
- for(let pass=0;options.palmFit&&pass<2;pass++){pts=liftCameraLandmarks(lm,world,captureAspect,camera.aspect,depth,scale).map(p=>new THREE.Vector3().fromArray(p));const q=new THREE.Quaternion().setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));const samples=[['Index1',5],['Middle1',9],['Ring1',13],['Pinky1',17]].map(([n,i])=>({uv:cameraUV(lm[i],captureAspect,camera.aspect),offset:rig.rest[side+n].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(q).toArray()}));depth=fitPalmDepth(cameraUV(lm[0],captureAspect,camera.aspect),samples,camera.aspect,depth);}
- if(options.metricDepth)depth=metricPalmDepth(lm,world,captureAspect,depth)/cameraFrame(captureAspect,camera.aspect).height;
- if(!options.metricDepth&&$('sizeDepth')?.checked){
+ for(let pass=0;pass<2;pass++){pts=liftCameraLandmarks(lm,world,captureAspect,camera.aspect,depth,scale).map(p=>new THREE.Vector3().fromArray(p));const q=new THREE.Quaternion().setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));const samples=[['Index1',5],['Middle1',9],['Ring1',13],['Pinky1',17]].map(([n,i])=>({uv:cameraUV(lm[i],captureAspect,camera.aspect),offset:rig.rest[side+n].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(q).toArray()}));depth=fitPalmDepth(cameraUV(lm[0],captureAspect,camera.aspect),samples,camera.aspect,depth);}
+ if($('sizeDepth')?.checked){
   const size=palmSize(lm,world,captureAspect);
   if(size&&!sizeReferences[side])sizeReferences[side]={size,depth};
   depth=sizeDistance(size,sizeReferences[side],depth,+$('nearDistance').value/100);
   $('sizeStatus').textContent=side+' hand: '+Math.round(depth*100)+' cm from camera (estimate).';
  }
+ if(combined?.group.visible&&combined.depth){
+  const protrusion=Math.max(0,...world.map(p=>(p.z-world[0].z)*scale));
+  depth=Math.min(depth,Math.max(.08,combined.depth-protrusion));
+ }
  const now=performance.now(),state=depthStates[side];
  if(!state)depthStates[side]={depth,scale,time:now};
  else {const dt=Math.min(.05,(now-state.time)/1000);const desired=Math.max(state.depth*.85,Math.min(state.depth*1.15,depth));const ms=getCombinedOptions().depthSmooth||0;state.depth=ms?state.depth+(desired-state.depth)*(1-Math.exp(-dt/(ms/1000))):depth;state.time=now;}
  const stable=depthStates[side],gain=$('sizeDepth')?.checked?1:(distanceGains[side]||1);
- return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,Math.max(.05,+$('phoneDistance').value/100+(stable.depth*gain-+$('phoneDistance').value/100)*($('sizeDepth')?.checked?1:+$('depthGain').value)),(options.worldDepth?stable.scale*gain:0)).map(p=>new THREE.Vector3().fromArray(p));
+ return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,Math.max(.05,+$('phoneDistance').value/100+(stable.depth*gain-+$('phoneDistance').value/100)*($('sizeDepth')?.checked?1:+$('depthGain').value)),stable.scale*gain).map(p=>new THREE.Vector3().fromArray(p));
 }
 function solveRaw(world,lm){const pts=cameraPoints(world,lm);
  palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));
@@ -278,7 +278,7 @@ $('depthGain').oninput=()=>{$('depthGain').nextElementSibling.value=$('depthGain
 $('calibrateDistance').onclick=()=>{if(!latest||camera.isOrthographicCamera){$('depthCalibrationStatus').textContent='Use perspective and show a hand next to your face first.';return;}const metres=+$('phoneDistance').value/100;let count=0;for(const s of ['R','L'])if(depthStates[s]?.depth){distanceGains[s]=metres/depthStates[s].depth;count++;}$('eyeZ').value=-metres;$('eyeZ').nextElementSibling.value=-metres;setViewMode();$('depthCalibrationStatus').textContent='Calibrated '+count+' hand(s) at '+$('phoneDistance').value+' cm. Recalibrate if you move the phone.';};
 
 getCombinedOptions=installCombinedUI();
-restoreStart({fingerNoise:1,directionSmoothing:35,movementThreshold:.5,confirmJump:12,lockUpper:true,upperCoupling:0});
+restoreStart({fingerNoise:0,directionSmoothing:0,movementThreshold:0,confirmJump:0,lockUpper:true,upperCoupling:0,depthGain:1,phoneDistance:40,eyeX:0,eyeY:0,eyeZ:-1.2,eyeYaw:180,eyePitch:0,eyeFov:60});
 $('trackingGrace').value=1000;$('trackingGrace').nextElementSibling.value=1000;
 for(const id of ['tipContact','contact']){$(id).checked=false;$(id).disabled=true;$(id).closest('label').hidden=true;}
 combined=new CombinedHead(scene,getCombinedOptions);
