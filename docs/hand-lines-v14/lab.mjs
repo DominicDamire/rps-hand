@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
 import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile,lockedAxis,constrainJoint,constrainAngles,directionAngles} from './profile.mjs?v=8-final';
-const fpsEl=document.createElement('div');document.getElementById('preview').before(fpsEl);const markFPS=fpsMeter(fpsEl,['HAND','RENDER']);
+const fpsPreview=document.getElementById('preview'),fpsWrap=document.createElement('div'),fpsEl=document.createElement('div');fpsWrap.id='fpsPreviewWrap';fpsWrap.style.cssText='display:block;position:relative;width:100%';fpsPreview.before(fpsWrap);fpsWrap.append(fpsPreview,fpsEl);fpsEl.id='trackingFPS';fpsEl.setAttribute('role','status');const markFPS=fpsMeter(fpsEl,['HAND','RENDER']);Object.assign(fpsEl.style,{position:'absolute',top:'8px',right:'8px',zIndex:'5',display:'block'});
 const $=id=>document.getElementById(id),clone=x=>JSON.parse(JSON.stringify(x)),RAD=Math.PI/180,KEY='hand-lines-archive-v14';
 let profile=emptyProfile();try{const saved=localStorage.getItem(KEY);if(saved)profile=validateProfile(JSON.parse(saved));}catch{$('notice').textContent='Saved profile could not be read. Import your JSON backup to recover it.';}
 let captureAspect=4/3;let allHands=[];const recentHands=new Map(),depthStates={},distanceGains={};let closePhone=null,tips=null,straight={},pinching=false,pinchFinger=null,contactHold=null,contactAngles=null;const tipDots={};let thumbGap=null;
