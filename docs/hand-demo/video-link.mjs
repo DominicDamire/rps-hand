@@ -5,7 +5,7 @@ export function receivePhone(onStream,onStatus,onEnd){
  const id='handlab-'+crypto.randomUUID(),peer=new Peer(id,{config});let call=null,closed=false;
  const box=document.createElement('dialog');box.className='phonePair';
  box.innerHTML='<h2>Use your phone camera</h2><p>Scan with your phone, then tap Start camera.<br>The phone sends video. This PC runs all tracking and rendering. Same Wi-Fi is recommended.</p><div class="qr"></div><p><a target="_blank" rel="noopener">Open phone camera page</a></p><p class="pairStatus">Creating connection…</p><button>Cancel connection</button>';
- const url=new URL('video-camera.html',import.meta.url);url.searchParams.set('pair',id);url.searchParams.set('v','alien15.4');
+ const url=new URL('video-camera.html',import.meta.url);url.searchParams.set('pair',id);url.searchParams.set('quality',document.getElementById('phoneQuality')?.value||'720');url.searchParams.set('v','alien15.4');
  box.querySelector('a').href=url.href;
  const status=t=>{if(closed)return;box.querySelector('.pairStatus').textContent=t;onStatus(t);};
  const close=()=>{if(closed)return;closed=true;call?.close();peer.destroy();box.close();box.remove();};

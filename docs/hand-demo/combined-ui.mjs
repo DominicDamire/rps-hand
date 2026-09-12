@@ -10,7 +10,7 @@ export function installCombinedUI(){
  const row=(id,title,min,max,step,value,help)=>`<label>${title}<input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"><output>${value}</output><small>${help}</small></label>`;
  settings.innerHTML+='<p>Applies to the device doing the work. With Phone camera, the phone streams video. This PC tracks hands, face and shoulders and renders the model. With a local camera, this computer also tracks. Higher targets can reduce FPS or increase heat when the device is overloaded.</p><label>Tracker processor<select id="trackerDelegate"><option value="GPU">GPU preferred (CPU fallback)</option><option value="CPU">CPU</option></select><small>GPU is the default. Actual processor is reported below; changing this restarts the trackers.</small></label>'+
  row('cameraFps','Camera capture target (FPS)',15,60,15,30,'Requests this camera rate. The camera/browser may deliver less. Applies to the active camera. Changing requires reconnecting the camera.')+
- row('handRate','Hand measurements / second',0,60,1,30,'Potentially reduces FPS. Zero stops hand inference; higher targets require faster processing.')+
+ row('handRate','Hand measurements / second',0,120,1,120,'Potentially reduces FPS. Zero stops hand inference; higher targets require faster processing.')+
  row('faceRate','Face / head measurements / second',0,60,1,30,'Potentially reduces FPS. Zero stops face inference. Head and face use one tracker; no lip animation.')+
  row('shoulderRate','Shoulder measurements / second',0,60,1,30,'Potentially reduces FPS. Zero stops shoulder inference. No every-second-frame restriction. Higher targets compete with hands and face.')+
  row('trackingWidth','Tracking image width (pixels)',192,640,32,480,'Potentially reduces FPS. Larger capture images add processing work; lower values may lose small details.')+
@@ -30,6 +30,7 @@ export function installCombinedUI(){
  row('headSize','Fixed head size multiplier',.5,1.5,.01,1,'Changes model proportions only when you adjust this slider. No per-frame resizing.')+
  row('faceOffset','Face depth offset (cm)',-15,15,.5,0,'Adjusts the face position relative to the hands after shared depth calibration. Positive moves it nearer the camera.');
  head.innerHTML+=row('depthSmooth','Hand depth smoothing (ms)',0,300,10,0,'Zero follows each depth estimate immediately. Higher values reduce depth jitter but delay motion.');container.prepend(head);container.prepend(settings);
+ const quality=document.createElement('label');quality.innerHTML='Phone video quality<select id="phoneQuality"><option value="480">480p</option><option value="720" selected>720p</option><option value="1080">1080p</option></select><small>Select before opening Phone camera QR. Reconnect to apply a change.</small>';$('phone').before(quality);
  const status=document.createElement('p');status.id='combinedStatus';status.setAttribute('role','status');status.textContent='Combined lab DEMO · camera off';$('preview').before(status);
  const preview=$('preview'),wrap=document.createElement('div');wrap.id='cameraPreviewWrap';preview.before(wrap);wrap.append(preview);const badge=document.createElement('div');badge.id='liveFps';badge.textContent='CAM — FPS\nHAND — · FACE — · BODY —';badge.setAttribute('aria-label','Measured camera and tracking frames per second');wrap.append(badge);
  const demo=details('Demo: fixed-size models',true);demo.innerHTML='<p>Fixed-size mode: original solid palm and fixed finger lengths. Tracking rotates the joints; it does not stretch the meshes. Head dimensions stay fixed after calibration. Jitter filtering remains adjustable.</p>'+
@@ -61,7 +62,7 @@ export function installCombinedUI(){
  container.parentElement.append(container);
  document.title='Combined Hands + Head Lab DEMO';document.querySelector('header b').textContent='HANDS + HEAD · DEMO';document.querySelector('header span').textContent='Direct-lines hands · grey head and shoulders · one camera';
  for(const p of container.querySelectorAll('p'))if(p.textContent.includes('It does not track your head.'))p.textContent='Mirror uses the camera view. First person uses the opposite viewpoint; head and hands share calibrated scene coordinates.';
- $('cameraFps').value=60;$('cameraFps').nextElementSibling.value=60;$('handRate').value=60;$('handRate').nextElementSibling.value=60;$('uncappedTracking').checked=false;
+ $('cameraFps').value=60;$('cameraFps').nextElementSibling.value=60;$('handRate').value=120;$('handRate').nextElementSibling.value=120;$('uncappedTracking').checked=false;
  $('shoulderRate').value=20;$('shoulderRate').nextElementSibling.value=20;$('faceRate').value=20;$('faceRate').nextElementSibling.value=20;$('lockBody').checked=false;$('neckShare').value=.45;$('neckShare').nextElementSibling.value=.45;
  $('headSize').value=1.2;$('headSize').nextElementSibling.value=1.2;
  for(const [id,value] of Object.entries({demoJitter:1,depthSmooth:40,headSmooth:20})){$(id).value=value;$(id).nextElementSibling.value=value;}
