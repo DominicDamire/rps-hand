@@ -1,7 +1,7 @@
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './phone-link.mjs?v=2';
+import {receivePhone} from '../hand-lines/phone-link.mjs?v=4';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -9,7 +9,7 @@ import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,v
 const $=id=>document.getElementById(id),clone=x=>JSON.parse(JSON.stringify(x)),RAD=Math.PI/180,KEY='hand-pose-lab-v1';
 let profile=emptyProfile();try{const saved=localStorage.getItem(KEY);if(saved)profile=validateProfile(JSON.parse(saved));}catch{$('notice').textContent='Saved profile could not be read. Import your JSON backup to recover it.';}
 let captureAspect=4/3;let closePhone=null,tips=null,straight={},pinching=false,pinchFinger=null,contactHold=null,contactAngles=null;const tipDots={};let thumbGap=null;
-let side='R',selected='Index1',editing=false,latest=null,editBase=null,frozenFeature=null,frozenCapture=null,savedId=null,angles=blankAngles(),epoch=0,stream=null,worker=null,workerReady=null,request=null,inflight=false,lastVideo=-1,sampleSource=null;
+let side='R',selected='Index1',editing=false,latest=null,editBase=null,frozenFeature=null,frozenCapture=null,savedId=null,angles=blankAngles(),epoch=0,stream=null,phoneActive=false,phoneFrame=document.createElement('canvas'),worker=null,workerReady=null,request=null,inflight=false,lastVideo=-1,sampleSource=null;
 let neutralSplay=profile.calibration.neutralSplay;
 const closureState=new ClosureTracker();let thumbReference=0;let curls=[0,0,0,0],posePreview=false,depthScale=profile.calibration.depthScale,lastDepth=null,lastTracking=0;
 const filters=Object.fromEntries(JOINTS.map(n=>[n,new Settler()])),positionFilter=new Settler(),curlFilter=new Settler(),thumbFilters=Object.fromEntries(['Thumb1','Thumb2','Thumb3'].map(n=>[n,new Settler()]));
@@ -69,7 +69,7 @@ function modelAngles(n){if(posePreview)return FIST[n];const fixed=currentAlignme
 
 function applyAngles(renderDt=null){if(!rig.loaded)return;angles=constrainAngles(angles,profile.limits[side]);rig.joints[side+'Hand'].quaternion.copy(editing?frozenPalm:($('follow').checked||$('spatial').checked)?palmQ:new THREE.Quaternion());
  for(const n of JOINTS){const qb=jointBasis(n);let v=modelAngles(n);
- if(renderDt!==null){v=editing||!stream?finalFilters[n].seed(v):finalFilters[n].step(v,renderDt,pinching&&(n.startsWith('Thumb')||n.startsWith(pinchFinger))?0:+$('changeThreshold').value,+$('changeSpeed').value);v=v.map((x,i)=>lockedAxis(n,i)&&!n.startsWith('Thumb')?currentAlignment(n)[i]:x);(displayedAngles??={})[n]=[...v];}
+ if(renderDt!==null){v=editing||(!stream&&!phoneActive)?finalFilters[n].seed(v):finalFilters[n].step(v,renderDt,pinching&&(n.startsWith('Thumb')||n.startsWith(pinchFinger))?0:+$('changeThreshold').value,+$('changeSpeed').value);v=v.map((x,i)=>lockedAxis(n,i)&&!n.startsWith('Thumb')?currentAlignment(n)[i]:x);(displayedAngles??={})[n]=[...v];}
 rig.joints[side+n].quaternion.copy(qb).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(...v.map(x=>x*RAD),'XYZ'))).multiply(qb.clone().invert());}
  rig.root.updateMatrixWorld(true);
 }
@@ -79,7 +79,7 @@ function resetView(){if(!rig.loaded)return;updateCameraFrame();room.visible=$('s
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(profile));return true;}catch{notice('Browser storage is full or unavailable. Your work is still open — export JSON now.');return false;}}
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),20000);}
 function updateMode(){for(const id of ['save','undo','zero','saveLimits','clearLimits','resume'])$(id).disabled=!editing;$('edit').disabled=editing||!latest;$('side').disabled=editing;$('detected').disabled=editing;$('follow').disabled=editing||$('spatial').checked;if($('spatial').checked)$('follow').checked=true;
- $('mode').textContent=editing?'FROZEN / EDITING':stream?'LIVE CAMERA':latest?'IMAGE PREVIEW':'LIVE PREVIEW';$('editHelp').textContent=editing?'Edit the selected joint. Saved corrections affect the fingers, not the wrist.':'Values are movement relative to your saved alignment. Locked sideways and twist read zero.';renderControls();}
+ $('mode').textContent=editing?'FROZEN / EDITING':stream||phoneActive?'LIVE CAMERA':latest?'IMAGE PREVIEW':'LIVE PREVIEW';$('editHelp').textContent=editing?'Edit the selected joint. Saved corrections affect the fingers, not the wrist.':'Values are movement relative to your saved alignment. Locked sideways and twist read zero.';renderControls();}
 function drawPreview(source,landmarks){const aspect=(source.width||source.naturalWidth)/(source.height||source.naturalHeight);if(aspect!==captureAspect){captureAspect=aspect;updateCameraFrame();}const c=$('preview');c.width=source.width||source.naturalWidth;c.height=source.height||source.naturalHeight;const ctx=c.getContext('2d');ctx.save();ctx.translate(c.width,0);ctx.scale(-1,1);ctx.drawImage(source,0,0,c.width,c.height);ctx.restore();
  if(!landmarks)return;ctx.lineWidth=2;ctx.strokeStyle='#86edbb';ctx.fillStyle='#f0ffee';const point=i=>[(1-landmarks[i].x)*c.width,landmarks[i].y*c.height];
  for(let f=0;f<5;f++){let prev=0;for(let j=1;j<=4;j++){const idx=1+f*4+j-1;ctx.beginPath();ctx.moveTo(...point(prev));ctx.lineTo(...point(idx));ctx.stroke();prev=idx;}}
@@ -91,6 +91,10 @@ async function detect(source){if(inflight||editing)return;inflight=true;const to
  try{await ensureWorker();if(token!==epoch||editing)return;const frame=document.createElement('canvas'),w=source.videoWidth||source.naturalWidth||source.width,h=source.videoHeight||source.naturalHeight||source.height;if(!w||!h)return;
  frame.width=480;frame.height=Math.round(h/w*480);frame.getContext('2d').drawImage(source,0,0,frame.width,frame.height);const bitmap=await createImageBitmap(frame);if(token!==epoch||editing){bitmap.close();return;}
  const data=await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{request=null;reject(Error('Tracker response timed out'));},10000);request={resolve:d=>{clearTimeout(timer);resolve(d);},reject:e=>{clearTimeout(timer);reject(e);}};worker.postMessage({type:'frame',bitmap,time:performance.now()},[bitmap]);});
+ acceptTracking(data,frame,token);
+ }catch(e){notice(e.message);}finally{inflight=false;}
+}
+function acceptTracking(data,frame,token=epoch){
  if(token!==epoch||editing)return;const desired=$('detected').value;let idx=desired==='first'?0:data.handedness?.findIndex(h=>h[0]?.categoryName===desired);
  if(desired==='first'&&latest&&data.landmarks?.length>1){let best=Infinity;data.landmarks.forEach((points,i)=>{const d=Math.hypot(points[0].x-latest.landmarks[0].x,points[0].y-latest.landmarks[0].y);if(d<best){best=d;idx=i;}});}
 
@@ -108,13 +112,12 @@ async function detect(source){if(inflight||editing)return;inflight=true;const to
   else{const actual=Object.fromEntries(JOINTS.map(n=>[n,[...modelAngles(n)]])),fitted=fitPinch(rig,tips,side,actual,jointBasis,profile.limits[side],pinchFinger);contactAngles=fitted.angles;if(fitted.gap<.001)contactHold={finger:pinchFinger,angles:clone(fitted.angles),thumbReference};}
   $('contactState').textContent='Thumb contact fitting';
  }else $('contactState').textContent=thumbGap!=null?'Thumb tracking fit · tip error '+(thumbGap*1000).toFixed(1)+' mm':'Yellow = surface tips · green = joints. Touch the thumb to any fingertip to fit contact.';
- $('matchState').textContent=match?'Matched “'+match.pose.name+'” · distance '+match.distance.toFixed(3):'No saved match — tracker pose';$('captureState').textContent=(stream?'Live camera':'Image input')+' · '+data.landmarks.length+' hand(s) · '+Math.round(data.inferenceMs)+' ms inference';updateMode();
- }catch(e){notice(e.message);}finally{inflight=false;}
+ $('matchState').textContent=match?'Matched “'+match.pose.name+'” · distance '+match.distance.toFixed(3):'No saved match — tracker pose';$('captureState').textContent=(stream||phoneActive?'Live camera':'Image input')+' · '+data.landmarks.length+' hand(s) · '+Math.round(data.inferenceMs)+' ms inference';updateMode();
 }
-function stopCamera(){closureState.reset();if(!editing){thumbReference=0;contactAngles=null;}epoch++;straight={};pinching=false;pinchFinger=null;contactHold=null;for(const f of Object.values(thumbFilters))f.reset();lastTracking=0;smoothPalmQ=previousPalmQ=heldPalmQ=null;palmQuiet=0;for(const f of Object.values(filters))f.reset();positionFilter.reset();curlFilter.reset();posePreview=false;closePhone?.();closePhone=null;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
+function stopCamera(){closureState.reset();if(!editing){thumbReference=0;contactAngles=null;}epoch++;straight={};pinching=false;pinchFinger=null;contactHold=null;for(const f of Object.values(thumbFilters))f.reset();lastTracking=0;smoothPalmQ=previousPalmQ=heldPalmQ=null;palmQuiet=0;for(const f of Object.values(filters))f.reset();positionFilter.reset();curlFilter.reset();posePreview=false;closePhone?.();closePhone=null;phoneActive=false;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
 async function startCamera(){try{stopCamera();editing=false;sampleSource=null;latest=null;notice('Opening camera…');const id=$('cameraSelect').value;stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(id?{deviceId:{exact:id}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:30}}});$('video').srcObject=stream;await $('video').play();lastVideo=-1;await listCameras();await ensureWorker();notice('Make a pose, then click Freeze & edit.');updateMode();}catch(e){stopCamera();notice('Camera could not start: '+e.message);}}
 async function listCameras(){const current=$('cameraSelect').value,devices=await navigator.mediaDevices.enumerateDevices();$('cameraSelect').replaceChildren(new Option('Default camera',''));for(const d of devices.filter(d=>d.kind==='videoinput'))$('cameraSelect').add(new Option(d.label||'Camera '+($('cameraSelect').options.length),d.deviceId));$('cameraSelect').value=current;}
-$('phone').onclick=()=>{stopCamera();editing=false;sampleSource=null;latest=null;updateMode();try{closePhone=receivePhone(async incoming=>{stream=incoming;$('video').srcObject=incoming;lastVideo=-1;try{await $('video').play();if(stream!==incoming)return;await ensureWorker();notice('Phone camera connected. Hold a pose, then Freeze & edit.');updateMode();}catch(e){stopCamera();notice('Could not start phone video: '+e.message);}},notice,message=>{stopCamera();notice(message);});}catch(e){notice(e.message);}};
+$('phone').onclick=()=>{stopCamera();editing=false;sampleSource=null;latest=null;updateMode();try{closePhone=receivePhone((data,size)=>{if(!phoneActive){phoneActive=true;notice('Phone tracking connected. Camera images stay on the phone.');updateMode();}phoneFrame.width=480;phoneFrame.height=Math.max(1,Math.round(480*(size.h||480)/(size.w||640)));const ctx=phoneFrame.getContext('2d');ctx.fillStyle='#05080c';ctx.fillRect(0,0,phoneFrame.width,phoneFrame.height);acceptTracking(data,phoneFrame);},notice,message=>{stopCamera();notice(message);});}catch(e){notice(e.message);}};
 $('start').onclick=startCamera;$('stop').onclick=stopCamera;
 async function loadImage(url){stopCamera();editing=false;latest=null;updateMode();const img=new Image();img.src=url;await img.decode();sampleSource=img;notice('Image input — edit it just like a camera pose.');await detect(img);}
 $('sample').onclick=()=>loadImage(new URL('../test/count5.png',import.meta.url).href).catch(e=>notice(e.message));
