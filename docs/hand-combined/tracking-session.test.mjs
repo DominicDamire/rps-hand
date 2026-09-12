@@ -6,7 +6,7 @@ globalThis.Worker=class{constructor(url){this.task=new URL(url).searchParams.get
 globalThis.document={hidden:false,createElement:()=>({getContext:()=>({drawImage(){}})})};
 globalThis.createImageBitmap=async()=>({close(){closes++;}});
 const video={readyState:2,videoWidth:640,videoHeight:480,requestVideoFrameCallback(fn){callback=fn;return 1;},cancelVideoFrameCallback(){callback=null;}};
-let received=0,opts={...defaults};const stop=startTracking(video,()=>received++,()=>{},()=>opts);
+let received=0,opts={...defaults,handPriority:false};const stop=startTracking(video,()=>received++,()=>{},()=>opts);
 const frame=async(n)=>{callback(n*17,{mediaTime:n/60});await new Promise(r=>setImmediate(r));};
 await frame(0);await frame(1);
 assert.equal(workers.length,3);for(const w of workers)assert.equal(w.frames.length,1);
@@ -20,10 +20,18 @@ stop();assert.equal(callback,null);assert.ok(workers.every(w=>w.dead));
 console.log('PASS GPU-default session: no inference queue, newest frame after completion, per-task stop/restart and cleanup');
 
 workers.length=0;video.currentTime=0;
-const stalledStop=startTracking(video,()=>{},()=>{},()=>defaults);
+const stalledStop=startTracking(video,()=>{},()=>{},()=>({...defaults,handPriority:false}));
 await new Promise(r=>setImmediate(r));
 assert.equal(workers.length,3,'Workers initialize before any video-frame callback');
 for(let i=1;i<=10;i++){video.currentTime=i/60;fallback(i*17);await new Promise(r=>setImmediate(r));}
 for(const w of workers)assert.equal(w.frames.length,1,'RAF fallback sends a fresh frame even when video callbacks never arrive, without queuing');
 stalledStop();assert.equal(fallback,null);
 console.log('PASS missing video callback regression: initialization and frame processing remain live');
+
+workers.length=0;video.currentTime=0;
+const priorityStop=startTracking(video,()=>{},()=>{},()=>defaults,{copyPreview:false});
+await new Promise(r=>setImmediate(r));
+const seen=[];let consumed=new Map();
+for(let i=1;i<80;i++){video.currentTime=i/60;await frame(i);let active=workers.filter(w=>w.frames.length>(consumed.get(w)||0));assert.ok(active.length<=1,'Priority mode never overlaps inference');for(const w of active){seen.push(w.task);consumed.set(w,w.frames.length);w.onmessage({data:{type:'result',task:w.task,inferenceMs:8}});}}
+assert.ok(seen.filter(x=>x==='hands').length>seen.filter(x=>x==='face').length);assert.ok(seen.includes('face')&&seen.includes('pose'),'Auxiliary trackers are not starved');priorityStop();
+console.log('PASS hand-priority scheduling: no overlap, hands favored, face and shoulders remain active');

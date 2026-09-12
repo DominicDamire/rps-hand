@@ -20,3 +20,12 @@ Validation: node head-depth.test.mjs, tracking-session.test.mjs and projection.t
 ## V18.1 phone startup repair
 
 Phone video now stays visible beneath a transparent landmark overlay. Trackers initialize independently of video callbacks; a requestAnimationFrame watchdog polls distinct video times if requestVideoFrameCallback stops. Telemetry runs independently and reports zero delivered frames or worker errors to the PC instead of remaining on a generic loading message. Regression tests simulate a browser that exposes video-frame callbacks but never invokes them. This is a tested startup-path fix; a physical iPhone run still requires user confirmation.
+
+## V19 response and depth defaults
+GPU preferred with reported CPU fallback; capture/hands/render targets 60, face 8, shoulders 4. Hand-priority scheduling serializes inference to avoid GPU contention, while keeping auxiliary tasks active. It can be disabled for comparison. Auxiliary capture is capped at 320px, hands remain 480px. Phone captures bitmaps directly from video, avoiding the redundant preview canvas copy. Actual device FPS is still measured, not guaranteed.
+
+Fresh V19 preferences disable direction/head/depth smoothing and jump confirmation; depth gain is 1. Contact and anatomical corrections remain available and retain their previous behavior. All 478 face landmarks and 21 hand dots are drawn on the camera; model skeleton lines are hidden. Face tracking remains MediaPipe Face Landmarker, with no lip animation on the alien.
+
+After shared distance calibration, index-fingertip cheek alignment can set a fixed per-hand depth offset using a ray intersection with the animated alien surface. It never resizes bones and does not guarantee metric accuracy at every distance. Recalibrating distance clears this offset.
+
+Validation: session tests cover newest-frame processing, lost video callbacks, hand-priority fairness and no overlapping inference. Face transport test covers all 478 points. Real iPhone throughput/contact still requires a device check.

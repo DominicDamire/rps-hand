@@ -1,3 +1,4 @@
+import {drawFace} from './face-overlay.mjs?v=19';
 import * as T from 'three';
 import {GLTFLoader} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js';
 import {cameraUV,cameraPosition} from './projection.mjs';
@@ -44,7 +45,7 @@ export class CombinedHead {
  }
  overlay(ctx,w,h){const o=this.options();if(!o.overlayRate)return;
   const line=(points,color,closed=false)=>{ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.beginPath();points.forEach((p,i)=>ctx[i?'lineTo':'moveTo']((1-p.x)*w,p.y*h));if(closed)ctx.closePath();ctx.stroke();};
-  if(this.face&&o.faceRate>0&&performance.now()-this.seen<900){const p=this.face.points;line(outline.map(i=>p[i]),'#8ee3bf');for(const ids of [[33,133],[362,263],[1,168]])line(ids.map(i=>p[i]),'#8ee3bf');const m=this.face.matrix,n=p[1];for(const [i,color] of [[0,'#ff7777'],[4,'#77ff99'],[8,'#77aaff']])line([n,{x:n.x+m[i]*.08,y:n.y-m[i+1]*.08}],color);}
+  if(this.face&&o.faceRate>0&&performance.now()-this.seen<900){const p=this.face.points;drawFace(ctx,p,w,h);const m=this.face.matrix,n=p[1];for(const [i,color] of [[0,'#ff7777'],[4,'#77ff99'],[8,'#77aaff']])line([n,{x:n.x+m[i]*.08,y:n.y-m[i+1]*.08}],color);}
   if(this.pose&&o.shoulderRate>0&&performance.now()-this.poseSeen<900){const p=this.pose.points;for(const [a,b] of [[11,12],[11,13],[13,15],[12,14],[14,16]])if(p[a].visibility>.4&&p[b].visibility>.4)line([p[a],p[b]],'#ffd36c');}
  }
 }

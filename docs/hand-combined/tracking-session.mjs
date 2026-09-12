@@ -1,12 +1,12 @@
 // One fresh camera frame per task, at most one inference in flight per worker.
-export const defaults = {cameraFps:60,handRate:60,faceRate:20,shoulderRate:10,trackingWidth:480,trackerDelegate:'GPU',overlayRate:20};
-export function startTracking(video, onResult, onStats, getOptions=()=>defaults) {
- let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0;
+export const defaults = {cameraFps:60,handRate:60,faceRate:8,shoulderRate:4,trackingWidth:480,trackerDelegate:'GPU',overlayRate:60,handPriority:true};
+export function startTracking(video, onResult, onStats, getOptions=()=>defaults,captureOptions={}) {
+ let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0,handStreak=0;
  const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},errors:{}};
  const slots=['hands','face','pose'].map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
  function startWorker(s){
   const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;
-  const url=new URL('./tracker.mjs?v=18.1',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);
+  const url=new URL('./tracker.mjs?v=19',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);
   const w=s.worker=new Worker(url,{type:'module'});
   s.timer=setTimeout(()=>{if(!s.ready){stats.errors[s.task]='Tracker initialization timed out';w.terminate();s.busy=false;}},60000);
   w.onerror=e=>{clearTimeout(s.timer);stats.errors[s.task]=e.message;s.busy=false;s.ready=false;};
@@ -19,12 +19,12 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults)
  }
  const enabled=(s,o)=>+(s.task==='hands'?o.handRate:s.task==='face'?o.faceRate:o.shoulderRate)>0;
  async function dispatch(s,now,opts){
-  s.busy=true;s.sent=now;const w=s.worker,width=+opts.trackingWidth;
-  try{const c=s.canvas;c.width=width;c.height=Math.max(1,Math.round(width*video.videoHeight/video.videoWidth));c.getContext('2d').drawImage(video,0,0,c.width,c.height);
+  s.busy=true;s.sent=now;const w=s.worker,width=s.task==='hands'?+opts.trackingWidth:Math.min(320,+opts.trackingWidth);
+  try{const c=s.canvas;c.width=width;c.height=Math.max(1,Math.round(width*video.videoHeight/video.videoWidth));if(captureOptions.copyPreview!==false)c.getContext('2d').drawImage(video,0,0,c.width,c.height);
    const time=Math.max(now,s.last+.001);s.last=time;
-   let bitmap;try{bitmap=await createImageBitmap(c);}catch{}
+   let bitmap;try{bitmap=await createImageBitmap(captureOptions.copyPreview===false?video:c,{resizeWidth:c.width,resizeHeight:c.height});}catch{}
    if(stopped||s.worker!==w){bitmap?.close();return;}
-   if(bitmap)w.postMessage({type:'frame',bitmap,time},[bitmap]);else{const image=c.getContext('2d').getImageData(0,0,c.width,c.height);w.postMessage({type:'frame',image,time},[image.data.buffer]);}
+   if(bitmap)w.postMessage({type:'frame',bitmap,time},[bitmap]);else{if(captureOptions.copyPreview===false)c.getContext('2d').drawImage(video,0,0,c.width,c.height);const image=c.getContext('2d').getImageData(0,0,c.width,c.height);w.postMessage({type:'frame',image,time},[image.data.buffer]);}
   }catch(e){s.busy=false;stats.errors[s.task]=String(e);}
  }
  function tick(now,metadata){
@@ -32,16 +32,18 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults)
   if(video.readyState<2||!video.videoWidth||document.hidden)return;
   const frameTime=video.currentTime??metadata?.mediaTime;
   if(frameTime===lastTime)return;lastTime=frameTime;cameraFrames++;serial++;
-  const opts={...defaults,...getOptions()};
+  const opts={...defaults,...getOptions()},due=[];
   for(const s of slots){
    if(!enabled(s,opts)){if(s.worker){s.worker.terminate();clearTimeout(s.timer);s.worker=null;s.ready=s.busy=false;}stats[s.task]=0;continue;}
    if(s.worker&&s.delegate!==opts.trackerDelegate){s.worker.terminate();clearTimeout(s.timer);s.worker=null;s.ready=s.busy=false;}
    if(!s.worker)startWorker(s);
    const rate=+(s.task==='hands'?opts.handRate:s.task==='face'?opts.faceRate:opts.shoulderRate);
    if(s.rate!==rate){s.rate=rate;s.next=now;}
-   if(s.ready&&!s.busy&&now>=s.next-1){s.next=Math.max(s.next+1000/rate,now);dispatch(s,now,opts);}
+   if(s.ready&&!s.busy&&now>=s.next-1)due.push(s);
   }
-
+  if(opts.handPriority&&slots.some(s=>s.busy))return;
+  let chosen=due;if(opts.handPriority){const hand=due.find(s=>s.task==='hands'),aux=due.filter(s=>s.task!=='hands').sort((a,b)=>a.sent-b.sent)[0];chosen=[hand&&(handStreak<3||!aux)?hand:aux||hand].filter(Boolean);}
+  for(const s of chosen){s.next=Math.max(s.next+1000/s.rate,now);handStreak=s.task==='hands'?handStreak+1:0;dispatch(s,now,opts);}
  }
  function videoTick(now,metadata){if(stopped)return;lastCallback=now;tick(now,metadata);handle=video.requestVideoFrameCallback(videoTick);}
  function fallbackTick(now){if(stopped)return;if(now-lastCallback>150)tick(now);rafHandle=requestAnimationFrame(fallbackTick);}
