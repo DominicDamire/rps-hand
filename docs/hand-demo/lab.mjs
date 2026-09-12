@@ -1,9 +1,9 @@
-import {fitHeadGrip} from './head-grip.mjs';
+import {fitHeadGrip} from './head-grip.mjs?v=demo8';
 import {LandmarkJitter} from './landmark-jitter.mjs';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=20.1';
-import {installCombinedUI} from './combined-ui.mjs?v=demo7';
-import {CombinedHead} from './head-model.mjs?v=demo7';
-import {directDriver} from './direct.mjs?v=demo7';
+import {installCombinedUI} from './combined-ui.mjs?v=demo8';
+import {CombinedHead} from './head-model.mjs?v=demo8';
+import {directDriver} from './direct.mjs?v=demo8';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
@@ -310,7 +310,7 @@ function demoContactAdjust(points,lm){
  if(o.demoMatch>0){const samples=points.slice(1).map((p,k)=>({uv:cameraUV(lm[k+1],captureAspect,camera.aspect),offset:p.clone().sub(origin).toArray()}));const depth=fitPalmDepth(cameraUV(lm[0],captureAspect,camera.aspect),samples,camera.aspect,-origin.z);const target=new THREE.Vector3().fromArray(cameraPosition(cameraUV(lm[0],captureAspect,camera.aspect),depth,camera.aspect));const delta=target.sub(origin).multiplyScalar(o.demoMatch);for(const p of points)p.add(delta);}
  if(!o.demoContact||!combined?.group.visible)return;
  const previous=demoContacts[side];if(previous&&(previous.lm===lm||performance.now()-previous.time<80)){if(previous.delta)for(const p of points)p.add(previous.delta);return;}
- combined.group.updateMatrixWorld(true);combined.group.traverse(m=>{if(m.isSkinnedMesh){m.skeleton.update();m.computeBoundingSphere();}});
+ combined.group.updateMatrixWorld(true);combined.group.traverse(m=>{if(m.isSkinnedMesh){m.skeleton.update();}});
  const ray=new THREE.Raycaster(),zero=new THREE.Vector3();let best=null;
  for(const i of [4,8,12,16,20,5,9,13,17].sort((a,b)=>points[a].distanceToSquared(combined.position)-points[b].distanceToSquared(combined.position)).slice(0,3)){for(const blend of [0,.16,.32]){const aim=points[i].clone();if(combined.position){aim.x+=(combined.position.x-aim.x)*blend;aim.y+=(combined.position.y-aim.y)*blend;}ray.set(zero,aim.normalize());const hit=ray.intersectObject(combined.group,true)[0];if(!hit)continue;const delta=hit.point.clone().sub(points[i]);delta.z+=o.demoPadding/1000;if(Math.abs(delta.z)>o.demoReach/100||Math.hypot(delta.x,delta.y)>o.demoSide/100)continue;if(!best||delta.lengthSq()<best.lengthSq())best=delta;break;}}
 
@@ -320,18 +320,54 @@ function demoContactAdjust(points,lm){
 function demoAdjust(points,lm){demoContactAdjust(points,lm);}
 // Separate depth buffer for hands: preserves their coordinates and perspective size.
 function renderDemo(){
- const oldMask=camera.layers.mask,oldAuto=renderer.autoClear,background=scene.background;
- for(const m of rig.parts)m.layers.set(1);
- scene.traverse(o=>{if(o.isLight)o.layers.enable(1);});
+ // Hands and bust share the depth buffer: contact must be spatial, not an overlay.
+ for(const m of rig.parts)m.layers.set(0);
  camera.layers.set(0);renderer.autoClear=true;renderer.render(scene,camera);
- renderer.autoClear=false;renderer.clearDepth();scene.background=null;camera.layers.set(1);renderer.render(scene,camera);
- scene.background=background;camera.layers.mask=oldMask;renderer.autoClear=oldAuto;
 }
 
-function demoNearFace(lm){if(!getCombinedOptions().demoGrip||!combined?.group.visible||!combined.depth||!combined.face)return false;const f=combined.face.points,left=Math.min(f[234].x,f[454].x),right=Math.max(f[234].x,f[454].x),top=f[10].y,bottom=f[152].y,pad=(right-left)*.15;return [4,8,12,16,20].some(i=>lm[i].x>left-pad&&lm[i].x<right+pad&&lm[i].y>top-(right-left)*.65&&lm[i].y<bottom+pad);}
+function demoNearFace(lm){if(!getCombinedOptions().demoGrip||!combined?.group.visible||!combined.depth||!combined.face)return false;const f=combined.face.points,left=Math.min(f[234].x,f[454].x),right=Math.max(f[234].x,f[454].x),top=f[10].y,bottom=f[152].y,pad=(right-left)*.15;return [0,4,8,12,16,20].some(i=>lm[i].x>left-pad&&lm[i].x<right+pad&&lm[i].y>top-(right-left)*.65&&lm[i].y<bottom+(bottom-top)*.75);}
 function fitDemoGrip(p,chains,lengths,hinges,lm){
- if(!demoNearFace(lm))return;combined.group.updateMatrixWorld(true);combined.group.traverse(m=>{if(m.isSkinnedMesh){m.skeleton.update();m.computeBoundingSphere();}});
- const ray=new THREE.Raycaster(),zero=new THREE.Vector3(),targets=[];
- for(let f=0;f<5;f++){const i=4+f*4,uv=cameraUV(lm[i],captureAspect,camera.aspect);let target=null;for(const blend of [0,.08,.16]){const aim=new THREE.Vector3().fromArray(cameraPosition(uv,combined.depth,camera.aspect));if(combined.position)aim.lerp(combined.position,blend);ray.set(zero,aim.normalize());const hit=ray.intersectObject(combined.group,true)[0];if(hit){target=hit.point.clone().addScaledVector(hit.point.clone().normalize(),-.006);break;}}if(!target){let best=.15*.15;const v=new THREE.Vector3();for(const sample of combined.contactSamples||[]){sample.mesh.getVertexPosition(sample.i,v);v.applyMatrix4(sample.mesh.matrixWorld);const d=v.distanceToSquared(chains[f][3]);if(d<best){best=d;target=v.clone().addScaledVector(v.clone().normalize(),-.006);}}}targets.push(target);}
- fitHeadGrip(p,chains,lengths,hinges,targets,getCombinedOptions().demoGrip);
+ if(!demoNearFace(lm))return;
+ combined.group.updateMatrixWorld(true);
+ const stamp=`${combined.seen}:${combined.poseSeen}`;
+ if(combined.contactStamp!==stamp){
+  combined.group.traverse(m=>{if(m.isSkinnedMesh){m.skeleton.update();}});
+  combined.surfacePoints=(combined.contactSamples||[]).map(({mesh,i,region})=>({region,point:mesh.getVertexPosition(i,new THREE.Vector3()).applyMatrix4(mesh.matrixWorld)}));
+  combined.contactStamp=stamp;
+ }
+ const face=combined.face.points,faceWidth=Math.abs(face[454].x-face[234].x),candidates=[];
+ // Select a contact anchor; never pull every finger into the face.
+ for(let f=0;f<5;f++){
+  const start=1+4*f,tip=start+3,dist=(a,b)=>Math.hypot(a.x-b.x,(a.y-b.y)/captureAspect);
+  let path=0;for(let i=start;i<tip;i++)path+=dist(lm[i],lm[i+1]);
+  candidates.push({source:chains[f][3],landmark:lm[tip],extended:f>0&&dist(lm[start],lm[tip])/Math.max(path,1e-8)>.88});
+ }
+ const hasExtended=candidates.some(c=>c.extended);
+ const palm=p[0].clone();for(const c of chains)palm.add(c[0]);palm.multiplyScalar(1/6);
+ const palmLm={x:lm[0].x,y:lm[0].y};for(const i of [1,5,9,13,17]){palmLm.x+=lm[i].x;palmLm.y+=lm[i].y;}palmLm.x/=6;palmLm.y/=6;
+ candidates.push({source:palm,landmark:palmLm});
+ const ray=new THREE.Raycaster(),origin=new THREE.Vector3();let best=null;
+ for(const candidate of candidates){
+  const uv=cameraUV(candidate.landmark,captureAspect,camera.aspect),aim=new THREE.Vector3().fromArray(cameraPosition(uv,combined.depth,camera.aspect));
+  ray.set(origin,aim.clone().normalize());
+  let target=null,screenError=Infinity;
+  const region=candidate.landmark.y>face[152].y+faceWidth*.08?'neck':'head';
+  const projectedAim=aim.clone().project(camera);
+  for(const sample of combined.surfacePoints||[]){
+   if(sample.region!==region)continue;
+   const v=sample.point,screen=v.clone().project(camera),d=Math.hypot((screen.x-projectedAim.x)*camera.aspect,screen.y-projectedAim.y);
+   if(d<screenError-.002||(Math.abs(d-screenError)<=.002&&target&&v.z>target.z)){screenError=d;target=v.clone();}
+  }
+  if(screenError>faceWidth*.45)continue;
+  if(!target)continue;
+  target.addScaledVector(ray.ray.direction,-.007);
+  // Prefer the camera landmark actually nearest the tracked face. Distance
+  // from the old model pose must not select a different finger or the shoulder.
+  let faceGap=Infinity;
+  for(const point of Object.values(face))faceGap=Math.min(faceGap,Math.hypot(candidate.landmark.x-point.x,(candidate.landmark.y-point.y)/captureAspect));
+  const score=faceGap*4+screenError*.5+target.distanceTo(candidate.source)*.05+(hasExtended&&!candidate.extended?faceWidth*2:0);
+  if(!best||score<best.score)best={score,source:candidate.source,target};
+ }
+ if(new URLSearchParams(location.search).has('fixture')){let d=document.getElementById('contactDiagnostic');if(!d){d=document.createElement('pre');d.id='contactDiagnostic';d.style.whiteSpace='pre-wrap';d.style.fontSize='11px';document.body.append(d);}d.textContent=JSON.stringify({samples:combined.surfacePoints?.length,neckSamples:combined.surfacePoints?.filter(s=>s.region==='neck').length,best:best?{source:best.source.toArray(),target:best.target.toArray(),score:best.score}:null});}
+ if(best)fitHeadGrip(p,chains,lengths,hinges,[{source:best.source,target:best.target}],getCombinedOptions().demoGrip);
 }
