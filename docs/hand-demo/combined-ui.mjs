@@ -8,7 +8,7 @@ export function installCombinedUI(){
  for(const el of children){if(el.nodeName==='H2'){section=details(el.textContent);container.append(section);}else if(el.nodeType!==3||el.textContent.trim())section.append(el);}
  const settings=details('Performance — camera, tracking and rendering');
  const row=(id,title,min,max,step,value,help)=>`<label>${title}<input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"><output>${value}</output><small>${help}</small></label>`;
- settings.innerHTML+='<p>Applies to the device doing the work. With Phone camera, the phone tracks hands, face and shoulders and sends coordinates over the relay. The PC renders the model. With a local camera, this computer also tracks. Higher targets can reduce FPS or increase heat when the device is overloaded.</p><label>Tracker processor<select id="trackerDelegate"><option value="GPU">GPU preferred (CPU fallback)</option><option value="CPU">CPU</option></select><small>GPU is the default. Actual processor is reported below; changing this restarts the trackers.</small></label>'+
+ settings.innerHTML+='<p>Applies to the device doing the work. With Phone camera, the phone streams video. This PC tracks hands, face and shoulders and renders the model. With a local camera, this computer also tracks. Higher targets can reduce FPS or increase heat when the device is overloaded.</p><label>Tracker processor<select id="trackerDelegate"><option value="GPU">GPU preferred (CPU fallback)</option><option value="CPU">CPU</option></select><small>GPU is the default. Actual processor is reported below; changing this restarts the trackers.</small></label>'+
  row('cameraFps','Camera capture target (FPS)',15,60,15,30,'Requests this camera rate. The camera/browser may deliver less. Applies to the active camera. Changing requires reconnecting the camera.')+
  row('handRate','Hand measurements / second',0,60,1,30,'Potentially reduces FPS. Zero stops hand inference; higher targets require faster processing.')+
  row('faceRate','Face / head measurements / second',0,60,1,30,'Potentially reduces FPS. Zero stops face inference. Head and face use one tracker; no lip animation.')+
@@ -63,7 +63,7 @@ export function installCombinedUI(){
  for(const p of container.querySelectorAll('p'))if(p.textContent.includes('It does not track your head.'))p.textContent='Mirror uses the camera view. First person uses the opposite viewpoint; head and hands share calibrated scene coordinates.';
  $('shoulderRate').value=30;$('lockBody').checked=false;$('neckShare').value=.45;$('neckShare').nextElementSibling.value=.45;
  $('headSize').value=1.2;$('headSize').nextElementSibling.value=1.2;
- document.querySelector('header b').textContent='HANDS + ALIEN HEAD · 15';
+ document.querySelector('header b').textContent='HANDS + ALIEN HEAD · 15.2 · PC TRACKING';
  document.querySelector('header span').textContent='Fixed-size hands · alien head, neck and shoulders';
  for(const id of ['demoGrip','demoContact','demoReach','demoSide','demoPadding']){$(id).value=0;$(id).nextElementSibling.value=0;$(id).closest('label').style.display='none';}
  for(const id of ['demoMatch','demoHeadMatch'])$(id).closest('label').style.display='none';
