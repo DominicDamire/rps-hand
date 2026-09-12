@@ -5,7 +5,7 @@ const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';
  const stabilizer=new DirectionStabilizer(),contactLatch=new ContactLatch();
- return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,upperCoupling=0,lockUpper=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,headContact=null,meshContact=null,lm,width,height}){
+ return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,upperCoupling=0,lockUpper=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,width,height}){
   if(lastSide!==side){contact=null;lastSide=side;lastShape='';}
   const p=points.map(v=>v.clone()),chains=[],lengths=[],inversePalm=palmQ.clone().invert();
   // Keep rigid attachments; copy only segment directions from the earlier direct tracker.
@@ -27,7 +27,6 @@ export function directDriver(rig,tips){
    if(lockUpper)constrainFinger(chain,lengths[f],hinge,upperCoupling);
   }
   const contactGap=contact?fitContact(chains[0],chains[contact/4-1],lengths[0],lengths[contact/4-1],hinges.get(contact/4-1)):null;
-  if(headContact)headContact(p,chains,lengths,hinges,lm);
   for(let f=0;f<5;f++)for(let k=0;k<4;k++)p[1+4*f+k].copy(chains[f][k]);
   rig.root.position.set(0,0,0);rig.root.updateMatrixWorld(true);const hand=rig.joints[side+'Hand'];hand.position.copy(hand.parent.worldToLocal(p[0].clone()));rig.setWorldQuat(side+'Hand',palmQ);rig.refresh(hand);
   const shape=side+':'+thickness+':'+tipInset,shapeChanged=shape!==lastShape;
@@ -45,6 +44,6 @@ export function directDriver(rig,tips){
    // Geometry transforms are changed ONLY by the user's thickness/inset controls.
    if(shapeChanged){const rot=new T.Matrix4().makeRotationFromQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0,0,1),axis));const shapeMatrix=rot.clone().multiply(new T.Matrix4().makeScale(thickness,thickness,1+(k===3?tipInset/1000/rest.length():0))).multiply(rot.clone().invert());for(const m of rig.parts)if(m.parent===j){m.matrixAutoUpdate=false;m.matrix.copy(shapeMatrix).multiply(matrices.get(m));m.matrixWorldNeedsUpdate=true;}}
   }
-  lastShape=shape;rig.root.updateMatrixWorld(true);const surfaceGap=meshContact?.(p,side,lm);return {points:p,contact,contactGap,surfaceGap};
+  lastShape=shape;rig.root.updateMatrixWorld(true);return {points:p,contact,contactGap};
  };
 }
