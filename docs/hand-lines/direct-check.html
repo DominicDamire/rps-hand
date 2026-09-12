@@ -1,11 +1,11 @@
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"}}</script><pre id="result">Loading</pre><script type="module">
-import * as T from 'three';import {DollRig} from '../doll/DollRig.js';import {buildTips} from './contact.mjs';import {directDriver} from './direct.mjs?v=4';
+import * as T from 'three';import {DollRig} from '../doll/DollRig.js';import {buildTips} from './contact.mjs';import {directDriver} from './direct.mjs?v=6';
 try{const rig=new DollRig(new T.Scene(),{url:new URL('../doll.glb',location).href,report:new URL('../doll-report.json',location).href});await rig.ready;const tips=buildTips(rig),run=directDriver(rig,tips);let max=0,maxLengthError=0;
 for(const side of ['R','L']){const names=['Thumb','Index','Middle','Ring','Pinky'],p=[new T.Vector3(0,0,-.5)],locals={};for(const [fi,f] of names.entries()){const mesh=rig.parts.find(m=>m.parent===rig.joints[side+f+'3']);locals[f]=[mesh,tips[side+f].clone().applyMatrix4(mesh.matrix.clone().invert())];for(let k=0;k<4;k++)p.push(new T.Vector3((fi-2)*.024+k*.003,.05+k*.026,-.5+k*.008));}
 const lm=p.map(v=>({x:v.x+.5,y:v.y+.5}));run(p,side,new T.Quaternion(),.016,{lm,width:480,height:480,thickness:1.3,tipInset:2});for(const [fi,f] of names.entries()){for(let k=1;k<=3;k++)max=Math.max(max,rig.joints[side+f+k].getWorldPosition(new T.Vector3()).distanceTo(p[1+fi*4+k-1]));const [m,local]=locals[f];max=Math.max(max,local.clone().applyMatrix4(m.matrixWorld).distanceTo(p[4+fi*4].clone().addScaledVector(p[4+fi*4].clone().sub(p[3+fi*4]).normalize(),.002)));}}
 const p=Array.from({length:21},(_,i)=>new T.Vector3(i*.01,i*.005,-.5)),lm=p.map(v=>({x:v.x+.5,y:v.y+.5}));
- const fresh=directDriver(rig,tips),first=fresh(p,'R',new T.Quaternion(),.016,{lm,width:480,height:480});
- const noisy=p.map(v=>v.clone().multiplyScalar(1.8)),second=fresh(noisy,'R',new T.Quaternion(),.016,{lm,width:480,height:480});
+ const fresh=directDriver(rig,tips),first=fresh(p,'R',new T.Quaternion(),.016,{lm,width:480,height:480,fixedLengths:true});
+ const noisy=p.map(v=>v.clone().multiplyScalar(1.8)),second=fresh(noisy,'R',new T.Quaternion(),.016,{lm,width:480,height:480,fixedLengths:true});
  for(let f=0;f<5;f++)for(let k=1;k<=3;k++){const i=1+f*4+k-1;maxLengthError=Math.max(maxLengthError,Math.abs(first.points[i].distanceTo(first.points[i+1])-second.points[i].distanceTo(second.points[i+1])));}
  document.querySelector('pre').textContent=JSON.stringify({pass:max<1e-6&&maxLengthError<1e-6,maxEndpointErrorMetres:max,maxLengthErrorAfter80PercentInputGrowth:maxLengthError});}catch(e){document.querySelector('pre').textContent=e.stack;}
 </script>

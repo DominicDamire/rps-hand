@@ -1,4 +1,4 @@
-import {directDriver} from './direct.mjs?v=4';
+import {directDriver} from './direct.mjs?v=6';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -19,7 +19,7 @@ let smoothPalmQ=null,previousPalmQ=null,heldPalmQ=null,palmQuiet=0;
 const palmQ=new THREE.Quaternion(),frozenPalm=new THREE.Quaternion(),basisCache={},jointDots={};
 const notice=t=>$('notice').textContent=t;
 const scene=new THREE.Scene();scene.background=new THREE.Color('#182331');
-const camera=new THREE.PerspectiveCamera(60,1,.01,20);
+const perspectiveCamera=new THREE.PerspectiveCamera(60,1,.01,20),orthographicCamera=new THREE.OrthographicCamera(-.5,.5,.5,-.5,.01,20);let camera=perspectiveCamera;
 const room=new THREE.Group();scene.add(room);const floor=new THREE.GridHelper(6,30,0x64859c,0x35495c);floor.position.set(0,-.35,-2);room.add(floor);
 for(const [x,z] of [[-.5,-1.2],[.5,-1.6],[-.8,-2.5]]){const mesh=new THREE.Mesh(new THREE.BoxGeometry(.2,.2,.2),new THREE.MeshStandardMaterial({color:0x49687d}));mesh.position.set(x,-.25,z);room.add(mesh);}
 
@@ -31,7 +31,7 @@ const markerGroup=new THREE.Group();scene.add(markerGroup);
 const lineGeometry=new THREE.BufferGeometry();lineGeometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(5*4*2*3),3));const modelLines=new THREE.LineSegments(lineGeometry,new THREE.LineBasicMaterial({color:0x8ee3bf,depthTest:false,transparent:true,opacity:.85}));modelLines.frustumCulled=false;modelLines.renderOrder=99;scene.add(modelLines);
 const gizmo=new THREE.Group();scene.add(gizmo);
 for(const [dir,color] of [[new THREE.Vector3(1,0,0),0xff676e],[new THREE.Vector3(0,1,0),0x61e599],[new THREE.Vector3(0,0,1),0x669eff]])gizmo.add(new THREE.ArrowHelper(dir,new THREE.Vector3(),.043,color,.009,.005));
-function resize(){const c=$('scene');renderer.setSize(c.clientWidth,c.clientHeight,false);camera.aspect=c.clientWidth/c.clientHeight;camera.updateProjectionMatrix();updateCameraFrame();}new ResizeObserver(resize).observe($('scene'));
+function resize(){const c=$('scene');renderer.setSize(c.clientWidth,c.clientHeight,false);camera.aspect=c.clientWidth/c.clientHeight;if(camera.isOrthographicCamera){camera.left=-.5*camera.aspect;camera.right=.5*camera.aspect;camera.top=.5;camera.bottom=-.5;}camera.updateProjectionMatrix();updateCameraFrame();}new ResizeObserver(resize).observe($('scene'));
 function updateCameraFrame(){const f=cameraFrame(captureAspect,camera.aspect),guide=$('cameraFrame');guide.style.width=(100*f.width)+'%';guide.style.height=(100*f.height)+'%';guide.hidden=!$('spatial').checked;}
 function placeFromCamera(dt){if(!$('spatial').checked||editing||!latest)return;const lm=latest.landmarks,uv=cameraUV(lm[0],captureAspect,camera.aspect),q=rig.joints[side+'Hand'].quaternion,samples=[['Index1',5],['Middle1',9],['Ring1',13],['Pinky1',17]].map(([n,i])=>({uv:cameraUV(lm[i],captureAspect,camera.aspect),offset:rig.rest[side+n].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(q).toArray()}));
  const desired=fitPalmDepth(uv,samples,camera.aspect,lastDepth||.5),depth=positionFilter.step([desired],dt,.002)[0],pos=cameraPosition(uv,depth,camera.aspect);rig.root.position.fromArray(pos).sub(rig.rest[side+'Hand'].world);rig.root.updateMatrixWorld(true);
@@ -45,6 +45,13 @@ function jointBasis(n){const key=side+n;if(basisCache[key])return basisCache[key
  return basisCache[key]=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x,y,z));
 }
 function cameraPoints(world,lm){
+ if(camera.isOrthographicCamera){
+  const w=cameraUV(lm[0],captureAspect,camera.aspect),origin=new THREE.Vector3((w.x-.5)*camera.aspect,.5-w.y,-.5),modelLength=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world);
+  const humanLength=Math.max(.01,Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z)),depthScale=modelLength/humanLength;
+  const relative=lm.map((p,i)=>{const uv=cameraUV(p,captureAspect,camera.aspect);return new THREE.Vector3((uv.x-w.x)*camera.aspect,w.y-uv.y,-(world[i].z-world[0].z)*depthScale);});
+  const factor=modelLength/Math.max(.01,relative[9].length());return relative.map(v=>v.multiplyScalar(factor).add(origin));
+ }
+
  const modelLength=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world),humanLength=Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z),scale=modelLength/Math.max(.01,humanLength);
  let depth=(depthEstimate(lm,world,captureAspect)||.5)*scale/cameraFrame(captureAspect,camera.aspect).height,pts;
  for(let pass=0;pass<2;pass++){pts=liftCameraLandmarks(lm,world,captureAspect,camera.aspect,depth,scale).map(p=>new THREE.Vector3().fromArray(p));const q=new THREE.Quaternion().setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));const samples=[['Index1',5],['Middle1',9],['Ring1',13],['Pinky1',17]].map(([n,i])=>({uv:cameraUV(lm[i],captureAspect,camera.aspect),offset:rig.rest[side+n].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(q).toArray()}));depth=fitPalmDepth(cameraUV(lm[0],captureAspect,camera.aspect),samples,camera.aspect,depth);}
@@ -171,9 +178,9 @@ tips=buildTips(rig);const drivers={R:directDriver(rig,tips),L:directDriver(rig,t
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
-configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready. Connect camera or Phone camera · QR. Fixed segment lengths; calibrated from the first visible frame.');
+configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready. Connect camera or Phone camera · QR. Tracked endpoints restored. Camera projection is selectable.');
 let lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(stream&&!editing&&$('video').readyState>=2&&!inflight&&$('video').currentTime!==lastVideo){lastVideo=$('video').currentTime;detect($('video'));}
- if(now-lastPaint<16)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,{smooth:0,threshold:0,contactPixels:0,coupling:0,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm:latest.landmarks,width:$('preview').width,height:$('preview').height});$('directStatus').textContent=directResult.contact?'Estimated fingertip contact held':'Fixed-length tracking · no pose presets';}renderOtherHand(renderDt);if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked;
+ if(now-lastPaint<16)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,{smooth:0,threshold:0,contactPixels:$('tipContact').checked?8:0,coupling:0,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm:latest.landmarks,width:$('preview').width,height:$('preview').height});$('directStatus').textContent=directResult.contact?'Estimated fingertip contact held':'Tracked endpoints · no pose presets';}renderOtherHand(renderDt);if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked;
  for(const n of JOINTS){const dot=jointDots[n];dot.visible=true;dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  for(const [i,f] of FINGERS.entries())tipDots[f].position.copy(directResult?directResult.points[4+i*4]:tipWorld(rig,tips,side,f));
  modelLines.visible=$('dots').checked;let lineIndex=0;const linePoints=lineGeometry.attributes.position;
@@ -197,15 +204,15 @@ function renderOtherHand(dt){
  for(const m of rig.parts)if(m.name.startsWith(other)&&/^[RL](Hand|Thumb|Index|Middle|Ring|Pinky)/.test(m.name))m.visible=!!extra;
  secondLines.visible=!!extra&&$('dots').checked;if(!extra)return;
  const originalSide=side;side=other;const pts=cameraPoints(extra.world,extra.landmarks),q=new THREE.Quaternion().setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));
- const result=drivers[side](pts,side,q,dt,{smooth:0,threshold:0,contactPixels:0,coupling:0,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm:extra.landmarks,width:$('preview').width,height:$('preview').height});side=originalSide;
+ const result=drivers[side](pts,side,q,dt,{smooth:0,threshold:0,contactPixels:$('tipContact').checked?8:0,coupling:0,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm:extra.landmarks,width:$('preview').width,height:$('preview').height});side=originalSide;
  let n=0;for(let f=0;f<5;f++){const ids=[0,1+f*4,2+f*4,3+f*4,4+f*4];for(let k=0;k<4;k++)for(const i of [ids[k],ids[k+1]]){const v=result.points[i];secondLineGeometry.attributes.position.setXYZ(n++,v.x,v.y,v.z);}}secondLineGeometry.attributes.position.needsUpdate=true;
 }
-function setViewMode(){const first=$('viewMode').value==='first';
+function setViewMode(){const desired=$('cameraProjection').value==='constant'?orthographicCamera:perspectiveCamera;if(camera!==desired){camera=desired;controls.object=camera;for(const s of ['R','L'])delete depthStates[s];resize();}const first=$('viewMode').value==='first';
  if(first){camera.position.set(+$('eyeX').value,+$('eyeY').value,+$('eyeZ').value);const yaw=+$('eyeYaw').value*RAD,pitch=+$('eyePitch').value*RAD;const dir=new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));camera.up.set(0,1,0);camera.lookAt(camera.position.clone().add(dir));camera.fov=+$('eyeFov').value;}
  else{camera.position.set(0,0,0);camera.up.set(0,1,0);camera.lookAt(0,0,-1);camera.fov=60;}
- camera.updateProjectionMatrix();$('scene').style.transform=first?'none':'scaleX(-1)';$('cameraFrame').style.display=first?'none':'';}
+ camera.updateProjectionMatrix();$('scene').style.transform=first?'none':'scaleX(-1)';$('cameraFrame').style.display=first||camera.isOrthographicCamera?'none':'';}
 
-$('viewMode').onchange=setViewMode;const originalReset=$('viewReset').onclick;$('viewReset').onclick=()=>{originalReset();setViewMode();};
+$('cameraProjection').onchange=setViewMode;$('viewMode').onchange=setViewMode;const originalReset=$('viewReset').onclick;$('viewReset').onclick=()=>{originalReset();setViewMode();};
 
 $('recalibrateSize').onclick=()=>{for(const s of ['R','L']){drivers[s]=directDriver(rig,tips);delete depthStates[s];}$('startStatus').textContent='Size calibration reset. Hold both hands open and clearly visible.';};
 
