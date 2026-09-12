@@ -1,4 +1,5 @@
-import {directDriver} from './direct.mjs?v=12';
+import {directDriver} from './direct.mjs?v=13';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=13';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -45,6 +46,10 @@ function jointBasis(n){const key=side+n;if(basisCache[key])return basisCache[key
  return basisCache[key]=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x,y,z));
 }
 function cameraPoints(world,lm){
+ const points=rawCameraPoints(world,lm);
+ return $('falseDepth')?.checked?reduceFalseDepthBends(points,lm,$('preview').width,$('preview').height,!camera.isOrthographicCamera):points;
+}
+function rawCameraPoints(world,lm){
  if(camera.isOrthographicCamera){
   const w=cameraUV(lm[0],captureAspect,camera.aspect),origin=new THREE.Vector3((w.x-.5)*camera.aspect,.5-w.y,-.5),modelLength=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world);
   const humanLength=Math.max(.01,Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z)),depthScale=modelLength/humanLength;
@@ -175,12 +180,13 @@ $('png').onclick=()=>{renderer.render(scene,camera);const c=document.createEleme
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set(1-(e.clientX-rect.left)/rect.width*2,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children.filter(m=>m.visible))[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
 await rig.ready;
 tips=buildTips(rig);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>drivers[args[1]](...args);let directResult=null;
+function directOptions(lm){return {staticInput:!!sampleSource,confirmDegrees:sampleSource?0:+$('confirmJump').value,contactFraction:+$('contactRange').value/100,noiseDegrees:+$('fingerNoise').value,contactPixels:$('tipContact').checked?8:0,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm,width:$('preview').width,height:$('preview').height};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
 configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready. Connect camera or Phone camera · QR. Connected rigid hand. Original tracked directions; no automatic resizing.');
 let lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(stream&&!editing&&$('video').readyState>=2&&!inflight&&$('video').currentTime!==lastVideo){lastVideo=$('video').currentTime;detect($('video'));}
- if(now-lastPaint<16)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,{noiseDegrees:+$('fingerNoise').value,contactPixels:$('tipContact').checked?8:0,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm:latest.landmarks,width:$('preview').width,height:$('preview').height});$('directStatus').textContent=directResult.contact?'Estimated fingertip contact held':'Stable finger planes · connected fixed-size hand';}renderOtherHand(renderDt);if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked;
+ if(now-lastPaint<16)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));$('directStatus').textContent=directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Stable finger planes · connected fixed-size hand';}renderOtherHand(renderDt);if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked;
  for(const n of JOINTS){const dot=jointDots[n];dot.visible=true;dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  for(const [i,f] of FINGERS.entries())tipDots[f].position.copy(directResult?directResult.points[4+i*4]:tipWorld(rig,tips,side,f));
  modelLines.visible=$('dots').checked;let lineIndex=0;const linePoints=lineGeometry.attributes.position;
@@ -192,13 +198,14 @@ let lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if
 }requestAnimationFrame(loop);addEventListener('pagehide',()=>{stopCamera();worker?.terminate();});
 
 const stabilityControls=document.createElement('section');
-stabilityControls.innerHTML='<h2>Finger stability</h2><label>Ignore tiny direction changes (degrees)<input id="fingerNoise" type="range" min="0" max="4" step="0.25" value="1" oninput="this.nextElementSibling.value=this.value"><output>1</output></label><p>Small tracking noise settles gently. Larger pose changes respond quickly. Set 0 for raw directions. Upper finger joints stay in one bending plane; no fist preset is used.</p>';
+stabilityControls.innerHTML='<h2>Finger stability</h2><label>Ignore tiny direction changes (degrees)<input id="fingerNoise" type="range" min="0" max="4" step="0.25" value="1" oninput="this.nextElementSibling.value=this.value"><output>1</output></label><label>Confirm jumps above (degrees, 0 = off)<input id="confirmJump" type="range" min="0" max="30" step="1" value="8" oninput="this.nextElementSibling.value=this.value"><output>8</output></label><p>Larger jumps need two consistent camera measurements. This rejects one-frame flips and adds one camera sample of delay. Set both controls to 0 for raw directions. Upper joints stay in one bending plane; no fist preset is used.</p><h2>Thumb contact</h2><label>Contact proximity (% of palm width)<input id="contactRange" type="range" min="3" max="30" step="1" value="12" oninput="this.nextElementSibling.value=this.value"><output>12</output></label><p>Applies when Fit nearby thumb and fingertip is enabled. Higher values close larger tip gaps. Live contact needs two measurements and releases when you separate the tips. Image overlap estimates contact; it cannot prove physical touch.</p>';
 $('directSettings').prepend(stabilityControls);
-const startFields=['fingerNoise','fingerThickness','tipInset','trackingGrace','eyeX','eyeY','eyeZ','eyeYaw','eyePitch','eyeFov','phoneDistance','depthGain'];
-function restoreStart(values){for(const id of startFields){const el=$(id),value=Number(values[id]);if(Number.isFinite(value)&&value>=Number(el.min)&&value<=Number(el.max)){el.value=value;el.nextElementSibling.value=value;}}}
+const depthControl=document.createElement('div');depthControl.innerHTML='<label><input id="falseDepth" type="checkbox" checked> Reduce false depth bends on visibly straight fingers</label><p>Uses clear, extended image lines to stabilize finger depth. Curled or foreshortened fingers keep their depth estimates. This is an estimate; turn it off to compare.</p>';stabilityControls.append(depthControl);
+const startFields=['confirmJump','contactRange','fingerNoise','fingerThickness','tipInset','trackingGrace','eyeX','eyeY','eyeZ','eyeYaw','eyePitch','eyeFov','phoneDistance','depthGain'];
+function restoreStart(values){if(typeof values.falseDepth==='boolean')$('falseDepth').checked=values.falseDepth;for(const id of startFields){const el=$(id),value=Number(values[id]);if(Number.isFinite(value)&&value>=Number(el.min)&&value<=Number(el.max)){el.value=value;el.nextElementSibling.value=value;}}}
 try{const saved=JSON.parse(localStorage.getItem('direct-lines-start-v2')||'null');if(saved)restoreStart(saved);}catch{}
-$('saveStart').onclick=()=>{try{localStorage.setItem('direct-lines-start-v2',JSON.stringify(Object.fromEntries(startFields.map(id=>[id,+$(id).value]))));$('startStatus').textContent='Starting settings saved in this browser.';}catch{$('startStatus').textContent='Browser storage unavailable.';}};
-$('resetStart').onclick=()=>{restoreStart({fingerNoise:1,fingerThickness:1.3,tipInset:2,trackingGrace:250});$('startStatus').textContent='Defaults restored. Save to use on next visit.';};
+$('saveStart').onclick=()=>{try{localStorage.setItem('direct-lines-start-v2',JSON.stringify({...Object.fromEntries(startFields.map(id=>[id,+$(id).value])),falseDepth:$('falseDepth').checked}));$('startStatus').textContent='Starting settings saved in this browser.';}catch{$('startStatus').textContent='Browser storage unavailable.';}};
+$('resetStart').onclick=()=>{restoreStart({confirmJump:8,contactRange:12,fingerNoise:1,fingerThickness:1.3,tipInset:2,trackingGrace:250});$('startStatus').textContent='Defaults restored. Save to use on next visit.';};
 
 const secondLineGeometry=new THREE.BufferGeometry();secondLineGeometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(120),3));const secondLines=new THREE.LineSegments(secondLineGeometry,new THREE.LineBasicMaterial({color:0x79bbff,depthTest:false}));secondLines.frustumCulled=false;scene.add(secondLines);
 function renderOtherHand(dt){
@@ -207,7 +214,7 @@ function renderOtherHand(dt){
  for(const m of rig.parts)if(m.name.startsWith(other)&&/^[RL](Hand|Thumb|Index|Middle|Ring|Pinky)/.test(m.name))m.visible=!!extra;
  secondLines.visible=!!extra&&$('dots').checked;if(!extra)return;
  const originalSide=side;side=other;const pts=cameraPoints(extra.world,extra.landmarks),q=new THREE.Quaternion().setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));
- const result=drivers[side](pts,side,q,dt,{noiseDegrees:+$('fingerNoise').value,contactPixels:$('tipContact').checked?8:0,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm:extra.landmarks,width:$('preview').width,height:$('preview').height});side=originalSide;
+ const result=drivers[side](pts,side,q,dt,directOptions(extra.landmarks));side=originalSide;
  let n=0;for(let f=0;f<5;f++){const ids=[0,1+f*4,2+f*4,3+f*4,4+f*4];for(let k=0;k<4;k++)for(const i of [ids[k],ids[k+1]]){const v=result.points[i];secondLineGeometry.attributes.position.setXYZ(n++,v.x,v.y,v.z);}}secondLineGeometry.attributes.position.needsUpdate=true;
 }
 function setViewMode(){const desired=$('cameraProjection').value==='constant'?orthographicCamera:perspectiveCamera;if(camera!==desired){camera=desired;controls.object=camera;for(const s of ['R','L'])delete depthStates[s];resize();}const first=$('viewMode').value==='first';
