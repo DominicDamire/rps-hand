@@ -2,7 +2,7 @@
 // Face Landmarker (head pose matrix + blendshapes), tracker.mjs?task=pose the Pose Landmarker lite (shoulders).
 import { FilesetResolver, FaceLandmarker, PoseLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs';
 const MP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1', MODELS = 'https://storage.googleapis.com/mediapipe-models/';
-const TASK = new URLSearchParams(self.location.search).get('task') || 'face';
+const params = new URLSearchParams(self.location.search), TASK = params.get('task') || 'face', REQUESTED = params.get('delegate') || 'auto';
 let tracker;
 self.onmessage = async ({ data }) => {
   try {
@@ -11,9 +11,9 @@ self.onmessage = async ({ data }) => {
       const opts = TASK === 'face'
         ? { baseOptions: { modelAssetPath: MODELS + 'face_landmarker/face_landmarker/float16/latest/face_landmarker.task', delegate: 'GPU' }, runningMode: 'VIDEO', numFaces: 1, outputFacialTransformationMatrixes: true, outputFaceBlendshapes: true }
         : { baseOptions: { modelAssetPath: MODELS + 'pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task', delegate: 'GPU' }, runningMode: 'VIDEO', numPoses: 1 };
-      const Cls = TASK === 'face' ? FaceLandmarker : PoseLandmarker;
-      try { tracker = await Cls.createFromOptions(files, opts); } catch (e) { opts.baseOptions.delegate = 'CPU'; tracker = await Cls.createFromOptions(files, opts); }
-      self.postMessage({ type: 'ready', task: TASK, delegate: opts.baseOptions.delegate });
+      const Cls = TASK === 'face' ? FaceLandmarker : PoseLandmarker, delegates = REQUESTED === 'auto' ? ['GPU', 'CPU'] : [REQUESTED]; let delegate;
+      for (delegate of delegates) { try { opts.baseOptions.delegate = delegate; tracker = await Cls.createFromOptions(files, opts); break; } catch (e) { if (delegate === delegates.at(-1)) throw e; } }
+      self.postMessage({ type: 'ready', task: TASK, delegate });
     } else if (data.type === 'frame') {
       try {
         const t0 = performance.now(), out = { type: 'result', task: TASK, time: data.time };

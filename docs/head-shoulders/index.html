@@ -4,11 +4,12 @@
 *{box-sizing:border-box}body{margin:0;overflow:hidden;background:#0b1016;color:#e8eef2;font:14px system-ui,sans-serif}canvas#scene{display:block;width:100vw;height:100dvh}
 #cam,#ov{position:fixed;top:12px;right:12px;width:min(320px,42vw);border-radius:10px;background:#000;z-index:3}#cam{border:1px solid #ffffff30}#ov{background:none;pointer-events:none;z-index:4}body.mirror #cam,body.mirror #ov{transform:scaleX(-1)}
 #hud{position:fixed;left:12px;top:12px;font:12px/1.6 ui-monospace,monospace;color:#9fe8c4;text-shadow:0 0 4px #000;z-index:3;white-space:pre-line}
-#panel{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);width:min(560px,calc(100% - 24px));padding:14px 16px;border-radius:14px;background:#101820ee;border:1px solid #ffffff18;z-index:3}
+#panel{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);width:min(620px,calc(100% - 24px));max-height:min(72dvh,720px);overflow:auto;padding:14px 16px;border-radius:14px;background:#101820ee;border:1px solid #ffffff18;z-index:3}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}.row:first-child{margin-top:0}
 button{font:inherit;border:1px solid #ffffff22;border-radius:9px;padding:9px 13px;color:#eaf4ef;background:#25323c;cursor:pointer}button.primary{background:#8fe3b4;color:#10261a;border:0}button:disabled{opacity:.5}
 label{display:flex;align-items:center;gap:6px;font-size:12px;color:#b9c6cc}input[type=range]{width:90px;accent-color:#8fe3b4}
 #status{font-size:13px;color:#d7e3e8}#error{color:#ffb3a0;font-size:12px;white-space:pre-wrap}
+details{margin-top:10px;border-top:1px solid #ffffff18;padding-top:9px}summary{cursor:pointer;color:#9fe8c4;font-weight:700}.setting{padding:9px 0;border-bottom:1px solid #ffffff10}.setting label{justify-content:space-between;font-size:13px;color:#e8eef2}.setting input[type=range]{width:min(260px,48vw)}.setting select{max-width:250px;background:#202d37;color:#e8eef2;border:1px solid #ffffff22;border-radius:7px;padding:6px}.setting small{display:block;margin-top:5px;color:#9eacb4;line-height:1.35}.setting output{min-width:42px;text-align:right;color:#9fe8c4}@media(max-width:640px){#panel{bottom:8px;max-height:62dvh;padding:12px}#cam,#ov{width:min(240px,54vw)}.setting label{align-items:flex-start;flex-wrap:wrap}.setting input[type=range]{width:100%}}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -19,11 +20,23 @@ label{display:flex;align-items:center;gap:6px;font-size:12px;color:#b9c6cc}input
 <video id="cam" autoplay playsinline muted></video><canvas id="ov"></canvas>
 <div id="hud">head + shoulders · loading one model…</div>
 <div id="panel">
-  <div class="row"><button class="primary" id="start">Start camera</button><button id="phoneCam" hidden>Phone as camera</button><button id="center">Center</button><a href="../hand-lines/" style="color:#9fe8c4">Back to hand lab</a>
-    <label><input id="lockBody" type="checkbox">Lock body</label></div>
-  <div class="row"><label>Turn gain <input id="turnGain" type="range" min="0.5" max="2.5" step="0.1" value="1.2"><output id="turnGainV">1.2×</output></label>
-    <label>Move gain <input id="moveGain" type="range" min="0" max="2" step="0.1" value="1"><output id="moveGainV">1.0×</output></label>
-    <label title="How much of the head turn the neck does (the rest is the head joint alone)">Neck share <input id="neckShare" type="range" min="0" max="0.8" step="0.05" value="0.35"><output id="neckShareV">35%</output></label></div>
+  <div class="row"><button class="primary" id="start">Start camera</button><button id="phoneCam" hidden>Phone as camera</button><button id="center">Center</button><a href="../hand-lines/" style="color:#9fe8c4">Back to hand lab</a></div>
+  <details open><summary>Movement settings</summary>
+    <div class="setting"><label><span>Lock body</span><input id="lockBody" type="checkbox"></label><small>Keeps the shoulders and torso fixed while head and eye tracking continue.</small></div>
+    <div class="setting"><label>Turn gain <input id="turnGain" type="range" min="0.5" max="2.5" step="0.1" value="1.2"><output id="turnGainV">1.2×</output></label><small>Multiplies tracked head rotation. Higher values make a small real turn rotate the model farther.</small></div>
+    <div class="setting"><label>Move gain <input id="moveGain" type="range" min="0" max="2" step="0.1" value="1"><output id="moveGainV">1.0×</output></label><small>Multiplies shoulder movement and estimated forward/back movement. Zero keeps the model centred.</small></div>
+    <div class="setting"><label>Neck share <input id="neckShare" type="range" min="0" max="0.8" step="0.05" value="0.35"><output id="neckShareV">35%</output></label><small>Chooses how much head rotation is shared with the neck. The remaining rotation stays on the head joint.</small></div>
+  </details>
+  <details id="performanceSettings" open><summary>Phone performance settings</summary>
+    <div class="setting"><label>Performance preset <select id="performancePreset"><option value="auto">Automatic (recommended)</option><option value="fast">Fast phone</option><option value="balanced">Balanced</option><option value="quality">High quality</option><option value="custom">Custom</option></select></label><small>Changes the real controls below. Automatic uses Fast phone on a phone and High quality on a computer.</small></div>
+    <div class="setting"><label>Tracker processor <select id="trackerDelegate"><option value="auto">Automatic GPU → CPU</option><option value="GPU">GPU only</option><option value="CPU">CPU only</option></select></label><small>Automatic normally works best. Changing this requires stopping and restarting the camera.</small></div>
+    <div class="setting"><label>Tracking image width <input id="trackingWidth" type="range" min="192" max="480" step="32" value="256"><output>256 px</output></label><small>Lower values reduce phone work and heat. Higher values may detect small or distant features more reliably.</small></div>
+    <div class="setting"><label>Face tracking rate <input id="faceRate" type="range" min="5" max="30" step="1" value="15"><output>15 fps</output></label><small>How often head rotation and eyes are measured. Lower values reduce lag caused by inference but update the head less often.</small></div>
+    <div class="setting"><label>Shoulder tracking rate <input id="shoulderRate" type="range" min="2" max="20" step="1" value="8"><output>8 fps</output></label><small>Shoulders move more slowly than the face, so this can usually stay below the face rate.</small></div>
+    <div class="setting"><label>3D scene frame rate <input id="sceneRate" type="range" min="15" max="60" step="5" value="30"><output>30 fps</output></label><small>Limits model animation and rendering. Lower values save battery and GPU time.</small></div>
+    <div class="setting"><label>Render resolution <input id="renderScale" type="range" min="0.5" max="2" step="0.25" value="1"><output>1×</output></label><small>Controls 3D pixels, not tracking accuracy. One is the best phone starting point; two is much heavier.</small></div>
+    <div class="setting"><label>Tracking overlay rate <input id="overlayRate" type="range" min="0" max="30" step="1" value="10"><output>10 fps</output></label><small>How often the dots and axes are redrawn. Set to zero to hide the overlay and save more work.</small></div>
+  </details>
   <div class="row"><span id="status">Start the camera, look at it, press Center.</span></div><div id="error"></div>
 </div>
 <script type="module">
@@ -32,15 +45,28 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { phoneCamera } from './camlink.mjs?v=7';
 const $ = id => document.getElementById(id), Q = new URLSearchParams(location.search), CAM = Q.has('cam');
 const status = t => $('status').textContent = t;
+const phoneLayout = matchMedia('(max-width: 700px)').matches || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+const performanceIds = ['trackingWidth', 'faceRate', 'shoulderRate', 'sceneRate', 'renderScale', 'overlayRate'];
+const performancePlans = {
+  fast: { trackingWidth: 224, faceRate: 12, shoulderRate: 6, sceneRate: 30, renderScale: .75, overlayRate: 8 },
+  balanced: { trackingWidth: 320, faceRate: 20, shoulderRate: 10, sceneRate: 45, renderScale: 1, overlayRate: 15 },
+  quality: { trackingWidth: 480, faceRate: 30, shoulderRate: 15, sceneRate: 60, renderScale: Math.min(2, devicePixelRatio), overlayRate: 30 }
+};
+const units = { trackingWidth: ' px', faceRate: ' fps', shoulderRate: ' fps', sceneRate: ' fps', renderScale: '×', overlayRate: ' fps' };
+function showPerformanceValue(id) { const input = $(id); input.nextElementSibling.textContent = input.value + units[id]; }
+function applyPerformancePlan(name) { const actual = name === 'auto' ? (phoneLayout ? 'fast' : 'quality') : name, plan = performancePlans[actual]; if (!plan) return; for (const id of performanceIds) { $(id).value = plan[id]; showPerformanceValue(id); } }
+function savePerformance() { try { localStorage.setItem('head-shoulders-performance-v1', JSON.stringify({ preset: $('performancePreset').value, delegate: $('trackerDelegate').value, ...Object.fromEntries(performanceIds.map(id => [id, +$(id).value])) })); } catch {} }
+try { const saved = JSON.parse(localStorage.getItem('head-shoulders-performance-v1') || 'null'); if (saved) { $('performancePreset').value = saved.preset || 'custom'; $('trackerDelegate').value = saved.delegate || 'auto'; for (const id of performanceIds) if (Number.isFinite(saved[id])) $(id).value = saved[id]; } else applyPerformancePlan('auto'); } catch { applyPerformancePlan('auto'); }
+for (const id of performanceIds) showPerformanceValue(id);
 
 // --- scene ------------------------------------------------------------------------------------------------
-const renderer = new THREE.WebGLRenderer({ canvas: $('scene'), antialias: true }); renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+const renderer = new THREE.WebGLRenderer({ canvas: $('scene'), antialias: true }); renderer.setPixelRatio(+$('renderScale').value);
 const scene = new THREE.Scene(); scene.background = new THREE.Color('#0b1016');
 const camera = new THREE.PerspectiveCamera(38, 1, .05, 50);
 scene.add(new THREE.HemisphereLight(0xdfe9ff, 0x2a2018, 1.1));
 const key = new THREE.DirectionalLight(0xfff1dc, 2.2); key.position.set(1.5, 2.5, 3); scene.add(key);
 const rim = new THREE.DirectionalLight(0x7fb8ff, 1.2); rim.position.set(-2, 1, -2); scene.add(rim);
-function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); } addEventListener('resize', resize); resize();
+function resize() { renderer.setPixelRatio(+$('renderScale').value); renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); } addEventListener('resize', resize); resize();
 
 // --- the bust: root -> neck -> head -> eyes; rest world rotations are what the tracking rotates from ----------
 const rig = { root: null, neck: null, head: null, eyes: [] }, rest = new Map(), model = new THREE.Group(); scene.add(model);
@@ -68,7 +94,7 @@ const scaled = (q, k, out) => { _e.setFromQuaternion(q, 'YXZ'); _e.x *= k; _e.y 
 // --- tracking -> pose ---------------------------------------------------------------------------------------
 const view = { mirror: true, turn: 1.2, move: 1, neck: .35, lock: false };
 const track = { faceQ: new THREE.Quaternion(), faceT: new THREE.Vector3(), neutralQ: null, neutralT: new THREE.Vector3(), haveFace: false, gaze: [0, 0], neutralGaze: [0, 0],
-  shoulder: { roll: 0, yaw: 0 }, neutralS: null, haveShoulders: false, ms: 0, seen: 0, yawDeg: 0, pitchDeg: 0, rollDeg: 0 };
+  shoulder: { roll: 0, yaw: 0 }, neutralS: null, haveShoulders: false, ms: 0, seen: 0, yawDeg: 0, pitchDeg: 0, rollDeg: 0, delegates: ['?', '?'] };
 const M = new THREE.Matrix4(), rawQ = new THREE.Quaternion(), rawT = new THREE.Vector3(), relQ = new THREE.Quaternion(), smoothQ = new THREE.Quaternion(), tmpQ = new THREE.Quaternion(), smoothT = new THREE.Vector3();
 function onResult(r) {
   if (r.task === 'face') { track.ms = r.ms; track.seen = performance.now(); overlay.face = r.face?.pts || null; overlay.matrix = r.face?.matrix || null; }
@@ -151,7 +177,7 @@ function drawOverlay() {
 }
 
 // --- camera + worker --------------------------------------------------------------------------------------
-let workers = [], stream = null, running = false, busy = [false, false], lastVideo = -1, frameN = 0;
+let workers = [], stream = null, running = false, busy = [false, false], lastVideo = -1, lastSent = [-Infinity, -Infinity], lastOverlay = -Infinity, lastRender = 0, lastHud = -Infinity;
 const v = $('cam');
 const takeCam = s => { stream = s; v.srcObject = s; v.play().catch(() => {}); };
 async function start() {
@@ -160,29 +186,36 @@ async function start() {
   try {
     stream = CAM ? (stream?.active ? stream : await phoneCamera(status, takeCam)) : await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } } });
     takeCam(stream); status('Loading face + pose tracking…');
-    workers = ['face', 'pose'].map(task => new Worker(new URL('./tracker.mjs?v=7&task=' + task, import.meta.url), { type: 'module' }));
-    await Promise.all(workers.map(w => new Promise((res, rej) => { const t = setTimeout(() => rej(Error('tracker loading timed out')), 60000); w.onmessage = ({ data }) => { if (data.type === 'ready') { clearTimeout(t); res(); } else if (data.type === 'error') { clearTimeout(t); rej(Error(data.message)); } }; w.onerror = e => { clearTimeout(t); rej(Error(e.message)); }; w.postMessage({ type: 'init' }); })));
+    workers = ['face', 'pose'].map(task => new Worker(new URL('./tracker.mjs?v=8&task=' + task + '&delegate=' + $('trackerDelegate').value, import.meta.url), { type: 'module' }));
+    track.delegates = await Promise.all(workers.map(w => new Promise((res, rej) => { const t = setTimeout(() => rej(Error('tracker loading timed out')), 60000); w.onmessage = ({ data }) => { if (data.type === 'ready') { clearTimeout(t); res(data.delegate); } else if (data.type === 'error') { clearTimeout(t); rej(Error(data.message)); } }; w.onerror = e => { clearTimeout(t); rej(Error(e.message)); }; w.postMessage({ type: 'init' }); })));
     workers.forEach((w, i) => w.onmessage = ({ data }) => { busy[i] = false; if (data.type === 'error') { $('error').textContent = data.task + ': ' + data.message; return; } if (data.type === 'result') onResult(data); });
     running = true; $('start').textContent = 'Stop camera'; status('Look at the camera and press Center');
   } catch (e) { stop(); $('error').textContent = e.name === 'NotAllowedError' ? 'Camera access was declined.' : e.message; }
   finally { $('start').disabled = false; }
 }
-function stop() { running = false; overlay.face = overlay.pose = overlay.matrix = null; busy = [false, false]; workers.forEach(w => w.terminate()); workers = []; if (!CAM) { stream?.getTracks().forEach(t => t.stop()); stream = null; } v.srcObject = null; $('start').textContent = CAM ? 'Connect phone camera' : 'Start camera'; track.haveFace = track.haveShoulders = false; }
-let last = 0;
+function stop() { running = false; overlay.face = overlay.pose = overlay.matrix = null; busy = [false, false]; lastSent = [-Infinity, -Infinity]; workers.forEach(w => w.terminate()); workers = []; if (!CAM) { stream?.getTracks().forEach(t => t.stop()); stream = null; } v.srcObject = null; ox.clearRect(0, 0, ov.width, ov.height); $('start').textContent = CAM ? 'Connect phone camera' : 'Start camera'; track.haveFace = track.haveShoulders = false; }
 function frame(now) {
-  requestAnimationFrame(frame); const dt = last ? Math.min(.1, (now - last) / 1000) : 1 / 60; last = now;
+  requestAnimationFrame(frame);
   if (running && v.readyState >= 2 && v.currentTime !== lastVideo) {
-    lastVideo = v.currentTime; frameN++; const t = Math.round(now);
-    workers.forEach((w, i) => {   // face every frame, shoulders every other frame (the heavier model, and they move slowly)
-      if (busy[i] || (i === 1 && frameN % 2)) return; busy[i] = true;
-      createImageBitmap(v, { resizeWidth: 480, resizeHeight: Math.round(480 * v.videoHeight / v.videoWidth), resizeQuality: 'low' }).then(bm => { if (workers[i] !== w) { bm.close(); return; } w.postMessage({ type: 'frame', bitmap: bm, time: t + i }, [bm]); }).catch(() => { busy[i] = false; });
+    lastVideo = v.currentTime; const t = Math.round(now), rates = [+$('faceRate').value, +$('shoulderRate').value], width = +$('trackingWidth').value;
+    workers.forEach((w, i) => {
+      if (busy[i] || now - lastSent[i] < 1000 / rates[i]) return; busy[i] = true; lastSent[i] = now;
+      createImageBitmap(v, { resizeWidth: width, resizeHeight: Math.round(width * v.videoHeight / v.videoWidth), resizeQuality: 'low' }).then(bm => { if (workers[i] !== w) { bm.close(); return; } w.postMessage({ type: 'frame', bitmap: bm, time: t + i }, [bm]); }).catch(() => { busy[i] = false; });
     });
   }
-  applyPose(dt); applyArms(dt); drawOverlay();
-  if (running && (now | 0) % 6 === 0) $('hud').textContent = `face ${track.haveFace ? 'yes' : 'no'} · shoulders ${track.haveShoulders ? 'yes' : 'no'} · ${Math.round(track.ms)} ms
+  const overlayRate = +$('overlayRate').value;
+  if (overlayRate > 0 && now - lastOverlay >= 1000 / overlayRate) { lastOverlay = now; drawOverlay(); }
+  else if (overlayRate === 0 && lastOverlay !== Infinity) { ox.clearRect(0, 0, ov.width, ov.height); lastOverlay = Infinity; }
+  else if (overlayRate > 0 && lastOverlay === Infinity) lastOverlay = -Infinity;
+  const sceneRate = +$('sceneRate').value;
+  if (now - lastRender < 1000 / sceneRate) return;
+  const dt = lastRender ? Math.min(.1, (now - lastRender) / 1000) : 1 / sceneRate; lastRender = now;
+  applyPose(dt); applyArms(dt);
+  if (running && now - lastHud > 250) { lastHud = now; $('hud').textContent = `face ${track.haveFace ? 'yes' : 'no'} · shoulders ${track.haveShoulders ? 'yes' : 'no'} · ${Math.round(track.ms)} ms · ${track.delegates[0]}/${track.delegates[1]}
 head: yaw ${track.yawDeg.toFixed(0)}° pitch ${track.pitchDeg.toFixed(0)}° roll ${track.rollDeg.toFixed(0)}°
 shoulders: roll ${((track.shoulder.roll - (track.neutralS?.roll || 0)) * 57.3).toFixed(0)}° turn ${((track.shoulder.yaw - (track.neutralS?.yaw || 0)) * 57.3).toFixed(0)}° · body ${view.lock ? 'LOCKED' : 'follows shoulders'}
 yellow = head + shoulder pose · green = face points · red/green/blue = head axes`;
+  }
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
@@ -194,6 +227,9 @@ $('lockBody').onchange = () => { view.lock = $('lockBody').checked; };
 $('turnGain').oninput = () => { view.turn = +$('turnGain').value; $('turnGainV').textContent = view.turn.toFixed(1) + '×'; };
 $('moveGain').oninput = () => { view.move = +$('moveGain').value; $('moveGainV').textContent = view.move.toFixed(1) + '×'; };
 $('neckShare').oninput = () => { view.neck = +$('neckShare').value; $('neckShareV').textContent = Math.round(view.neck * 100) + '%'; };
+$('performancePreset').onchange = () => { if ($('performancePreset').value !== 'custom') applyPerformancePlan($('performancePreset').value); resize(); savePerformance(); };
+for (const id of performanceIds) $(id).oninput = () => { $('performancePreset').value = 'custom'; showPerformanceValue(id); if (id === 'renderScale') resize(); savePerformance(); };
+$('trackerDelegate').onchange = () => { savePerformance(); if (running) status('Processor changed · stop and restart the camera to apply it'); };
 $('phoneCam').onclick = () => { const u = new URL(location.href); u.searchParams.set('cam', ''); location.href = u.href; };
 document.addEventListener('visibilitychange', () => { if (document.hidden && running && !CAM) stop(); });
 if (CAM) { $('start').textContent = 'Connect phone camera'; start(); }
