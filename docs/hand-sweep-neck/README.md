@@ -1,4 +1,4 @@
-# Sweep 2.4.15: whole-hand placement and joint neck-contact calibration
+# Sweep 2.4.16: whole-hand placement and joint neck-contact calibration
 
 ## Three changes
 
@@ -25,3 +25,11 @@ There is no enabled fist-to-fist attachment. Hand-to-hand matching, both collisi
 ## 2.4.15 fingertip proximity controls
 
 Bring nearby fingertips together is an optional persisted toggle, initially off. It restricts candidates to tip-tip pairs between opposite hands and takes priority over general matching. The existing detection range and confirmation duration control activation; the existing side-correction cap controls the residual after ray-depth fitting. A new target gap slider controls the requested contact-point separation (0–10 mm). When tips separate beyond the release threshold (1.5 times activation range), the temporary correction releases. These controls do not alter collision parameters or sweep calibration. Collisions can push a matched pair apart. One best pair is matched per frame, not every finger simultaneously, and skin contact may differ from landmark contact.
+
+## 2.4.16 collision correction, settings tabs and exact tip lock
+
+Between-hand separation now moves the complete compounds onto opposite sides of a separating plane after detecting shell overlap. This prevents a local finger correction from deepening a different piece overlap. It is conservative and can separate hands farther than a detailed concave surface solver. A final pass catches overlap introduced by head correction; subsequent head clearance moves both hands together.
+
+Contact controls have their own Contact detection tab. Tracking & calibration exposes the existing head tracking-loss hold next to the hand hold (default 1000 ms; head range now up to 5000 ms). This holds old observations, not prediction or smoothing.
+
+The yellow-tip toggle now defaults its target gap to zero (existing settings migrate once). It matches the rendered result.points endpoints that draw the yellow markers. A confirmed zero-gap tip match takes priority over between-hand collision separation: that separation is paused while the lock is active, while head clearance translates the pair together. This priority can allow other hand parts to overlap during a tip lock; it is not a simultaneous nonpenetration and exact-contact solver. Separation resumes upon release. Tests cover exact dot-point gap, compound overlap removal and unchanged already-separated shapes; actual-doll geometry check reports no remaining overlap in the constructed overlapping-hands pose. Live poses remain to be tested.

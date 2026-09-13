@@ -33,3 +33,6 @@ const nearby=packet(false,0);nearby.lm=other.map(p=>({...p}));nearby.lm[8]={...l
 assert.equal(new HandContactAssist().update({...tipArgs,right:nearby,rangePercent:2}),null);
 assert.ok(new HandContactAssist().update({...tipArgs,right:nearby,rangePercent:50}),'increasing detection threshold accepts nearby tips');
 console.log('PASS: tip-only matching, adjustable gap, palm rejection, non-index tips and threshold');
+
+const exact=new HandContactAssist().update({...tipArgs,tipGap:0});assert.ok(exact);
+assert.ok(Math.hypot(...exact.pair.a.map((v,i)=>v+exact.A[i]-exact.pair.b[i]-exact.B[i]))<1e-10,'yellow dot to yellow dot must be exact');

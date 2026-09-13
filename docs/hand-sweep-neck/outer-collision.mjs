@@ -1,6 +1,6 @@
 import * as T from 'three';
 import {ConvexGeometry} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/geometries/ConvexGeometry.js';
-import {convexPenetration,frontClearance} from './convex-contact.mjs?v=touch2.4.15-final';
+import {convexPenetration,frontClearance,separateHandShells} from './convex-contact.mjs?v=touch2.4.16-final';
 const groups=['Hand',...['Thumb','Index','Middle','Ring','Pinky'].flatMap(f=>[1,2,3].map(i=>f+i))];
 function hull(points,node){if(points.length<4)return null;const geometry=new ConvexGeometry(points),p=geometry.attributes.position,n=geometry.attributes.normal,vertices=[],normals=[],seen=new Set(),directions=new Set();
  for(let i=0;i<p.count;i++){const v=new T.Vector3().fromBufferAttribute(p,i),key=v.toArray().map(x=>x.toFixed(6)).join(',');if(!seen.has(key)){seen.add(key);vertices.push(v);}const normal=new T.Vector3().fromBufferAttribute(n,i),nk=normal.toArray().map(x=>x.toFixed(3)).join(',');if(!directions.has(nk)){directions.add(nk);normals.push(normal);}}
@@ -25,8 +25,9 @@ export class OuterCollision{
    let moved=false;
    for(const side of (paired&&sides.length===2?[]:sides)){const shells=this.hand[side].map(world);let best=null;for(const a of shells)for(const b of worldHead){const hit=convexPenetration(a,b);if(hit&&(!best||hit.depth>best.depth))best=hit;}
     if(best&&best.depth>.00005){const delta=new T.Vector3().fromArray(best.delta);shift(side,delta);headHits++;moved=true;}}
-   if(enabled.hands&&sides.length===2){const L=this.hand.L.map(world),R=this.hand.R.map(world);let best=null;for(const a of L)for(const b of R){const hit=convexPenetration(a,b);if(hit&&(!best||hit.depth>best.depth))best=hit;}
-    if(best&&best.depth>.00005){const delta=new T.Vector3().fromArray(best.delta).multiplyScalar(.5);shift('L',delta);shift('R',delta.clone().negate());handHits++;moved=true;}}
+   if(enabled.hands&&sides.length===2){const hit=separateHandShells(this.hand.L.map(world),this.hand.R.map(world));
+    if(hit){const delta=new T.Vector3().fromArray(hit.delta).multiplyScalar(.5);shift('L',delta);shift('R',delta.clone().negate());handHits++;moved=true;}}
+
    if(paired&&sides.length===2&&worldHead.length){const z=frontClearance([...this.hand.L.map(world),...this.hand.R.map(world)],worldHead);if(z){const delta=new T.Vector3(0,0,z);shift('L',delta);shift('R',delta);headHits++;moved=true;}}
    if(!moved)break;
   }
@@ -35,6 +36,11 @@ export class OuterCollision{
   if(worldHead.length){
    const batches=paired&&sides.length===2?[sides]:sides.map(s=>[s]);
    for(const batch of batches){const z=frontClearance(batch.flatMap(s=>this.hand[s].map(world)),worldHead);if(z){for(const side of batch)shift(side,new T.Vector3(0,0,z));headHits++;}}
+  }
+  // Head correction can introduce a new hand overlap. Resolve it once for
+  // the full compounds, then move both forward together if the head needs room.
+  if(enabled.hands&&sides.length===2){const hit=separateHandShells(this.hand.L.map(world),this.hand.R.map(world));if(hit){const d=new T.Vector3().fromArray(hit.delta).multiplyScalar(.5);shift('L',d);shift('R',d.clone().negate());handHits++;}
+   if(worldHead.length){const z=frontClearance([...this.hand.L.map(world),...this.hand.R.map(world)],worldHead);if(z){for(const side of sides)shift(side,new T.Vector3(0,0,z));headHits++;}}
   }
   const remaining=worldHead.length?sides.reduce((n,s)=>n+this.hand[s].map(world).filter(a=>worldHead.some(b=>convexPenetration(a,b))).length,0):0;
   this.last={head:headHits,hands:handHits,remaining};return this.last;

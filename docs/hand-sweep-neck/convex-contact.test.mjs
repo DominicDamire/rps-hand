@@ -17,3 +17,11 @@ assert.equal(frontClearance([boxAt(.3,0,-1,.025)],[obstacle]),0,'beside head sta
 assert.equal(frontClearance([boxAt(0,.3,-1,.025)],[obstacle]),0,'above head stays unshifted');
 const touchingPair=[boxAt(-.03,0,-.8,.025),boxAt(.03,0,-.8,.025)],pairShift=frontClearance(touchingPair,[obstacle]);assert.ok(pairShift>0);assert.equal((touchingPair[1].vertices[0][2]+pairShift)-(touchingPair[0].vertices[0][2]+pairShift),0,'same shift preserves contacting pair');
 console.log('PASS: front barrier catches through-head jumps, leaves clear front/side/top poses alone, and preserves paired translation');
+
+const {separateHandShells}=await import('./convex-contact.mjs');
+const compoundsA=[boxAt(-.01,0,0,.05),boxAt(.06,.04,0,.025)],compoundsB=[boxAt(.02,0,0,.05),boxAt(-.05,.04,0,.025)];
+const sep=separateHandShells(compoundsA,compoundsB);assert.ok(sep);
+const translate=(h,d)=>({...h,vertices:h.vertices.map(p=>p.map((v,k)=>v+d[k]))});
+for(const a of compoundsA)for(const b of compoundsB)assert.equal(convexPenetration(translate(a,sep.delta.map(v=>v/2)),translate(b,sep.delta.map(v=>-v/2))),null,'all compound pieces must separate together');
+assert.equal(separateHandShells([boxAt(-1,0,0,.05)],[boxAt(1,0,0,.05)]),null);
+console.log('PASS: whole-hand compound separation does not introduce another piece overlap');

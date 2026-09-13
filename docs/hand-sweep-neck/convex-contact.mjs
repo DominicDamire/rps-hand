@@ -60,3 +60,16 @@ export function frontClearance(shapes,obstacles){
  }
  return clearance;
 }
+
+// Once any exterior pieces intersect, choose a separating plane for the
+// complete compounds. A local finger push must not deepen a second overlap.
+export function separateHandShells(A,B){
+ if(!A.some(a=>B.some(b=>convexPenetration(a,b))))return null;
+ const bounds=S=>[0,1,2].map(k=>{let lo=Infinity,hi=-Infinity;for(const h of S)for(const p of h.vertices){lo=Math.min(lo,p[k]);hi=Math.max(hi,p[k]);}return [lo,hi];});
+ const a=bounds(A),b=bounds(B);let best=null;
+ for(let k=0;k<3;k++){const sign=a[k][0]+a[k][1]>=b[k][0]+b[k][1]?1:-1;
+  const distance=(sign>0?b[k][1]-a[k][0]:a[k][1]-b[k][0])+.0003;
+  if(distance>0&&(!best||distance<best.distance)){const delta=[0,0,0];delta[k]=sign*distance;best={delta,distance};}
+ }
+ return best;
+}
