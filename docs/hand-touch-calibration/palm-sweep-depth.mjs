@@ -1,7 +1,6 @@
-// One translation estimator: fixed sweep scale / foreshortening-corrected palm span.
+// One translation estimator: fixed mesh/camera scale / rotation-corrected palm span.
 // Palm orientation only affects the projected-size correction; never a learned depth term.
 export const PALM_EDGES=[[0,5],[0,9],[0,13],[0,17],[5,17]];
-const median=a=>[...a].sort((a,b)=>a-b)[Math.floor(a.length/2)];
 const xyz=p=>Array.isArray(p)?p:[p?.x,p?.y,p?.z];
 const sub=(a,b)=>a.map((v,i)=>v-b[i]);
 export function palmObservation(lm,points,aspect=1,focal=1){
@@ -21,16 +20,7 @@ export function palmObservation(lm,points,aspect=1,focal=1){
   aa+=ex*ex+ey*ey;ab+=ex*ox+ey*oy;count++;
  }
  if(aa<1e-7||ab<=0||count<2)return null;
- return {size:ab/aa,length,facing,reliable:facing>=.18&&count>=3};
-}
-export function fitPalmSweep(rows){
- const samples=rows.filter(r=>r.observation?.reliable&&r.depth>.04&&r.depth<4&&Number.isFinite(r.depth));
- if(samples.length<12)return null;
- const sizes=samples.map(r=>r.observation.size).sort((a,b)=>a-b);
- if(sizes[Math.floor(sizes.length*.9)]<sizes[Math.floor(sizes.length*.1)]*1.05)return null;
- const scale=median(samples.map(r=>r.observation.size*r.depth));
- const depths=samples.map(r=>r.depth).sort((a,b)=>a-b),neckDepth=median(depths.slice(Math.floor(depths.length*.9)));
- return {kind:'palm-sweep',scale,neckDepth,farDepth:neckDepth+.30,frames:samples.length};
+ return {size:ab/aa,length,scale:length*focal,facing,reliable:facing>=.18&&count>=3};
 }
 export class PalmSweepDepth {
  constructor(){this.reset();}
@@ -40,20 +30,13 @@ export class PalmSweepDepth {
   const far=fit?.farDepth>0?fit.farDepth:4;
   const bound=d=>Math.max(.04,Math.min(far,d));
   // An edge-on/occluded palm does not provide enough evidence for a new depth.
-  if(!observation?.reliable||!(fit?.scale>0)){
+  if(!observation?.reliable||!(observation.scale>0)){
    const depth=bound(state?.depth??fallback);this.states[side]={depth,time,held:true};return depth;
   }
-  const target=fit.scale/observation.size;
+  // Scale belongs to the fixed mesh and the current camera projection.
+  // A captured coefficient must never make the projected palm larger/smaller.
+  const target=observation.scale/observation.size;
   if(!Number.isFinite(target)||target<=0)return bound(state?.depth??fallback);
   const depth=bound(target);this.states[side]={depth,time,held:false};return depth;
  }
-}
-
-export function fitOneHandPalmSweep(early,late,aspect=1){
- const start=early.map(s=>palmObservation(s.landmarks,s.points,aspect,s.focal)).filter(o=>o?.reliable);
- const end=late.map(s=>({observation:palmObservation(s.landmarks,s.points,aspect,s.focal),depth:s.face?.neckDepth})).filter(s=>s.observation?.reliable&&s.depth>.04&&s.depth<4);
- if(start.length<3||end.length<3)return null;
- const nearSize=median(start.map(o=>o.size)),farSize=median(end.map(s=>s.observation.size)),neckDepth=median(end.map(s=>s.depth));
- if(nearSize<=farSize*1.05)return null;
- return {kind:'palm-sweep',scale:neckDepth*farSize,neckDepth,farDepth:neckDepth+.30,frames:early.length+late.length};
 }

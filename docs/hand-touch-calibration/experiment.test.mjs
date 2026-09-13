@@ -1,16 +1,44 @@
-import assert from 'node:assert/strict';import {fitSweep,sweepDepth} from './experiment.mjs';
-const lm=scale=>Array.from({length:21},(_,i)=>({x:.4+(i%5)*.02*scale,y:.4+Math.floor(i/5)*.02*scale,z:0}));
-const samples=Array.from({length:80},(_,i)=>({elapsed:i*100,landmarks:lm(i<20?2:i>=60?1:1.5),face:{raw:.7,depth:.7,neckDepth:.65,handDepth:.3}}));
-const fit=fitSweep(samples,1);assert.ok(fit);assert.ok(Math.abs(sweepDepth(lm(2),1,fit,.5)-.3)<1e-9,'starting position is retained exactly');assert.ok(Math.abs(sweepDepth(lm(1),1,fit,.5)-.65)<1e-9,'neck endpoint maps to captured plane');assert.ok(sweepDepth(lm(1.5),1,fit,.5)>.3&&sweepDepth(lm(1.5),1,fit,.5)<.65);const saved=JSON.stringify(fit);sweepDepth(lm(.8),1,fit,.5);assert.equal(JSON.stringify(fit),saved,'no live refitting');assert.equal(fitSweep([],1),null);assert.equal(fitSweep(samples.map(s=>({...s,landmarks:lm(1)})),1),null);
-console.log('PASS: one-hand two-endpoint map preserves starting distance, reaches neck plane, interpolates continuously and never refits live');
-
-const moving=samples.map((s,i)=>({...s,landmarks:lm(i<5?2:i>=75?1:1.5)}));
-const endpointFit=fitSweep(moving,1);assert.ok(endpointFit);
-assert.ok(Math.abs(sweepDepth(lm(2),1,endpointFit,.5)-.3)<1e-9,'first half-second anchors start, not two seconds of moving hand');
-assert.ok(Math.abs(sweepDepth(lm(1),1,endpointFit,.5)-.65)<1e-9,'last half-second anchors neck endpoint');
-assert.equal(fitSweep(moving.filter(s=>s.elapsed>=1000),1),null,'missing real start cannot silently use mid-sweep samples');
-console.log('PASS: endpoint windows exclude middle motion');
-
-const prep=Array.from({length:5},(_,i)=>({...moving[0],elapsed:-500+i*100}));
-const dropout=[...prep,...moving.filter(s=>s.elapsed>=1000&&s.elapsed<7700).map(s=>s.elapsed>2000&&s.elapsed<6000?{...s,face:null}:s)];
-assert.ok(fitSweep(dropout,1),'countdown anchor and last available neck frames survive brief endpoint gaps and missing face mid-sweep');
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {fitCrownSweep,rearPlaneCorrection} from './crown-sweep.mjs';
+import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs';
+import {cameraFrame} from './projection.mjs';
+const report=JSON.parse(readFileSync(new URL('../doll-report.json',import.meta.url),'utf8'));
+const sub=(a,b)=>a.map((v,i)=>v-b[i]),dot=(a,b)=>a.reduce((v,x,i)=>v+x*b[i],0),unit=a=>a.map(v=>v/Math.hypot(...a)),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const ids=[0,5,9,13,17];
+function pose({side='L',depth=.6,yaw=0,roll=0,aspect=9/16,viewAspect=16/9,centreY=.5,centreX=.5}={}){
+ const at=n=>report.joints[side+n].rest,w=at('Hand'),y=unit(sub(at('Middle1'),w));let x=sub(at('Index1'),at('Pinky1'));x=unit(x.map((v,i)=>v-y[i]*dot(x,y)));const z=cross(x,y);
+ const rest=[w];for(const finger of ['Thumb','Index','Middle','Ring','Pinky']){for(let k=1;k<=3;k++)rest.push(at(finger+k));const tip=sub(at(finger+'3'),at(finger+'2'));rest.push(at(finger+'3').map((v,i)=>v+tip[i]*.7));}
+ const p=rest.map(r=>{const a=sub(r,w),X=dot(a,x),Y=dot(a,y),Z=dot(a,z),u=Math.cos(yaw)*X+Math.sin(yaw)*Z,v=Y,t=-Math.sin(yaw)*X+Math.cos(yaw)*Z;return [Math.cos(roll)*u-Math.sin(roll)*v,Math.sin(roll)*u+Math.cos(roll)*v,t-depth];});
+ const focal=1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,viewAspect).height),mean=fn=>ids.reduce((a,i)=>a+fn(p[i])/5,0),inv=mean(q=>1/-q[2]);
+ const dx=((centreX-.5)*aspect/focal-mean(q=>q[0]/-q[2]))/inv,dy=((.5-centreY)/focal-mean(q=>q[1]/-q[2]))/inv;
+ for(const q of p){q[0]+=dx;q[1]+=dy;}
+ const landmarks=p.map(([X,Y,Z])=>({x:.5+focal*X/-Z/aspect,y:.5-focal*Y/-Z,z:0}));
+ return {points:p,landmarks,focal,aspect,face:{top:.25,bottom:.65,left:.33,right:.67}};
+}
+let checks=0,maxError=0;const tracker=new PalmSweepDepth();
+for(const side of ['L','R'])for(const aspect of [9/16,4/3,16/9])for(const viewAspect of [16/9,9/16])for(const yaw of [0,.5,1,2.7,Math.PI])for(const roll of [0,Math.PI/2,Math.PI])for(const depth of [.3,.6,1.2]){
+ const s=pose({side,aspect,viewAspect,yaw,roll,depth,centreX:.7,centreY:.3});
+ // Recreate the bad placement with the correct fixed mesh, then recover depth.
+ const p=s.points.map(q=>q.map((v,k)=>v+s.points[0][k]*(.8122656356-1)));
+ const o=palmObservation(s.landmarks,p,aspect,s.focal);assert.ok(o.reliable);
+ const got=tracker.update(side,o,{scale:.09253574734794362,farDepth:4},.5,checks++);
+ maxError=Math.max(maxError,Math.abs(got-depth));assert.ok(Math.abs(got-depth)<1e-9);
+ const base=-p[0][2],moved=p.map(q=>q.map((v,k)=>v+p[0][k]*(got-base)/base));
+ for(const i of ids){const q=moved[i],actual={x:.5+s.focal*q[0]/-q[2]/aspect,y:.5-s.focal*q[1]/-q[2]};assert.ok(Math.hypot(actual.x-s.landmarks[i].x,actual.y-s.landmarks[i].y)<1e-9,'wrist and four MCPs must reproject without the old 23% oversize');}
+}
+const samples=Array.from({length:90},(_,i)=>{const t=Math.max(0,Math.min(1,(i-10)/69));return {...pose({depth:.35+.45*t,centreY:.75-.55*t}),elapsed:(i-10)*100,label:'Left'};});
+const {fit,error}=fitCrownSweep(samples);assert.ok(fit,error);assert.equal(fit.kind,'crown-sweep');assert.equal(fit.scale,undefined,'capture must not introduce an independently fitted scale');assert.ok(fit.endDepth>.79&&fit.endDepth<.81);assert.ok(fit.farDepth<.9,'no extra 30 cm beyond endpoint');
+const farPoints=pose({depth:1.2}).points,correction=rearPlaneCorrection(farPoints,fit.farDepth);assert.ok(correction>0);assert.ok(Math.abs(Math.max(...farPoints.map(p=>-p[2]-correction))-fit.farDepth)<1e-12);
+assert.equal(rearPlaneCorrection(farPoints,null),0);
+const saved=JSON.stringify(fit);
+for(const side of ['L','R']){const s=pose({side,depth:.5});assert.ok(Math.abs(new PalmSweepDepth().update(side,palmObservation(s.landmarks,s.points,s.aspect,s.focal),fit,.4,1)-.5)<1e-9);}
+assert.equal(JSON.stringify(fit),saved,'live movement never refits calibration');
+assert.match(fitCrownSweep(samples.map(s=>({...s,face:null}))).error,/face visible/);
+assert.match(fitCrownSweep(samples.map(s=>({...pose({depth:.4,centreY:.5}),elapsed:s.elapsed}))).error,/farther/);
+assert.match(fitCrownSweep(samples.map(s=>({...s,landmarks:s.landmarks.map(p=>({...p,y:p.y+(s.elapsed>=7000?.55:0)}))}))).error,/upward/);
+assert.match(fitCrownSweep(samples.filter(s=>s.elapsed<7000)).error,/endpoints/);
+assert.match(fitCrownSweep(samples.filter(s=>s.elapsed>=1000)).error,/endpoints/);
+assert.match(fitCrownSweep(samples.map(s=>s.elapsed>=7000?{...s,aspect:4/3}:s)).error,/framing changed/);
+console.log(`PASS: ${checks} real-doll geometry cases, upright/sideways/flipped, portrait/landscape, max depth error ${maxError}; saved scale regression and wrist/MCP reprojection`);
+console.log('PASS: low-to-head endpoint, both hands, no free scale, no extra rear allowance, missing face/start/end, stationary path, framing change and fixed calibration');
