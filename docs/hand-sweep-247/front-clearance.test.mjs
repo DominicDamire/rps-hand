@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {frontClearance} from './front-clearance.mjs';
+const box={min:{x:-.1,y:-.2,z:-.5},max:{x:.1,y:.2,z:-.3}};
+const p=[{x:0,y:0,z:-.6},{x:.04,y:.05,z:-.4}];const dz=frontClearance(p,box,.05);
+assert(Math.abs(dz-.35)<1e-9);assert(p.every(v=>v.z+dz>=box.max.z+.05-1e-9));
+assert.equal(frontClearance([{x:2,y:0,z:-.6}],box),0);
+assert.equal(frontClearance([{x:0,y:0,z:-.1}],box),0);
+const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+assert(Math.abs(distance(...p)-distance(...p.map(v=>({...v,z:v.z+dz}))))<1e-9);
+console.log('PASS whole-hand clearance, separated hand, already-front hand, rigid lengths');
