@@ -1,13 +1,13 @@
-import {fitWholeHand} from './whole-hand-placement.mjs?v=touch2.4.14-final';
-import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=touch2.4.14-final';
-import {rearPlaneCorrection} from './neck-sweep.mjs?v=touch2.4.14-final';
-import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=touch2.4.14-final';
+import {fitWholeHand} from './whole-hand-placement.mjs?v=touch2.4.15-final';
+import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=touch2.4.15-final';
+import {rearPlaneCorrection} from './neck-sweep.mjs?v=touch2.4.15-final';
+import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=touch2.4.15-final';
 const palmDepth=new PalmSweepDepth();
-import {TrackingJitter} from './tracking-jitter.mjs?v=touch2.4.14-final';
+import {TrackingJitter} from './tracking-jitter.mjs?v=touch2.4.15-final';
 const trackingJitter=new TrackingJitter();
-import {OuterCollision} from './outer-collision.mjs?v=touch2.4.14-final';
-import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.4.14-final';
-import {installExperiment} from './experiment.mjs?v=touch2.4.14-final';
+import {OuterCollision} from './outer-collision.mjs?v=touch2.4.15-final';
+import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.4.15-final';
+import {installExperiment} from './experiment.mjs?v=touch2.4.15-final';
 let depthExperiment=null;
 import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=alien18.4';
 import {palmSize} from './palm-distance.mjs?v=alien13';
@@ -15,10 +15,10 @@ import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
-import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.14-final';
-import {CombinedHead} from './head-model.mjs?v=touch2.4.14-final';
-import {directDriver} from './direct.mjs?v=touch2.4.14-final';
-import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.14-final';
+import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.15-final';
+import {CombinedHead} from './head-model.mjs?v=touch2.4.15-final';
+import {directDriver} from './direct.mjs?v=touch2.4.15-final';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.15-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -104,11 +104,11 @@ const interactionShifts={L:new THREE.Vector3(),R:new THREE.Vector3()};
 function applyHandInteractions(now){
  interactionShifts.L.set(0,0,0);interactionShifts.R.set(0,0,0);
  const options=getCombinedOptions(),status=$('handContactStatus');
- if(!options.handsTouch&&!options.outerCollision&&!options.headCollision){contactAssist.reset();if(status.textContent!=='Contact assistance and outer collisions off.')status.textContent='Contact assistance and outer collisions off.';return;}
+ if(!options.nearbyTips&&!options.handsTouch&&!options.outerCollision&&!options.headCollision){contactAssist.reset();if(status.textContent!=='Contact assistance and outer collisions off.')status.textContent='Contact assistance and outer collisions off.';return;}
  if(depthExperiment?.recording){contactAssist.reset();status.textContent='Recording: contact and collision corrections paused.';return;}
  const packet=label=>{const h=allHands.find(h=>h.label===label),r=renderedHands[label==='Left'?'L':'R'];return h&&r?{...h,seen:h.seen,lm:h.landmarks,points:r.result.points.map(p=>p.toArray())}:null;};
  const left=packet('Left'),right=packet('Right');
- const fit=contactAssist.update({left,right,aspect:captureAspect,now,enabled:options.handsTouch&&!editing,rangePercent:options.touchRange,confirmMs:options.touchConfirm,maxSideChange:options.touchSideLimit/100,indexOnly:!!$('indexContactOnly')?.checked,assumeIndexContact:false});
+ const fit=contactAssist.update({left,right,aspect:captureAspect,now,enabled:(options.handsTouch||options.nearbyTips)&&!editing,rangePercent:options.touchRange,confirmMs:options.touchConfirm,maxSideChange:options.touchSideLimit/100,indexOnly:!options.nearbyTips&&!!$('indexContactOnly')?.checked,tipsOnly:options.nearbyTips,tipGap:options.tipTargetGap/1000,assumeIndexContact:false});
  if(fit){shiftRenderedHand('L',new THREE.Vector3().fromArray(fit.A));shiftRenderedHand('R',new THREE.Vector3().fromArray(fit.B));}
  if(options.outerCollision||options.headCollision){
   const visible={L:!!left&&rig.parts.some(m=>m.name.startsWith('LHand')&&m.visible),R:!!right&&rig.parts.some(m=>m.name.startsWith('RHand')&&m.visible)};
@@ -344,7 +344,7 @@ Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
 Scene: ${measuredScene} measured FPS (target ${o.sceneRate})${Object.keys(s.errors||{}).length?' · '+JSON.stringify(s.errors):''}`;}
 window.combinedLab={version:19,get head(){return combined;},get metrics(){return trackingStats;},get handResult(){return directResult;},get scene(){return scene;}};
-notice('Sweep 2.4.14 ready. Record one front-to-neck sweep; tracking runs on the PC.');
+notice('Sweep 2.4.15 ready. Record one front-to-neck sweep; tracking runs on the PC.');
 combined.ready.then(()=>{if(combined.error)notice('Head model failed to load: '+combined.error);});
 
 const fixtureName=new URLSearchParams(location.search).get('fixture');
@@ -506,9 +506,9 @@ depthExperiment=installExperiment({container:$('directSettings'),getHead:()=>com
 $('relaxedPalm').checked=false;$('contactThreshold').value=0;$('contactThreshold').nextElementSibling.value=0;
 
 const handContactStatus=document.createElement('p');handContactStatus.id='handContactStatus';handContactStatus.setAttribute('role','status');$('outerCollision').closest('label').after(handContactStatus);
-const contactPanel=document.createElement('section');contactPanel.style.display='block';contactPanel.innerHTML='<h2>Optional contact</h2><p>Contact matching and collisions start off so you can judge the calibrated positioning directly. Touching finger lines close the model gap after confirmation; separating the lines releases it. When enabled, head collision blocks the hands and can push an overlapping hand. These contact corrections do not change the saved sweep. Finger joints within one hand use bending limits, not self-collision.</p>';
+const contactPanel=document.createElement('section');contactPanel.style.display='block';contactPanel.innerHTML='<h2>Optional contact</h2><p>The three detection/correction settings below control contact matching only, never collisions. Fingertip-only matching takes priority over general hand contact when both are enabled. It selects nearby tips on opposite hands and releases them when their tracking points separate. Collision toggles separately prevent model overlap and can override the requested gap. Touching finger lines close the model gap after confirmation; separating the lines releases it. When enabled, head collision blocks the hands and can push an overlapping hand. These contact corrections do not change the saved sweep. Finger joints within one hand use bending limits, not self-collision.</p>';
 contactPanel.append($('handsTouch').closest('label'),$('outerCollision').closest('label'),$('headCollision').closest('label'),handContactStatus);$('touchProgress').closest('section').after(contactPanel);
-for(const id of ['touchRange','touchConfirm','touchSideLimit']){const label=$(id).closest('label');label.style.display='block';contactPanel.append(label);}
+for(const id of ['nearbyTips','tipTargetGap','touchRange','touchConfirm','touchSideLimit']){const label=$(id).closest('label');label.style.display='block';contactPanel.append(label);}
 if(wallTest){wallTest.style.display='block';contactPanel.after(wallTest);}
 
 const indexLabel=document.createElement('label');indexLabel.style.display='block';indexLabel.innerHTML='<input id="indexContactOnly" type="checkbox"> Match index fingertips only';contactPanel.prepend(indexLabel);

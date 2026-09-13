@@ -1,4 +1,4 @@
-# Sweep 2.4.14: whole-hand placement and joint neck-contact calibration
+# Sweep 2.4.15: whole-hand placement and joint neck-contact calibration
 
 ## Three changes
 
@@ -21,3 +21,7 @@ There is no enabled fist-to-fist attachment. Hand-to-hand matching, both collisi
 ## Verification
 
 540 ideal actual-doll palm projections, 48 whole-hand XYZ recovery cases, both-hand scale and projection invariance, surface-contact endpoint equations, capture timing, invalid observations, failed recapture and reset are tested. Actual-model browser checks cover 30 open/curled hand cases across changing calibration scales with no accumulated joint drift or projection change; every case found a palm mesh surface. The prior full-bust transform test verifies coherent head/neck/root placement and reset. These are software/geometry checks, not proof of perfect live depth or contact. Private recordings and QA data are excluded from publication.
+
+## 2.4.15 fingertip proximity controls
+
+Bring nearby fingertips together is an optional persisted toggle, initially off. It restricts candidates to tip-tip pairs between opposite hands and takes priority over general matching. The existing detection range and confirmation duration control activation; the existing side-correction cap controls the residual after ray-depth fitting. A new target gap slider controls the requested contact-point separation (0–10 mm). When tips separate beyond the release threshold (1.5 times activation range), the temporary correction releases. These controls do not alter collision parameters or sweep calibration. Collisions can push a matched pair apart. One best pair is matched per frame, not every finger simultaneously, and skin contact may differ from landmark contact.

@@ -7,14 +7,14 @@ export function contactSamples(lm,points){
  for(let f=0;f<5;f++)for(let k=1;k<4;k++){const a=1+4*f+k-1,b=a+1;samples.push({image:[(lm[a].x+lm[b].x)/2,(lm[a].y+lm[b].y)/2],point:points[a].map((v,i)=>(v+points[b][i])/2),tip:false,key:a+'-'+b});}
  samples.push({image:[(lm[0].x+lm[9].x)/2,(lm[0].y+lm[9].y)/2],point:points[0].map((v,i)=>(v+points[9][i])/2),tip:false,key:'palm'});return samples;
 }
-export function findTouchPair(left,right,aspect=1,previousKey=null,{rangePercent=18,indexOnly=false,assumeIndexContact=false}={}){
+export function findTouchPair(left,right,aspect=1,previousKey=null,{rangePercent=18,indexOnly=false,tipsOnly=false,tipGap=.001,assumeIndexContact=false}={}){
  const size=Math.min(imagePalmSize(left.lm,aspect)||0,imagePalmSize(right.lm,aspect)||0);
  if(size<=0)return null;const threshold=size*Math.max(0,Math.min(50,rangePercent))/100,A=contactSamples(left.lm,left.points),B=contactSamples(right.lm,right.points);let best=null;
  if(indexOnly){const a=A[8],b=B[8],gap=Math.hypot((a.image[0]-b.image[0])*aspect,a.image[1]-b.image[1]);return (assumeIndexContact||gap<=threshold*(previousKey==='8:8'?1.5:1))?{a:a.point,b:b.point,key:'8:8',score:gap,gap,surfaceGap:.001}:null;}
- for(const a of A)for(const b of B){if(!a.tip&&!b.tip&&!(a.key==='palm'&&b.key==='palm'))continue;
+ for(const a of A)for(const b of B){if(tipsOnly&&(!a.tip||!b.tip))continue;if(!a.tip&&!b.tip&&!(a.key==='palm'&&b.key==='palm'))continue;
   const gap=Math.hypot((a.image[0]-b.image[0])*aspect,a.image[1]-b.image[1]),key=a.key+':'+b.key;
   if(gap>threshold*(key===previousKey?1.5:1))continue;
-  const score=gap*(a.tip&&b.tip?.8:1),candidate={a:a.point,b:b.point,key,score,gap,surfaceGap:a.tip&&b.tip?.001:.006};if(key===previousKey)return candidate;if(!best||score<best.score)best=candidate;
+  const score=gap*(a.tip&&b.tip?.8:1),candidate={a:a.point,b:b.point,key,score,gap,surfaceGap:a.tip&&b.tip?tipGap:.006};if(key===previousKey)return candidate;if(!best||score<best.score)best=candidate;
  }return best;
 }
 export function solveTouchDepth(a,b,rootA,rootB,{maxSideChange=.035,surfaceGap=.001}={}){

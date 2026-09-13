@@ -21,3 +21,15 @@ const declared=new HandContactAssist(),declaredArgs={left:packet(true,0),right:{
 assert.ok(declared.update(declaredArgs),'declared touching recording closes on the initial frame');
 assert.equal(declared.update({...declaredArgs,now:400}),null,'declared contact cannot resurrect stale tracking');
 assert.equal(declared.update({...declaredArgs,enabled:false}),null,'contact switch still disables declared recording correction');
+
+const tipArgs={left:packet(true,0),right:packet(false,0),now:0,enabled:true,confirmMs:0,tipsOnly:true,tipGap:.004};
+const tipFit=new HandContactAssist().update(tipArgs);assert.ok(tipFit);assert.equal(tipFit.key,'8:8');assert.equal(tipFit.pair.surfaceGap,.004);
+const distance=Math.hypot(...tipFit.pair.a.map((v,i)=>v+tipFit.A[i]-tipFit.pair.b[i]-tipFit.B[i]));assert.ok(distance<=.004001);
+const palmOnly=packet(false,0);palmOnly.lm=other.map(p=>({...p}));palmOnly.lm[8]={...other[8],x:.9};palmOnly.lm[0]={...lm[0]};palmOnly.lm[9]={...lm[9]};
+assert.equal(new HandContactAssist().update({...tipArgs,right:palmOnly}),null,'fingertip-only mode must reject palm and non-tip proximity');
+const middle=packet(false,0);middle.lm=other.map(p=>({...p}));middle.lm[8]={x:.9,y:.9};middle.lm[12]={...lm[16]};
+assert.ok(new HandContactAssist().update({...tipArgs,right:middle}),'middle/ring tips work, not just indices');
+const nearby=packet(false,0);nearby.lm=other.map(p=>({...p}));nearby.lm[8]={...lm[8],x:lm[8].x+.005};
+assert.equal(new HandContactAssist().update({...tipArgs,right:nearby,rangePercent:2}),null);
+assert.ok(new HandContactAssist().update({...tipArgs,right:nearby,rangePercent:50}),'increasing detection threshold accepts nearby tips');
+console.log('PASS: tip-only matching, adjustable gap, palm rejection, non-index tips and threshold');
