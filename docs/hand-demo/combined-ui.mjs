@@ -71,7 +71,7 @@ export function installCombinedUI(){
  $('shoulderRate').value=20;$('shoulderRate').nextElementSibling.value=20;$('faceRate').value=20;$('faceRate').nextElementSibling.value=20;$('lockBody').checked=false;$('neckShare').value=.45;$('neckShare').nextElementSibling.value=.45;
  $('headSize').value=1.2;$('headSize').nextElementSibling.value=1.2;
  for(const [id,value] of Object.entries({demoJitter:0,depthSmooth:0,headSmooth:0,turnGain:1,moveGain:1,neckShare:.45,headSize:1.2,faceOffset:0})){$(id).value=value;$(id).nextElementSibling.value=value;}
- document.querySelector('header b').textContent='HANDS + ALIEN HEAD · 17 · SEPARATE TRACKERS';
+ document.querySelector('header b').textContent='HANDS + ALIEN HEAD · 18 · SIZE + BACK WALL';
  document.querySelector('header span').textContent='Fixed-size hands · alien head, neck and shoulders';
  for(const id of ['demoGrip','demoContact','demoReach','demoSide','demoPadding']){$(id).value=0;$(id).nextElementSibling.value=0;$(id).closest('label').style.display='none';}
  for(const id of ['demoMatch','demoHeadMatch'])$(id).closest('label').style.display='none';
