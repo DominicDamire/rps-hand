@@ -101,3 +101,14 @@ Depth uses the fixed model wrist-to-middle-MCP length times the current camera f
 Manual hand-depth/height offsets are zero and hidden in this version. Existing finger constraints and Reduce tracking shake remain. Optional contact matching and collisions remain available but start off and are bypassed during capture. The captured plane constrains joint centres, not every outer skin vertex; outer head/hand collision is a separate option.
 
 Verification: 540 synthetic projections using the actual doll palm coordinates, both hands, three image aspects, two viewport aspects, three depths, five yaw angles and three rolls. Injecting the old depth-scale error and applying the new estimator restores wrist/MCP reprojection to numerical precision. Another 96 rotation/depth cases cover edge-on hold/recovery and observation caching. Tests also exercise the actual capture button/observe/timer path, five-second preparation, eight-second deadline, successful activation, missing endpoint/face, wrong motion/framing, preserving a previous capture on failure, reset, fixed rear boundary and shared behavior. These are geometry and software checks, not measured accuracy of the user's new phone sweep.
+
+
+## Sweep 2.4.9: restore front-to-neck capture
+
+Replaces the low-to-crown capture with the normal single-hand sweep: hold an extended open hand, palm facing the user, for the five-second countdown; move back to the bottom of the neck over eight seconds, one way, and hold the last second. There is no upward-motion requirement or crown-position gate. Face visibility remains an endpoint quality check, not proof of neck contact. Restores the neck reference plus 0.30 model-metre rear allowance. Both hands share the fixed reference.
+
+The 2.4.8 mesh/camera scale correction, fixed joint dimensions, finger limits, tracking-shake filter and optional contact controls are retained. No independent scale coefficient is refitted. The old 0.0925 preset is not restored.
+
+Assume the phone leans back so the camera looks upward by 10 degrees. Tracking and mirror rendering remain in camera space. Only the rear plane uses the corresponding upright-room depth, `-y*sin(10°)-z*cos(10°)`. The endpoint is transformed with the same convention, and plane corrections translate along the wrist image ray. The raw camera-Z clamp is disabled for this tilted plane to avoid double limiting. This is an assumed orientation, not measured phone tilt, camera intrinsics calibration or a new size gradient.
+
+Tests retain the 540 actual-doll projection cases and 96 estimator cases, and update the capture UI/timer tests for a sweep with no vertical displacement. Added high/low-frame rear-plane checks, wrist image-ray preservation, absence of a second camera-Z clamp, and a camera-to-room rotation check across heights. Browser verification confirms the new instructions and button. No changes to `direct.mjs` or the finger-constraint modules.

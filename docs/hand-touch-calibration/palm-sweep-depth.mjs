@@ -27,7 +27,8 @@ export class PalmSweepDepth {
  reset(){this.states={};}
  update(side,observation,fit,fallback,time=0){
   let state=this.states[side];if(state&&time<state.time)state=null;if(state&&state.time===time)return state.depth;
-  const far=fit?.farDepth>0?fit.farDepth:4;
+  // Tilted rear planes are enforced after placement, along the image ray.
+  const far=fit?.farDepth>0&&!fit.phoneTilt?fit.farDepth:4;
   const bound=d=>Math.max(.04,Math.min(far,d));
   // An edge-on/occluded palm does not provide enough evidence for a new depth.
   if(!observation?.reliable||!(observation.scale>0)){

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {fitCrownSweep,rearPlaneCorrection} from './crown-sweep.mjs';
+import {fitNeckSweep,rearPlaneCorrection,roomDepth} from './neck-sweep.mjs';
 import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs';
 import {cameraFrame} from './projection.mjs';
 const report=JSON.parse(readFileSync(new URL('../doll-report.json',import.meta.url),'utf8'));
@@ -27,18 +27,33 @@ for(const side of ['L','R'])for(const aspect of [9/16,4/3,16/9])for(const viewAs
  const base=-p[0][2],moved=p.map(q=>q.map((v,k)=>v+p[0][k]*(got-base)/base));
  for(const i of ids){const q=moved[i],actual={x:.5+s.focal*q[0]/-q[2]/aspect,y:.5-s.focal*q[1]/-q[2]};assert.ok(Math.hypot(actual.x-s.landmarks[i].x,actual.y-s.landmarks[i].y)<1e-9,'wrist and four MCPs must reproject without the old 23% oversize');}
 }
-const samples=Array.from({length:90},(_,i)=>{const t=Math.max(0,Math.min(1,(i-10)/69));return {...pose({depth:.35+.45*t,centreY:.75-.55*t}),elapsed:(i-10)*100,label:'Left'};});
-const {fit,error}=fitCrownSweep(samples);assert.ok(fit,error);assert.equal(fit.kind,'crown-sweep');assert.equal(fit.scale,undefined,'capture must not introduce an independently fitted scale');assert.ok(fit.endDepth>.79&&fit.endDepth<.81);assert.ok(fit.farDepth<.9,'no extra 30 cm beyond endpoint');
-const farPoints=pose({depth:1.2}).points,correction=rearPlaneCorrection(farPoints,fit.farDepth);assert.ok(correction>0);assert.ok(Math.abs(Math.max(...farPoints.map(p=>-p[2]-correction))-fit.farDepth)<1e-12);
+const samples=Array.from({length:90},(_,i)=>{const t=Math.max(0,Math.min(1,(i-10)/69));return {...pose({depth:.35+.45*t,centreY:.68}),elapsed:(i-10)*100,label:'Left'};});
+const {fit,error}=fitNeckSweep(samples);assert.ok(fit,error);assert.equal(fit.kind,'neck-sweep');assert.equal(fit.scale,undefined,'capture must not introduce an independently fitted scale');assert.ok(fit.endDepth>.79&&fit.endDepth<.81);assert.ok(Math.abs(fit.farDepth-fit.neckDepth-.30)<1e-12);assert.equal(fit.phoneTilt,10);
+for(const centreY of [.1,.5,.9])for(const roll of [0,Math.PI/2]){
+ const farPoints=pose({depth:1.5,centreY,roll}).points,correction=rearPlaneCorrection(farPoints,fit.farDepth,fit.phoneTilt);assert.ok(correction>0);
+ const moved=farPoints.map(p=>p.map((v,i)=>v-farPoints[0][i]*correction/-farPoints[0][2]));
+ assert.ok(Math.abs(Math.max(...moved.map(p=>roomDepth(p,fit.phoneTilt)))-fit.farDepth)<1e-12);
+ assert.ok(Math.abs(moved[0][0]/moved[0][2]-farPoints[0][0]/farPoints[0][2])<1e-12,'clamp preserves wrist image X');
+ assert.ok(Math.abs(moved[0][1]/moved[0][2]-farPoints[0][1]/farPoints[0][2])<1e-12,'clamp preserves wrist image Y');
+}
+const farPoints=pose({depth:1.2}).points;
 assert.equal(rearPlaneCorrection(farPoints,null),0);
 const saved=JSON.stringify(fit);
 for(const side of ['L','R']){const s=pose({side,depth:.5});assert.ok(Math.abs(new PalmSweepDepth().update(side,palmObservation(s.landmarks,s.points,s.aspect,s.focal),fit,.4,1)-.5)<1e-9);}
 assert.equal(JSON.stringify(fit),saved,'live movement never refits calibration');
-assert.match(fitCrownSweep(samples.map(s=>({...s,face:null}))).error,/face visible/);
-assert.match(fitCrownSweep(samples.map(s=>({...pose({depth:.4,centreY:.5}),elapsed:s.elapsed}))).error,/farther/);
-assert.match(fitCrownSweep(samples.map(s=>({...s,landmarks:s.landmarks.map(p=>({...p,y:p.y+(s.elapsed>=7000?.55:0)}))}))).error,/upward/);
-assert.match(fitCrownSweep(samples.filter(s=>s.elapsed<7000)).error,/endpoints/);
-assert.match(fitCrownSweep(samples.filter(s=>s.elapsed>=1000)).error,/endpoints/);
-assert.match(fitCrownSweep(samples.map(s=>s.elapsed>=7000?{...s,aspect:4/3}:s)).error,/framing changed/);
+assert.match(fitNeckSweep(samples.map(s=>({...s,face:null}))).error,/face visible/);
+assert.match(fitNeckSweep(samples.map(s=>({...pose({depth:.4,centreY:.5}),elapsed:s.elapsed}))).error,/farther/);
+assert.match(fitNeckSweep(samples.filter(s=>s.elapsed<7000)).error,/endpoints/);
+assert.match(fitNeckSweep(samples.filter(s=>s.elapsed>=1000)).error,/endpoints/);
+assert.match(fitNeckSweep(samples.map(s=>s.elapsed>=7000?{...s,aspect:4/3}:s)).error,/framing changed/);
 console.log(`PASS: ${checks} real-doll geometry cases, upright/sideways/flipped, portrait/landscape, max depth error ${maxError}; saved scale regression and wrist/MCP reprojection`);
-console.log('PASS: low-to-head endpoint, both hands, no free scale, no extra rear allowance, missing face/start/end, stationary path, framing change and fixed calibration');
+console.log('PASS: front-to-neck endpoint without upward movement, both hands, no free scale, 10-degree tilted rear plane, missing face/start/end, stationary path, framing change and fixed calibration');
+
+const tilted={...fit,farDepth:.55};const atHigh=pose({depth:.56,centreY:.08});const o=palmObservation(atHigh.landmarks,atHigh.points,atHigh.aspect,atHigh.focal);assert.ok(Math.abs(new PalmSweepDepth().update('L',o,tilted,.4,1)-.56)<1e-9,'tilted plane must not also clamp raw camera Z');
+
+const angle=10*Math.PI/180;
+for(const height of [-.5,0,.5]){
+ const depth=.9,p=[0,Math.cos(angle)*height-Math.sin(angle)*depth,-Math.sin(angle)*height-Math.cos(angle)*depth];
+ assert.ok(Math.abs(roomDepth(p,10)-depth)<1e-12,'10-degree camera coordinates must recover a constant upright-room depth across heights');
+}
+console.log('PASS: assumed upward camera pitch transforms consistently across heights without image scaling');
