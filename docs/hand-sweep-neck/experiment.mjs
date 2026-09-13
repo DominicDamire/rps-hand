@@ -1,12 +1,12 @@
-import {fitNeckSweep} from './neck-sweep.mjs?v=touch2.4.13-final';
-import {OneHandSweep} from './one-hand-sweep.mjs?v=touch2.4.13-final';
+import {fitNeckSweep} from './neck-sweep.mjs?v=touch2.4.14-final';
+import {OneHandSweep} from './one-hand-sweep.mjs?v=touch2.4.14-final';
 
 export function installExperiment({container,getHead,getFocal=()=>1,onReference=()=>{},onBegin=()=>{},getNeckReference=()=>null}){
  const panel=document.createElement('section');panel.style.display='block';
- panel.innerHTML=`<h2>Front-to-neck sweep · 2.4.13</h2>
+ panel.innerHTML=`<h2>Front-to-neck sweep · 2.4.14</h2>
  <p>Keep your phone and head still. Extend one open hand toward the camera, palm facing you. Keep the whole hand inside the picture.</p>
  <p>Press Record and hold still for the <b>5-second countdown</b>. Then move the hand <b>back to your neck for 8 seconds, one way</b>. Finish with the palm gently against your neck just below the jaw, keeping the hand and face visible. Hold there for the final second. No upward sweep or return movement.</p>
- <p>The finish fits the head, neck and shoulders to the palm in depth, height and sideways position. Both hands retain their palm-based depth and spacing; the sweep does not enlarge them to reach the neck. The neck reference leaves 30 model cm of space behind it. The phone is assumed to lean back about 10 degrees; this angle is not measured. No extra calibration step.</p>
+ <p>The finish jointly fits both hands and the head, neck and shoulders. The wrist, palm and fingers all contribute to hand positioning. Hand model size and depth change together. The palm surface targets the neck surface without an added gap. The two hands share one fixed scale. The neck reference leaves 30 model cm of space behind it. The phone is assumed to lean back about 10 degrees; this angle is not measured. No extra calibration step.</p>
  <button id="touchSweep">Record sweep to neck (8 seconds)</button> <button id="touchReset">Reset capture</button>
  <p id="touchStatus" role="status" aria-live="polite">Ready. Corrected palm-size depth is active; record to save your neck reference.</p>
  <progress id="touchProgress" max="8" value="0" aria-label="Sweep recording progress" style="width:100%"></progress>`;
@@ -19,7 +19,7 @@ export function installExperiment({container,getHead,getFocal=()=>1,onReference=
   $('touchStatus').textContent=result.message;$('touchProgress').value=result.progress;
   if(!result.done)return;cancel();
   if(result.samples){const {fit,error}=fitNeckSweep(result.samples);
-   if(fit){active=fit;onReference(fit);$('touchStatus').textContent='Saved for both hands. Head, neck and shoulders aligned to the finishing palm. Hand depth and spacing are preserved. The fitted transform stays fixed during tracking. Keep the phone in this position.';}
+   if(fit){active=fit;onReference(fit);$('touchStatus').textContent='Saved for both hands. Both hands and the head/neck/shoulders calibrated together at the finishing palm. Hand size and depth share a fixed correction, preserving camera alignment. The fitted transform stays fixed during tracking. Keep the phone in this position.';}
    else $('touchStatus').textContent='Capture not applied. '+error+' Previous reference kept.';
   }
  }

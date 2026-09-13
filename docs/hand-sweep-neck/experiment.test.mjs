@@ -1,3 +1,4 @@
+import {fitWholeHand} from './whole-hand-placement.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {fitNeckSweep,rearPlaneCorrection,roomDepth} from './neck-sweep.mjs';
@@ -14,7 +15,7 @@ function pose({side='L',depth=.6,yaw=0,roll=0,aspect=9/16,viewAspect=16/9,centre
  const dx=((centreX-.5)*aspect/focal-mean(q=>q[0]/-q[2]))/inv,dy=((.5-centreY)/focal-mean(q=>q[1]/-q[2]))/inv;
  for(const q of p){q[0]+=dx;q[1]+=dy;}
  const landmarks=p.map(([X,Y,Z])=>({x:.5+focal*X/-Z/aspect,y:.5-focal*Y/-Z,z:0}));
- const palm=ids.reduce((a,i)=>a.map((v,k)=>v+p[i][k]/5),[0,0,0]);const neck=palm.map((v,k)=>(v-[.01,-.02,.006][k])/1.2);return {points:p,landmarks,focal,aspect,face:{top:.25,bottom:.65,left:.33,right:.67,neckContact:{palm,neck}}};
+ const palm=ids.reduce((a,i)=>a.map((v,k)=>v+p[i][k]/5),[0,0,0]);const neck=palm.map((v,k)=>(v-[.01,-.02,0][k])/1.2);return {points:p,landmarks,focal,aspect,face:{top:.25,bottom:.65,left:.33,right:.67,neckContact:{palm,neck}}};
 }
 let checks=0,maxError=0;const tracker=new PalmSweepDepth();
 for(const side of ['L','R'])for(const aspect of [9/16,4/3,16/9])for(const viewAspect of [16/9,9/16])for(const yaw of [0,.5,1,2.7,Math.PI])for(const roll of [0,Math.PI/2,Math.PI])for(const depth of [.3,.6,1.2]){
@@ -28,7 +29,7 @@ for(const side of ['L','R'])for(const aspect of [9/16,4/3,16/9])for(const viewAs
  for(const i of ids){const q=moved[i],actual={x:.5+s.focal*q[0]/-q[2]/aspect,y:.5-s.focal*q[1]/-q[2]};assert.ok(Math.hypot(actual.x-s.landmarks[i].x,actual.y-s.landmarks[i].y)<1e-9,'wrist and four MCPs must reproject without the old 23% oversize');}
 }
 const samples=Array.from({length:90},(_,i)=>{const t=Math.max(0,Math.min(1,(i-10)/69));return {...pose({depth:.35+.45*t,centreY:.68}),elapsed:(i-10)*100,label:'Left'};});
-const {fit,error}=fitNeckSweep(samples);assert.ok(fit,error);assert.equal(fit.kind,'neck-sweep');assert.ok(Math.abs(fit.headScale-1.2)<1e-9);assert.equal(fit.depthGain,1);assert.ok(Math.abs(fit.endDepth-.8)<1e-9);assert.ok(Math.hypot(...fit.headOffset.map((v,k)=>v-[.01,-.02,0][k]))<1e-9);assert.ok(Math.abs(fit.farDepth-fit.neckDepth-.30)<1e-12);assert.equal(fit.phoneTilt,10);
+const {fit,error}=fitNeckSweep(samples);assert.ok(fit,error);assert.equal(fit.kind,'neck-sweep');assert.ok(Math.abs(fit.headScale-Math.sqrt(1.2))<1e-9);assert.ok(Math.abs(fit.depthGain-1/Math.sqrt(1.2))<1e-9);assert.ok(Math.abs(fit.endDepth-.8*fit.handScale)<1e-9);assert.ok(Math.hypot(...fit.headOffset.map((v,k)=>v-[.01,-.02,0][k]*fit.handScale))<1e-9);assert.ok(Math.abs(fit.farDepth-fit.neckDepth-.30)<1e-12);assert.equal(fit.phoneTilt,10);
 for(const centreY of [.1,.5,.9])for(const roll of [0,Math.PI/2]){
  const farPoints=pose({depth:1.5,centreY,roll}).points,correction=rearPlaneCorrection(farPoints,fit.farDepth,fit.phoneTilt);assert.ok(correction>0);
  const moved=farPoints.map(p=>p.map((v,i)=>v-farPoints[0][i]*correction/-farPoints[0][2]));
@@ -39,7 +40,7 @@ for(const centreY of [.1,.5,.9])for(const roll of [0,Math.PI/2]){
 const farPoints=pose({depth:1.2}).points;
 assert.equal(rearPlaneCorrection(farPoints,null),0);
 const saved=JSON.stringify(fit);
-for(const side of ['L','R']){const s=pose({side,depth:.5});assert.ok(Math.abs(new PalmSweepDepth().update(side,palmObservation(s.landmarks,s.points,s.aspect,s.focal),fit,.4,1)-.5*fit.depthGain)<1e-9);}
+for(const side of ['L','R']){const s=pose({side,depth:.5});assert.ok(Math.abs(new PalmSweepDepth().update(side,palmObservation(s.landmarks,s.points,s.aspect,s.focal),fit,.4,1)-.5)<1e-9);}
 assert.equal(JSON.stringify(fit),saved,'live movement never refits calibration');
 assert.match(fitNeckSweep(samples.map(s=>({...s,face:null}))).error,/face visible/);
 assert.match(fitNeckSweep(samples.map(s=>({...pose({depth:.4,centreY:.5}),elapsed:s.elapsed}))).error,/farther/);
@@ -49,7 +50,7 @@ assert.match(fitNeckSweep(samples.map(s=>s.elapsed>=7000?{...s,aspect:4/3}:s)).e
 console.log(`PASS: ${checks} real-doll geometry cases, upright/sideways/flipped, portrait/landscape, max depth error ${maxError}; saved scale regression and wrist/MCP reprojection`);
 console.log('PASS: front-to-neck endpoint without upward movement, both hands, frozen neck depth gain, 10-degree tilted rear plane, missing face/start/end, stationary path, framing change and fixed calibration');
 
-const tilted={...fit,farDepth:.55};const atHigh=pose({depth:.56,centreY:.08});const o=palmObservation(atHigh.landmarks,atHigh.points,atHigh.aspect,atHigh.focal);assert.ok(Math.abs(new PalmSweepDepth().update('L',o,tilted,.4,1)-.56*fit.depthGain)<1e-9,'tilted plane must not also clamp raw camera Z');
+const tilted={...fit,farDepth:.55};const atHigh=pose({depth:.56,centreY:.08});const o=palmObservation(atHigh.landmarks,atHigh.points,atHigh.aspect,atHigh.focal);assert.ok(Math.abs(new PalmSweepDepth().update('L',o,tilted,.4,1)-.56)<1e-9,'tilted plane must not also clamp raw camera Z');
 
 const angle=10*Math.PI/180;
 for(const height of [-.5,0,.5]){
@@ -58,7 +59,7 @@ for(const height of [-.5,0,.5]){
 }
 console.log('PASS: assumed upward camera pitch transforms consistently across heights without image scaling');
 
-assert.equal(fit.depthGain,1);assert.match(fitNeckSweep(samples.map(s=>({...s,face:{...s.face,neckContact:null}}))).error,/neck observations/);
+assert.ok(Math.abs(fit.depthGain-1/Math.sqrt(1.2))<1e-9);assert.match(fitNeckSweep(samples.map(s=>({...s,face:{...s.face,neckContact:null}}))).error,/neck observations/);
 
 const endSample=samples.at(-1),endObservation=palmObservation(endSample.landmarks,endSample.points,endSample.aspect,endSample.focal);
 assert.ok(Math.abs(new PalmSweepDepth().update('L',endObservation,fit,.5,1)-.8)<1e-9,'finishing wrist preserves geometry depth');
@@ -67,9 +68,25 @@ for(const yaw of [0,.4,1,Math.PI])for(const side of ['L','R']){
  const near=t.update(side,palmObservation(a.landmarks,a.points,a.aspect,a.focal),fit,.5,1),far=t.update(side,palmObservation(b.landmarks,b.points,b.aspect,b.focal),fit,.5,2);
  assert.ok(Math.abs(far/near-2)<1e-9,'frozen neck anchor preserves the inverse-size distance ratio across hands and rotations');
 }
-console.log('PASS: full-bust contact fit recovers depth/XY while preserving V10 palm projection on both hands');
+console.log('PASS: full-bust contact fit recovers depth/XY while jointly scaling hand depth and geometry to preserve projection');
 
-for(const row of samples.slice(-10)){const {neck,palm}=row.face.neckContact;const placed=neck.map((v,k)=>v*fit.headScale+fit.headOffset[k]);assert.ok(Math.hypot(...placed.map((v,k)=>v-palm[k]+(k===2?.006:0)))<1e-9,'neck must meet palm in all three axes without moving hands');}
+for(const row of samples.slice(-10)){const {neck,palm}=row.face.neckContact;const placed=neck.map((v,k)=>v*fit.headScale+fit.headOffset[k]);assert.ok(Math.hypot(...placed.map((v,k)=>v-fit.handScale*palm[k]))<1e-9,'neck must meet palm in all three axes without moving hands');}
 
 const unstable=samples.map((s,i)=>({...s,face:{...s.face,neckContact:{...s.face.neckContact,palm:s.face.neckContact.palm.map((v,k)=>v+(k===0?(i%2?.1:-.1):0))}}}));
 assert.match(fitNeckSweep(unstable).error,/moved too much/);
+
+assert.ok(fit.handScale!==1&&fit.headScale!==1,'both hands and head must participate in calibration');
+for(const side of ['L','R'])for(const depth of [.3,.8])for(const yaw of [0,.8,Math.PI]){
+ const row=pose({side,depth,yaw});for(const p of row.points){const q=p.map(v=>v*fit.handScale);assert.ok(Math.abs(q[0]/q[2]-p[0]/p[2])<1e-12&&Math.abs(q[1]/q[2]-p[1]/p[2])<1e-12,'joint depth/geometry scale preserves every fingertip projection');}
+}
+
+let wholeCases=0;
+for(const side of ['L','R'])for(const depth of [.4,.8,1.2])for(const yaw of [0,.5,1,Math.PI])for(const roll of [0,Math.PI/2]){
+ const row=pose({side,depth,yaw,roll,aspect:4/3}),wrong=row.points.map(p=>p.map((v,k)=>v+[.02,-.03,-.1][k]));
+ const delta=fitWholeHand(wrong,row.landmarks,row.aspect,row.focal);assert.ok(delta,'whole hand fit must be solvable');
+ assert.ok(Math.hypot(...delta.map((v,k)=>v+[.02,-.03,-.1][k]))<1e-8,'recover XYZ from all hand landmarks');wholeCases++;
+}
+const whole=pose({aspect:4/3,depth:.7}),altered=whole.landmarks.map((p,i)=>i===8?{...p,x:p.x+.1}:p);
+assert.ok(Math.hypot(...fitWholeHand(whole.points,altered,whole.aspect,whole.focal))<.02,'single bad tip must not move the whole hand over 2 cm in this fixture');
+assert.equal(fitWholeHand(whole.points,whole.landmarks.slice(0,10),whole.aspect,whole.focal),null);
+console.log('PASS: '+wholeCases+' whole-hand XYZ fits, invalid-input fallback and fingertip outlier handling');

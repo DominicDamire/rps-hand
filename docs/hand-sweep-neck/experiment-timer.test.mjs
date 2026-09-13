@@ -18,4 +18,4 @@ node('touchSweep').onclick();now+=13000;timer();assert.equal(calibrated.active,t
 node('touchReset').onclick();assert.equal(calibrated.active,false);assert.equal(refs.at(-1),null);
 console.log('PASS: single capture UI path, endpoint activation for both hands, failed recapture retains reference, independent head movement and reset');
 
-assert.ok(refs[0].headScale>1);assert.equal(refs[0].depthGain,1);assert.deepEqual(refs[0].headOffset.slice(0,2),[.01,-.02]);
+assert.ok(refs[0].headScale>1);assert.ok(refs[0].depthGain<1);assert.equal(refs[0].depthGain,refs[0].handScale);assert.ok(Math.abs(refs[0].headOffset[0]-.01*refs[0].handScale)<1e-9);

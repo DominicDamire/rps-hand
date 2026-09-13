@@ -1,5 +1,5 @@
-import {palmObservation} from './palm-sweep-depth.mjs?v=touch2.4.13-final';
-import {sweepEndpoints} from './one-hand-sweep.mjs?v=touch2.4.13-final';
+import {palmObservation} from './palm-sweep-depth.mjs?v=touch2.4.14-final';
+import {sweepEndpoints} from './one-hand-sweep.mjs?v=touch2.4.14-final';
 const median=a=>[...a].sort((a,b)=>a-b)[Math.floor(a.length/2)];
 export const PHONE_TILT_DEGREES=10;
 // Assume a phone leaning back, with its camera looking 10 degrees upward.
@@ -11,7 +11,7 @@ export function roomDepth(p,tilt=PHONE_TILT_DEGREES){
 function observation(s){
  const o=palmObservation(s.landmarks,s.points,s.aspect,s.focal);
  if(!o?.reliable)return null;
- const depth=o.scale/o.size,base=-s.points[0][2];
+ const depth=-s.points[0][2],base=depth;
  if(!(depth>.04&&depth<4&&base>0))return null;
  const points=s.points.map(p=>p.map((v,i)=>v+s.points[0][i]*(depth-base)/base));
  return {s,depth,backDepth:Math.max(...points.map(p=>roomDepth(p)))};
@@ -29,17 +29,20 @@ export function fitNeckSweep(samples){
  if(atNeck.length<3)return {error:'Keep your face visible as you finish at your neck.'};
  const anchors=atNeck.filter(o=>[o.s.face.neckContact?.neck,o.s.face.neckContact?.palm].every(p=>Array.isArray(p)&&p.length===3&&p.every(Number.isFinite)&&p[2]<-.04));
  if(anchors.length<3)return {error:'Hold the palm gently against your neck just below the jaw for the final second. Need at least three clear neck observations.'};
- // Preserve V10 palm projection for both hands. The contact calibrates the
- // entire bust in camera space, without gesture-dependent hand translation.
- const headScale=median(anchors.map(o=>(-o.s.face.neckContact.palm[2]+.006)/-o.s.face.neckContact.neck[2]));
+ // Preserve V10 palm projection while jointly fitting both model scales.
+ // Scale every hand point with its depth, not just the wrist translation.
+ const ratio=median(anchors.map(o=>(-o.s.face.neckContact.palm[2])/-o.s.face.neckContact.neck[2]));
+ // Contact determines relative scale, not absolute metres. Equal squared
+ // log-scale priors split the correction between hand and bust models.
+ const headScale=Math.sqrt(ratio),handScale=1/headScale;
  if(headScale<.25||headScale>4)return {error:'Head and hand scale mismatch is too large. Keep the face and whole palm clearly visible and retry.'};
- const offsets=anchors.map(o=>o.s.face.neckContact.palm.map((v,k)=>v-(k===2?.006:0)-headScale*o.s.face.neckContact.neck[k]));
+ const offsets=anchors.map(o=>o.s.face.neckContact.palm.map((v,k)=>handScale*v-headScale*o.s.face.neckContact.neck[k]));
  const headOffset=[0,1,2].map(k=>median(offsets.map(p=>p[k])));
  const errors=offsets.map(p=>Math.hypot(...p.map((v,k)=>v-headOffset[k]))).sort((a,b)=>a-b);
  const residual=errors[Math.floor(.8*(errors.length-1))];
  if(residual>.03)return {error:'The finishing contact moved too much. Hold the palm at the same spot below the jaw for the final second.'};
- const neckDepth=median(anchors.map(o=>o.backDepth));
- return {fit:{kind:'neck-sweep',version:4,depthGain:1,headScale,headOffset,contactResidual:residual,nearDepth,endDepth,neckDepth,farDepth:neckDepth+.30,phoneTilt:PHONE_TILT_DEGREES,aspect:median(aspects),frames:samples.length}};
+ const neckDepth=handScale*median(anchors.map(o=>o.backDepth));
+ return {fit:{kind:'neck-sweep',version:5,depthGain:handScale,handScale,headScale,headOffset,contactResidual:residual,nearDepth:nearDepth*handScale,endDepth:endDepth*handScale,neckDepth,farDepth:neckDepth+.30,phoneTilt:PHONE_TILT_DEGREES,aspect:median(aspects),frames:samples.length}};
 }
 // Return camera-Z movement toward the camera, along the wrist's image ray.
 export function rearPlaneCorrection(points,farDepth,tilt=0){

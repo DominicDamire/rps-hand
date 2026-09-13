@@ -1,21 +1,23 @@
-# Sweep 2.4.13: preserve palm placement, fit the full bust at neck contact
+# Sweep 2.4.14: whole-hand placement and joint neck-contact calibration
 
-This comparison combines 2.4.10's geometry-based palm placement with the front-to-neck contact reference. Original 2.4.7 and 2.4.10 pages remain unchanged.
+## Three changes
 
-## Calibration
+1. Both hands and the head/neck/shoulder bust participate in calibration. A shared hand model scale changes hand geometry and camera-space depth together, preserving projection. Bust scale and XYZ offset meet the captured neck contact. All scales are frozen after capture; proportions do not change live.
+2. All 21 landmarks contribute to a rigid XYZ translation fit after finger articulation. Wrist and MCPs receive half the total nominal weight, other finger points the other half. Three iteratively reweighted least-squares passes reduce individual outlier influence. At least 17 visible points are required; invalid fits fall back to the existing rotation-corrected palm estimate. This does not move fingers independently or force two hands together.
+3. Calibration raycasts through the palm centre against the rendered palm meshes, taking the rear surface facing the neck. The corresponding sampled outer neck surface is fitted to that surface with zero added gap. The former 6 mm joint-centre allowance is removed. Missing surface observations reject capture rather than silently guessing an offset.
 
-Hold one extended open hand, palm facing yourself, through the five-second preparation. Move back over eight seconds, finishing with gentle palm contact at the neck just below the jaw. Keep the face and palm visible and hold the last second. No pressure is required.
+## Procedure and assumptions
 
-Both hands keep the same fixed-mesh, rotation-corrected palm-size depth estimator before and after capture. The saved hand depth gain is exactly one: the neck fit cannot enlarge the projected hands or pull their wrists together. Fingers retain the 2.4.7 segment driver; the 2.4.10 extended-finger-only correction remains excluded.
+Hold one extended open hand, palm facing yourself, through the five-second preparation. Move back over eight seconds, finishing with gentle palm contact just below the jaw; hold the final second with hand and face visible. Keep the phone and head still. No pressure is required. The fixed calibration applies to both hands. Recapture uses the original bust coordinates, avoiding accumulated adjustments. Failed capture preserves the prior fit; reset clears it.
 
-The final observations select nearby projected outer neck samples. Calibration first estimates a uniform bust scale about the camera from the neck/palm depth ratio, then a camera-space XYZ translation aligning that surface with the finishing palm joint centre plus a 6 mm skin allowance. The head, neck and shoulders share this transform. Median endpoint estimates are frozen; they never refit from later finger gestures or head movement. Recapture removes the previous transform when measuring neck samples, preventing cumulative adjustment. Failed captures retain the previous fit; reset clears it. The 10-degree phone-tilt assumption and rear allowance remain.
+Contact determines relative hand/bust scale, not absolute camera distance. The scale split minimizes equal squared log-scale changes from the starting hand and bust sizes: for the observed depth ratio r, bust scale is sqrt(r), hand scale is 1/sqrt(r). This is an explicit modelling prior, not sensor-derived metric depth or a research-calibrated anatomical ratio. Median XYZ offsets align endpoint contact; unstable finishing observations are rejected. The 10-degree phone-tilt assumption and rear allowance remain.
 
-This is user-declared contact calibration using an approximate palm skin offset and sampled neck mesh. It is not measured camera distance or an exact skin fit. A single palm reference does not identify every head/neck proportion or guarantee the opposite hand's contact. Bust fitting may shift its displayed image position. Live landmark noise, palm orientation errors and fixed finger proportions can still cause fingertip mismatch.
+Whole-hand fitting is a compromise when fixed model proportions or finger angle constraints differ from the detected hand. It cannot guarantee every fingertip exactly overlays its landmark. Single-point surface contact does not guarantee that every other part of the palm and neck is free of penetration. Physical depth accuracy requires live validation.
 
-## Optional contact
+## Fists and assistance
 
-Hand-to-hand contact matching and both collision toggles start OFF, so assistance does not hide the placement result. They remain available. If enabled, the 2.4.12 exterior collision and contact logic runs after placement, pauses during calibration, and does not modify the saved fit.
+There is no enabled fist-to-fist attachment. Hand-to-hand matching, both collision passes, within-hand thumb contact, saved-pose matching and reference-fist blending start off in the live page. Curled fingers still have the established MCP splay and PIP/DIP plane limits. Optional contact corrections remain available but never alter the calibration.
 
 ## Verification
 
-540 ideal projections of the actual doll palm cover both hands, orientations, portrait/landscape framing and near/far depth. Tests verify unchanged wrist/MCP projection and inverse-size ratios, full XYZ endpoint alignment, fixed hand gain, missing/unstable endpoints, capture timing, failed recapture and reset. A browser check using the actual alien mesh verifies a common head/neck/root transform, no accumulation over 60 frames, unchanged uncalibrated neck reference on recapture, and correct reset. These are software and geometry checks, not a claim that the user's live fists and fingertips now match perfectly.
+540 ideal actual-doll palm projections, 48 whole-hand XYZ recovery cases, both-hand scale and projection invariance, surface-contact endpoint equations, capture timing, invalid observations, failed recapture and reset are tested. Actual-model browser checks cover 30 open/curled hand cases across changing calibration scales with no accumulated joint drift or projection change; every case found a palm mesh surface. The prior full-bust transform test verifies coherent head/neck/root placement and reset. These are software/geometry checks, not proof of perfect live depth or contact. Private recordings and QA data are excluded from publication.

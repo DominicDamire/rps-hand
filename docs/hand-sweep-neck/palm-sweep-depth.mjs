@@ -36,7 +36,9 @@ export class PalmSweepDepth {
   }
   // Scale belongs to the fixed mesh and the current camera projection.
   // The neck sweep adds one frozen gain; it never changes with the gesture.
-  const gain=fit?.depthGain>0?fit.depthGain:1;
+  // A joint fit scales the finished hand geometry and depth together.
+  // Do not also translate the wrist here.
+  const gain=fit?.handScale>0?1:fit?.depthGain>0?fit.depthGain:1;
   const target=gain*observation.scale/observation.size;
   if(!Number.isFinite(target)||target<=0)return bound(state?.depth??fallback);
   const depth=bound(target);this.states[side]={depth,time,held:false};return depth;
