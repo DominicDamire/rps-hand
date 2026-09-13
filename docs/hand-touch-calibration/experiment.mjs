@@ -1,60 +1,37 @@
 import {imagePalmSize} from './size-wall-depth.mjs';
+import {OneHandSweep} from './one-hand-sweep.mjs?v=touch2';
 const median=a=>[...a].sort((a,b)=>a-b)[Math.floor(a.length/2)];
-function error(sample,k){const p=sample.A.map((a,i)=>a*k.L+sample.B[i]*k.R-sample.c[i]);return Math.hypot(...p);}
-export function fitContact(samples,anchor){let aa=0,bb=0,ab=0,ac=0,bc=0;for(const s of samples)for(let i=0;i<3;i++){const a=s.A[i],b=s.B[i],c=s.c[i];aa+=a*a;bb+=b*b;ab+=a*b;ac+=a*c;bc+=b*c;}const ridge=(aa+bb)*.025;aa+=ridge;bb+=ridge;ac+=ridge*anchor.L;bc+=ridge*anchor.R;const det=aa*bb-ab*ab;if(det<1e-10)return null;const k={L:(ac*bb-bc*ab)/det,R:(bc*aa-ac*ab)/det};return ['L','R'].every(s=>k[s]>anchor[s]*.5&&k[s]<anchor[s]*1.5)?k:null;}
-export function installExperiment({container}){
- const panel=document.createElement('section');panel.style.display='block';panel.innerHTML=`<h2>Hands-touching calibration</h2><p>Five seconds to get ready, then eight seconds recording: four seconds toward your chest, four seconds back toward the camera. Keep index fingertips touching, both hands visible and the camera fixed. After one sweep, the fitted depth values apply immediately. Reset restores the original depth.</p><label>Measured contact distance (cm)<input id="touchDistance" type="number" min="10" max="150" value="30"></label><button id="touchAnchor">1. Capture measured anchor</button> <button id="touchSweep">2. Record 8-second sweep</button> <button id="touchReset">Reset calibration</button><p id="touchStatus" role="status" aria-live="polite" style="font-size:18px;font-weight:600">No calibration. Base size-depth active.</p><progress id="touchProgress" max="8" value="0" aria-label="Calibration recording progress" style="width:100%"></progress><p id="touchQuality">No samples yet.</p>`;container.prepend(panel);
- const find=id=>panel.querySelector('#'+id),status=find('touchStatus'),quality=find('touchQuality'),progress=find('touchProgress');
- let mode=null,start=0,samples=[],anchor=null,candidate=null,active=null,last=null,timer=null,reason='Waiting for a fresh camera frame.',rejected={},lastObservation=0;
- const captureButtons=[find('touchAnchor'),find('touchSweep')];
- const blocked=()=>document.getElementById('relaxedPalm')?.checked||+document.getElementById('contactThreshold')?.value>0||+document.getElementById('handDistance')?.value!==0||+document.getElementById('handHeight')?.value!==0;
- function stop(){clearInterval(timer);timer=null;mode=null;for(const b of captureButtons)b.disabled=false;find('touchDistance').disabled=false;}
- function reject(text){reason=text;rejected[text]=(rejected[text]||0)+1;}
- function summary(){const top=Object.entries(rejected).sort((a,b)=>b[1]-a[1])[0];return top?' Most frequent issue: '+top[0]:'';}
- function updateQuality(){quality.textContent=samples.length+' accepted frames. '+reason;}
- function finish(){
-  const phase=mode;stop();progress.value=8;
-  if(phase==='anchor'){status.textContent='Anchor stopped: '+samples.length+'/20 accepted frames.'+summary();return;}
-  if(samples.length<40){status.textContent='Sweep finished at 8 seconds: '+samples.length+'/40 accepted frames.'+summary();return;}
-  const outward=samples.filter(s=>s.elapsed<4000).length,returning=samples.length-outward;
-  if(outward<12||returning<12){status.textContent='Sweep finished: need visible touching hands in both halves. Toward chest: '+outward+' frames; toward camera: '+returning+'.'+summary();return;}
-  const sizes=samples.map(s=>s.L.size).sort((a,b)=>a-b),range=sizes[Math.floor(sizes.length*.9)]/sizes[Math.floor(sizes.length*.1)];
-  if(range<1.5){status.textContent='Sweep finished: near/far size change was '+range.toFixed(2)+'×; need at least 1.5×. Move through a larger distance while keeping hands visible.';return;}
-  candidate=fitContact(samples,anchor);if(candidate){active=candidate;status.textContent='Calibration applied after one sweep. Test your hands now; Reset restores the original depth. Sweep fit error '+(median(samples.map(s=>error(s,candidate)))*1000).toFixed(1)+' mm.';}else status.textContent='Could not fit usable depth values. Repeat measured anchor and sweep.';
+export function fitSweep(samples,aspect){
+ const early=samples.filter(s=>s.elapsed<2000),late=samples.filter(s=>s.elapsed>=6000);
+ if(early.length<3||late.length<3)return null;
+ const start=median(early.map(s=>imagePalmSize(s.landmarks,aspect))),end=median(late.map(s=>imagePalmSize(s.landmarks,aspect)));
+ if(!(start>end*1.05&&end>0))return null;
+ const depths=late.map(s=>s.face?.neckDepth).filter(d=>Number.isFinite(d)&&d>.04&&d<4);if(depths.length<3)return null;
+ const starts=early.map(s=>s.face?.handDepth).filter(d=>Number.isFinite(d)&&d>.04&&d<4);if(starts.length<3)return null;
+ const startDepth=median(starts),endDepth=median(depths);if(endDepth<=startDepth+.005)return null;
+ return {version:2,startDepth,endDepth,face:late[Math.floor(late.length/2)].face,startSize:start,endSize:end};
+}
+export function sweepDepth(lm,aspect,fit,fallback){
+ const size=imagePalmSize(lm,aspect);if(!fit||!size)return fallback;
+ const t=(fit.startSize/size-1)/(fit.startSize/fit.endSize-1);
+ return Math.max(.04,Math.min(4,fit.startDepth+t*(fit.endDepth-fit.startDepth)));
+}
+export function installExperiment({container,getHead}){
+ const panel=document.createElement('section');panel.style.display='block';panel.innerHTML=`<h2>One-hand sweep</h2><p>Extend one open hand, palm facing yourself. Keep your face visible. After the five-second countdown, move the hand back toward your shoulder/neck over eight seconds. Finish with the hand at your neck. No second hand, measurements or return sweep.</p><button id="touchSweep">Record one-hand sweep (8s)</button> <button id="touchReset">Reset capture</button><p id="touchStatus" role="status" aria-live="polite">Ready. No capture yet.</p><progress id="touchProgress" max="8" value="0" aria-label="Sweep recording progress" style="width:100%"></progress>`;container.prepend(panel);
+ const $=id=>panel.querySelector('#'+id),capture=new OneHandSweep();let active=null,timer=null,latest={hands:[],face:null,aspect:1};
+ function cancel(){clearInterval(timer);timer=null;capture.cancel();$('touchSweep').disabled=false;}
+ function tick(){const result=capture.update(performance.now(),latest.hands,latest.face);if(!result)return;$('touchStatus').textContent=result.message;$('touchProgress').value=result.progress;
+  if(result.done){cancel();if(result.samples){const fit=fitSweep(result.samples,latest.aspect);if(fit){active=fit;$('touchStatus').textContent='Sweep captured. Move naturally. The saved mapping stays unchanged until you record again.';}else $('touchStatus').textContent='Sweep not captured: move from the extended position back to your neck, keeping the hand and face visible.';}}
  }
- function begin(phase){
-  if(blocked()){status.textContent='Switch relaxed palm off and set contact activation, hand distance and hand height to zero for calibration.';return;}
-  const measured=+find('touchDistance').value/100;if(phase==='anchor'&&!(measured>=.1&&measured<=1.5)){status.textContent='Enter a measured distance from 10 to 150 cm.';return;}
-  stop();samples=[];last=null;rejected={};reason='Waiting for a fresh camera frame.';progress.value=0;
-  if(phase==='anchor')active=candidate=anchor=null;
-  for(const b of captureButtons)b.disabled=true;find('touchDistance').disabled=true;
-  const readyAt=performance.now()+5000;
-  function tick(){const now=performance.now();
-   if(blocked()){stop();status.textContent='Capture stopped: calibration fit settings changed.';return;}
-   if(now<readyAt){status.textContent='Starting in '+Math.ceil((readyAt-now)/1000)+'… Put your index fingertips together.';updateQuality();return;}
-   if(!mode){mode=phase;start=now;lastObservation=now;}
-   const elapsed=now-start;progress.value=Math.min(8,elapsed/1000);
-   if(elapsed>=8000){finish();updateQuality();return;}
-   const seconds=(elapsed/1000).toFixed(1);
-   status.textContent=mode==='anchor'?'Recording '+seconds+'/8.0 s — HOLD at your measured distance ('+samples.length+'/20 frames).':elapsed<4000?'Recording '+seconds+'/8.0 s — MOVE TOWARD YOUR CHEST.':'Recording '+seconds+'/8.0 s — MOVE BACK TOWARD THE CAMERA.';
-   if(now-lastObservation>700)reason='No fresh tracking results. Check camera connection.';updateQuality();
-  }
-  timer=setInterval(tick,100);tick();
+ $('touchSweep').onclick=()=>{cancel();capture.begin(performance.now());$('touchSweep').disabled=true;$('touchProgress').value=0;timer=setInterval(tick,100);tick();};
+ $('touchReset').onclick=()=>{cancel();active=null;$('touchProgress').value=0;$('touchStatus').textContent='Capture reset.';};
+ return {get active(){return !!active;},get faceReference(){return active?.face;},cancel,
+ depth(side,lm,world,base,aspect){return sweepDepth(lm,aspect,active,base);},
+ observe(hands,rendered,aspect){const head=getHead(),now=performance.now();let face=null;
+  if(head?.face&&now-head.seen<250&&head.depth>0){const sample=hands.find(h=>(!capture.label||h.label===capture.label)&&now-h.seen<250),points=rendered[sample?.label==='Left'?'L':'R']?.result?.points;
+   const offset=points?[0,5,9,13,17].reduce((sum,i)=>sum+points[i].z-points[0].z,0)/5:0;
+   face={raw:Math.abs(head.face.matrix[14])/100,depth:head.depth,neckDepth:head.depth+offset,handDepth:points?-points[0].z:null};
+  }latest={hands,face,aspect};
  }
- find('touchAnchor').onclick=()=>begin('anchor');find('touchSweep').onclick=()=>anchor?begin('sweep'):status.textContent='Capture the measured anchor first.';
- find('touchReset').onclick=()=>{stop();anchor=candidate=active=null;samples=[];progress.value=0;status.textContent='Calibration reset. Base depth active.';quality.textContent='No samples yet.';};
- return {depth(side,lm,world,base,aspect){const size=imagePalmSize(lm,aspect);return active&&size?active[side]/size:base;},observe(hands,rendered,aspect){
-  if(!mode)return;const now=performance.now();if(now-start>=8000){finish();return;}
-  if(blocked()){stop();status.textContent='Capture stopped: calibration fit settings changed.';return;}
-  const L=hands.find(h=>h.label==='Left'),R=hands.find(h=>h.label==='Right');
-  if(!L||!R){reject(!L&&!R?'Neither hand detected.':!L?'Left hand not detected.':'Right hand not detected.');return;}
-  if(L.time!==R.time){reject('Hands are from different frames; one hand was lost.');return;}
-  if(L.time===last)return;last=L.time;lastObservation=now;
-  if((Number.isFinite(L.seen)&&now-L.seen>250)||(Number.isFinite(R.seen)&&now-R.seen>250)){reject('Hand tracking is stale.');return;}
-  const l=L.landmarks[8],r=R.landmarks[8],gap=Math.hypot((l.x-r.x)*aspect,l.y-r.y);
-  if(gap>.045){reject('Index fingertips do not meet in the tracked image.');return;}
-  const data={};for(const [s,h] of [['L',L],['R',R]]){const p=rendered[s]?.result?.points;if(!p){reject('Hand model is not ready.');return;}const root=p[0],tip=p[8],z=-root.z,size=imagePalmSize(h.landmarks,aspect);if(!size||z<=0){reject('Palm size/depth is invalid.');return;}data[s]={size,ray:[root.x/z,root.y/z,-1],offset:tip.clone().sub(root).toArray()};}
-  const A=data.L.ray.map(v=>v/data.L.size),B=data.R.ray.map(v=>-v/data.R.size),c=data.R.offset.map((v,i)=>v-data.L.offset[i]);samples.push({A,B,c,L:data.L,R:data.R,baseline:rendered.L.result.points[8].distanceTo(rendered.R.result.points[8]),elapsed:now-start});reason='Good — touching fingertips accepted.';
-  if(mode==='anchor'&&samples.length>=20){const d=+find('touchDistance').value/100;anchor={};for(const s of ['L','R'])anchor[s]=median(samples.map(v=>(d+v[s].offset[2])*v[s].size));stop();status.textContent='Anchor recorded: 20 valid frames. Next: record the 8-second sweep.';updateQuality();}
- }};
+ };
 }

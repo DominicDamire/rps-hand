@@ -1,16 +1,16 @@
-import {ExtendedReferenceCapture,referenceDepth,validReference} from './extended-reference.mjs?v=alien18.9';
-import {OuterCollision} from './outer-collision.mjs?v=alien18.9';
-import {findTouchPair,solveTouchDepth,closeContact} from './hand-pair-depth.mjs?v=alien18.9';
+import {ExtendedReferenceCapture,referenceDepth,validReference} from './extended-reference.mjs?v=alien18.10';
+import {OuterCollision} from './outer-collision.mjs?v=alien18.10';
+import {findTouchPair,solveTouchDepth,closeContact} from './hand-pair-depth.mjs?v=alien18.10';
 import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=alien18.4';
 import {palmSize} from './palm-distance.mjs?v=alien13';
 import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
-import {installCombinedUI} from './combined-ui.mjs?v=alien18.9';
-import {CombinedHead} from './head-model.mjs?v=alien18.9';
-import {directDriver} from './direct.mjs?v=alien18.9';
-import {reduceFalseDepthBends} from './depth-lines.mjs?v=14';
+import {installCombinedUI} from './combined-ui.mjs?v=alien18.10';
+import {CombinedHead} from './head-model.mjs?v=alien18.10';
+import {directDriver} from './direct.mjs?v=alien18.10';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=alien18.10';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -82,13 +82,13 @@ function keepHandBeforeWall(S,result){
 const relaxedStates={};
 function relaxedPoints(points,S,q,dt){
  const o=getCombinedOptions(),range=(o.contactThreshold||0)/100,state=relaxedStates[S]??={amount:0,q:q.clone()};
- let near=false;if(!o.manualDepth&&o.headContactEnabled&&o.relaxedPalm&&range&&combined?.group.visible&&headWallCorners){const box=new THREE.Box3().setFromPoints(headWallCorners.map(p=>p.clone().applyMatrix4(combined.bones.head.matrixWorld)));near=points.some(p=>box.distanceToPoint(p)<range);}
+ let near=false;if(o.relaxedPalm&&range&&combined?.group.visible&&headWallCorners){const box=new THREE.Box3().setFromPoints(headWallCorners.map(p=>p.clone().applyMatrix4(combined.bones.head.matrixWorld)));near=points.some(p=>box.distanceToPoint(p)<range);}
  state.amount+=((near?1:0)-state.amount)*(1-Math.exp(-Math.min(dt,.1)/.12));if(state.amount<.001)return points;
  state.q.slerp(q,1-Math.exp(-Math.min(dt,.1)/.06));q.slerp(state.q,state.amount);
  const p=points.map(v=>v.clone());for(let f=0;f<5;f++)for(let k=1;k<=3;k++){const id=1+4*f+k-1,name=S+FINGERS[f]+k,rest=k<3?rig.rest[S+FINGERS[f]+(k+1)].world.clone().sub(rig.rest[name].world):tips[S+FINGERS[f]].clone(),length=points[id+1].distanceTo(points[id]),direction=points[id+1].clone().sub(points[id]).normalize().lerp(rest.normalize().applyQuaternion(q),state.amount).normalize();p[id+1].copy(p[id]).addScaledVector(direction,length);}
  return p;
 }
-let extendedReference=null;try{const r=JSON.parse(localStorage.getItem('alien-extended-reference'));if(validReference(r))extendedReference=r;}catch{}
+let extendedReference=null;try{const r=JSON.parse(localStorage.getItem('alien-simple-reference-v2'));if(validReference(r))extendedReference=r;}catch{}
 const referenceCapture=new ExtendedReferenceCapture();let referenceTimer=null;
 const outerCollision=new OuterCollision();
 const pairContact={key:null,since:0,A:new THREE.Vector3(),B:new THREE.Vector3()};
@@ -98,7 +98,7 @@ function pairLabel(text){const e=$('handPairStatus');if(e&&e.textContent!==text)
 function reconcileHands(dt,now){
 
  const hands=allHands.filter(h=>now-h.seen<250),L=hands.find(h=>h.label==='Left'),R=hands.find(h=>h.label==='Right');
- if(getCombinedOptions().manualDepth||editing||!getCombinedOptions().handsTouch||!$('bothHands').checked||!L||!R||L.time!==R.time||L.confidence<.5||R.confidence<.5||!renderedHands.L||!renderedHands.R){resetPairContact();pairLabel(getCombinedOptions().manualDepth?'Extended-hand reference active. Automatic contact shifts off.':getCombinedOptions().handsTouch?'Hand contact: waiting for two visible hands.':'Hand contact assistance off.');return;}
+ if(getCombinedOptions().manualDepth||editing||!getCombinedOptions().handsTouch||!$('bothHands').checked||!L||!R||L.time!==R.time||L.confidence<.5||R.confidence<.5||!renderedHands.L||!renderedHands.R){resetPairContact();pairLabel(getCombinedOptions().manualDepth?'Extended-hand reference active. Automatic hand-to-hand depth correction off.':getCombinedOptions().handsTouch?'Hand contact: waiting for two visible hands.':'Hand contact assistance off.');return;}
  const left=renderedHands.L.result,right=renderedHands.R.result;
  const pair=findTouchPair({lm:L.landmarks,points:left.points.map(p=>p.toArray())},{lm:R.landmarks,points:right.points.map(p=>p.toArray())},captureAspect,pairContact.key);
  let solution=null;
@@ -117,7 +117,7 @@ function reconcileHands(dt,now){
 function cameraPoints(world,lm){const points=rawSizePoints(world,lm);return $('falseDepth')?.checked?reduceFalseDepthBends(points,lm,$('preview').width,$('preview').height,!camera.isOrthographicCamera):points;}
 function rawSizePoints(world,lm){
  const options=getCombinedOptions();
- if(options.manualDepth){const depth=referenceDepth(lm,world,captureAspect,extendedReference,depthStates[side]?.depth||options.manualHandDepth/100);depthStates[side]={depth};const length=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world),observed=Math.max(.01,Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z));return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,depth,length/observed).map(p=>new THREE.Vector3().fromArray(p).add(new THREE.Vector3(0,(options.handHeight||0)/100,0)));}
+ if(options.manualDepth){const depth=referenceDepth(lm,world,captureAspect,extendedReference,depthStates[side]?.depth||.5);depthStates[side]={depth};const length=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world),observed=Math.max(.01,Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z));return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,depth,length/observed).map(p=>new THREE.Vector3().fromArray(p).add(new THREE.Vector3(0,(options.handHeight||0)/100,0)));}
 
  if(!modelPalmSpan){const spans=[];for(const S of ['R','L'])for(const [a,b] of [['Hand','Index1'],['Hand','Middle1'],['Hand','Ring1'],['Hand','Pinky1'],['Index1','Pinky1']])spans.push(rig.rest[S+a].world.distanceTo(rig.rest[S+b].world));spans.sort((a,b)=>a-b);modelPalmSpan=(spans[4]+spans[5])/2;}
  const size=imagePalmSize(lm,captureAspect),frame=cameraFrame(captureAspect,camera.aspect),focal=1/(2*Math.tan(Math.PI/6)*frame.height);
@@ -256,7 +256,7 @@ configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready
 let timingAt=0,timingTotal=0,timingCount=0;
 const wallTest=new URLSearchParams(location.search).has('fixture')?document.createElement('p'):null;if(wallTest)$('directSettings').prepend(wallTest);
 let sceneFrames=0,sceneWindow=performance.now(),measuredScene=0,lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(stream&&!editing)drawPreview($('video'),latest?.landmarks);if(+getCombinedOptions().handRate===0){latest=null;allHands=[];}
- if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(stream&&$('video').readyState>=2)drawPreview($('video'),latest?.landmarks);const calculationStart=performance.now();if(getCombinedOptions().rawOnly){measuredScene=0;sceneFrames=0;sceneWindow=now;$('scene').style.visibility='hidden';$('calculationTiming').textContent='RAW: model calculations and 3D rendering OFF. Read tracking FPS on camera preview.';return;}$('scene').style.visibility='';if(sampleSource&&combined){combined.seen=combined.poseSeen=now;}combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.wallLimited?'Hand at head back-wall limit':directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Fixed hand proportions · tracked segment directions';}renderOtherHand(renderDt);reconcileHands(renderDt,now);updateReferenceStatus(now);if(!getCombinedOptions().manualDepth&&(getCombinedOptions().outerCollision||getCombinedOptions().headContactEnabled)){const visible={L:rig.parts.some(m=>m.name.startsWith('LHand')&&m.visible),R:rig.parts.some(m=>m.name.startsWith('RHand')&&m.visible)};outerCollision.resolve(combined,rig,visible,shiftRenderedHand,!!pairContact.key,+$('fingerThickness').value+':'+$('tipInset').value,{head:getCombinedOptions().headContactEnabled,hands:getCombinedOptions().outerCollision});for(const S of ['L','R'])if(visible[S]&&renderedHands[S])keepHandBeforeWall(S,renderedHands[S].result);}if(wallTest)wallTest.textContent='Back-wall clearance: '+Object.entries(renderedHands).map(([s,h])=>s+' '+(1000*h.result.wallClearance).toFixed(3)+' mm').join(' / ');if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&!!latest;
+ if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(stream&&$('video').readyState>=2)drawPreview($('video'),latest?.landmarks);const calculationStart=performance.now();if(getCombinedOptions().rawOnly){measuredScene=0;sceneFrames=0;sceneWindow=now;$('scene').style.visibility='hidden';$('calculationTiming').textContent='RAW: model calculations and 3D rendering OFF. Read tracking FPS on camera preview.';return;}$('scene').style.visibility='';if(sampleSource&&combined){combined.seen=combined.poseSeen=now;}combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.wallLimited?'Hand at head back-wall limit':directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Fixed hand proportions · tracked segment directions';}renderOtherHand(renderDt);reconcileHands(renderDt,now);updateReferenceStatus(now);if(getCombinedOptions().outerCollision||getCombinedOptions().headContactEnabled){const visible={L:rig.parts.some(m=>m.name.startsWith('LHand')&&m.visible),R:rig.parts.some(m=>m.name.startsWith('RHand')&&m.visible)};outerCollision.resolve(combined,rig,visible,shiftRenderedHand,!!pairContact.key,+$('fingerThickness').value+':'+$('tipInset').value,{head:getCombinedOptions().headContactEnabled,hands:getCombinedOptions().outerCollision});for(const S of ['L','R'])if(visible[S]&&renderedHands[S])keepHandBeforeWall(S,renderedHands[S].result);}if(wallTest)wallTest.textContent='Back-wall clearance: '+Object.entries(renderedHands).map(([s,h])=>s+' '+(1000*h.result.wallClearance).toFixed(3)+' mm').join(' / ');if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&!!latest;
  for(const n of JOINTS){const dot=jointDots[n];dot.visible=true;dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  for(const [i,f] of FINGERS.entries())tipDots[f].position.copy(directResult?directResult.points[4+i*4]:tipWorld(rig,tips,side,f));
  modelLines.visible=false;let lineIndex=0;const linePoints=lineGeometry.attributes.position;
@@ -318,14 +318,14 @@ $('phoneDistance').oninput=()=>{$('phoneDistance').nextElementSibling.value=$('p
 $('depthGain').oninput=()=>{$('depthGain').nextElementSibling.value=$('depthGain').value;};
 $('calibrateDistance').onclick=()=>{if(!latest||camera.isOrthographicCamera){$('depthCalibrationStatus').textContent='Use perspective and show a hand next to your face first.';return;}const metres=+$('phoneDistance').value/100;let count=0;for(const s of ['R','L'])if(depthStates[s]?.depth){distanceGains[s]=metres/depthStates[s].depth;count++;}$('eyeZ').value=-metres;$('eyeZ').nextElementSibling.value=-metres;setViewMode();$('depthCalibrationStatus').textContent='Calibrated '+count+' hand(s) at '+$('phoneDistance').value+' cm. Recalibrate if you move the phone.';};
 
-const readCombinedOptions=installCombinedUI();getCombinedOptions=()=>({...readCombinedOptions(),holistic:false,handPriority:false,depthSmooth:0,headSmooth:0});
+const readCombinedOptions=installCombinedUI();getCombinedOptions=()=>({...readCombinedOptions(),holistic:false,handPriority:false,depthSmooth:0,headSmooth:0,captureFace:readCombinedOptions().manualDepth?extendedReference?.face:null});
 restoreStart({fingerThickness:.9,tipInset:5,fingerNoise:0,directionSmoothing:0,movementThreshold:0,confirmJump:0});
 if($('sizeDepth'))$('sizeDepth').checked=false;
 for(const id of ['sizeDepth','restGap','nearDistance','demoJitter','fingerNoise','directionSmoothing','movementThreshold','confirmJump','upperCoupling','falseDepth','phoneDistance','depthGain']){const el=$(id);if(el)el.closest('label').style.display='none';}
 for(const id of ['captureRestSize','sizeStatus','calibrateDistance','depthCalibrationStatus','alignCheeks'])if($(id))$(id).style.display='none';
 restoreStart({fingerNoise:0,directionSmoothing:0,movementThreshold:0,confirmJump:0,lockUpper:true,upperCoupling:0,depthGain:1,phoneDistance:40,eyeX:0,eyeY:0,eyeZ:-1.2,eyeYaw:180,eyePitch:0,eyeFov:60});
 $('trackingGrace').value=1000;$('trackingGrace').nextElementSibling.value=1000;
-for(const id of ['tipContact','contact']){$(id).checked=true;$(id).disabled=false;}
+for(const id of ['tipContact','contact','reference','usePoses']){$(id).checked=false;}
 $('falseDepth').checked=true;$('lockUpper').checked=true;
 combined=new CombinedHead(scene,getCombinedOptions);
 $('centerHead').onclick=()=>combined.center();
@@ -343,7 +343,7 @@ Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
 Scene: ${measuredScene} measured FPS (target ${o.sceneRate})${Object.keys(s.errors||{}).length?' · '+JSON.stringify(s.errors):''}`;}
 window.combinedLab={version:19,get head(){return combined;},get metrics(){return trackingStats;},get handResult(){return directResult;},get scene(){return scene;}};
-notice('Alien 18.9 ready. Extended-hand reference calibration available; tracking runs on the PC.');
+notice('Alien 18.10 ready. Extended-hand reference calibration available; tracking runs on the PC.');
 combined.ready.then(()=>{if(combined.error)notice('Head model failed to load: '+combined.error);});
 
 const fixtureName=new URLSearchParams(location.search).get('fixture');
@@ -487,7 +487,7 @@ if($('captureRestSize'))$('captureRestSize').onclick=()=>{
  for(const [id,max,value] of [['fingerNoise',15,1],['directionSmoothing',500,25],['confirmJump',90,0],['depthSmooth',500,25],['headSmooth',500,0]]){const e=$(id);e.max=max;e.value=value;e.nextElementSibling.value=value;const label=e.closest('label');label.style.display='block';jiggle.append(label);}
  const view=document.createElement('button');view.textContent='Explore in 3D — rotate / pan / zoom';let explore=false;
  view.onclick=()=>{explore=!explore;controls.enabled=explore;controls.enablePan=true;controls.maxDistance=8;if(explore){controls.target.set(0,0,-(combined?.depth||.5));$('scene').style.transform='none';$('cameraFrame').style.display='none';}else setViewMode();view.textContent=explore?'Return to camera mirror':'Explore in 3D — rotate / pan / zoom';};panel.prepend(view,jiggle);
- const allowed=new Set(['manualDepth','manualHandDepth','manualHeadDepth','headContactEnabled','outerCollision','handsTouch','relaxedPalm','handDistance','handHeight','headSide','contactThreshold','headHeight','headSize','headBack','fingerThickness','tipInset','lockBody','turnGain','moveGain','neckShare','trackingGrace','faceGrace','showHead','mappedFaceDots','fingerNoise','directionSmoothing','confirmJump','depthSmooth','headSmooth']);
+ const allowed=new Set(['manualDepth','headContactEnabled','outerCollision','handsTouch','relaxedPalm','handHeight','headSide','contactThreshold','headHeight','headSize','headBack','fingerThickness','tipInset','lockBody','turnGain','moveGain','neckShare','trackingGrace','faceGrace','showHead','mappedFaceDots','fingerNoise','directionSmoothing','confirmJump','depthSmooth','headSmooth']);
  for(const label of panel.querySelectorAll('label')){const input=label.querySelector('input,select');if(input&&!allowed.has(input.id))label.style.display='none';}
  for(const el of panel.querySelectorAll('p,small,button'))if(el!==view&&!jiggle.contains(el)&&el.id!=='calculationTiming'&&el.id!=='saveManualDepth'&&el.id!=='manualDepthStatus')el.style.display='none';
  for(const d of panel.querySelectorAll('details')){if(d===jiggle)continue;const visible=[...d.querySelectorAll('label')].some(l=>l.style.display!=='none');if(!visible)d.style.setProperty('display','none','important');}
@@ -506,17 +506,16 @@ const handPairStatus=document.createElement('p');handPairStatus.id='handPairStat
 
 function referenceModeUI(){
  if($('manualDepth').checked&&!extendedReference)$('manualDepth').checked=false;
- for(const id of ['headContactEnabled','outerCollision','handsTouch','relaxedPalm','contactThreshold','handDistance','headBack'])$(id).disabled=$('manualDepth').checked;
- $('manualDepthStatus').textContent=$('manualDepth').checked?'Extended-hand reference active. Depth follows the saved hand-size ratio; automatic contact shifts are off.':extendedReference?'Saved reference available. Enable extended-arm depth reference to use it.':'Set the reference distance, then capture your extended hand with your face visible.';
+
+ $('manualDepthStatus').textContent=$('manualDepth').checked?'Extended-hand reference active. Depth follows the saved hand-size ratio; automatic hand-to-hand depth correction is off.':extendedReference?'Saved reference available. Enable extended-arm depth reference to use it.':'Extend your open hand below your visible face, then capture. No distance entry needed.';
 }
 $('manualDepth').addEventListener('input',referenceModeUI);referenceModeUI();
 $('saveManualDepth').onclick=()=>{
- const distance=+$('manualHandDepth').value/100;
- referenceCapture.begin(performance.now(),distance);clearInterval(referenceTimer);$('saveManualDepth').disabled=true;
- const tick=()=>{const now=performance.now(),result=referenceCapture.update(now,allHands,!!combined?.face&&now-combined.seen<250,captureAspect);
+ referenceCapture.begin(performance.now());clearInterval(referenceTimer);$('saveManualDepth').disabled=true;
+ const tick=()=>{const now=performance.now(),result=referenceCapture.update(now,allHands,combined?.face&&now-combined.seen<250?{raw:Math.abs(combined.face.matrix[14])/100,depth:combined.depth}:null,captureAspect,renderedHands);
   if(!result)return; $('manualDepthStatus').textContent=result.message;
   if(result.done){clearInterval(referenceTimer);referenceTimer=null;$('saveManualDepth').disabled=false;
-   if(result.reference){extendedReference=result.reference;try{localStorage.setItem('alien-extended-reference',JSON.stringify(extendedReference));}catch{}
+   if(result.reference){extendedReference=result.reference;try{localStorage.setItem('alien-simple-reference-v2',JSON.stringify(extendedReference));}catch{}
     for(const s of ['L','R'])delete depthStates[s];$('manualDepth').checked=true;$('manualDepth').dispatchEvent(new Event('input'));}
   }
  };referenceTimer=setInterval(tick,100);tick();
@@ -525,6 +524,6 @@ $('saveManualDepth').onclick=()=>{
 let lastReferenceStatus=0;
 function updateReferenceStatus(now){
  if(referenceTimer||!getCombinedOptions().manualDepth||!extendedReference||now-lastReferenceStatus<250)return;
- lastReferenceStatus=now;const values=Object.entries(renderedHands).map(([s,h])=>s+': '+(-h.result.points[0].z*100).toFixed(1)+' cm');
- $('manualDepthStatus').textContent='Saved reference: '+(extendedReference.depth*100).toFixed(0)+' cm. Estimated hand distance '+(values.join(' / ')||'— show a hand')+'. Contact corrections off.';
+ lastReferenceStatus=now;
+ $('manualDepthStatus').textContent='Reference captured. Move naturally. Hand distance follows the captured size ratio.';
 }

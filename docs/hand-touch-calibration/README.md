@@ -1,11 +1,9 @@
-# Hands-touching experiment
-Capture a measured anchor, then one eight-second sweep. Each capture starts after a five-second preparation countdown. During the sweep move touching index fingertips toward your chest for four seconds, then back toward the camera for four seconds. Keep both hands visible and the camera fixed; the face is not required. A usable fit applies immediately after the sweep, with fit error displayed for reference. There is no independent-validation step. Reset cancels capture and restores base depth. Contact/relaxed palm must be off and hand offsets zero while recording. Calibration is session-only.
+# One-hand sweep 2
 
+Five seconds to prepare, then an eight-second one-way sweep. Extend one fully visible open hand toward the camera with the palm facing yourself, keep your face visible, and move back to your neck/shoulder. Finish with the hand at the neck. No manual centimetres, measured anchor, touching index fingers, second hand, return sweep or validation step.
 
-This measures model consistency, not independent physical depth accuracy: monocular landmarks and assumed hand geometry remain uncertain. Synthetic fit test passes; real calibration requires the user’s measured capture.
+Capture retains the starting model wrist depth and observes the initial palm span. At the neck endpoint it uses the head's existing depth plane plus the tracked wrist-to-palm depth offset. The saved inverse-palm-size mapping interpolates between those two endpoints and preserves the initial placement exactly. During subsequent motion the coefficients never refit themselves. Finger gestures continue using MediaPipe landmarks and the existing direct rig conversion. The head reference is retained at its already displayed distance. The endpoint assumes the requested hand-at-neck pose; it does not independently prove physical contact.
 
-## Touch 1.2
-Fixed eight-second recording timer after five-second preparation: first half toward chest, second half toward camera. Displays accepted frames and rejection reasons; stops at the deadline even if tracking fails. Removed the unnecessary face-visible / 3 cm model-head-motion rejection gate: these hand-fit equations do not depend on face landmarks. Camera must remain fixed. Validation requires samples in both halves and a robust 1.5× near/far range.
+Reset removes the mapping; recapture replaces it. Capture fails clearly if the start/end frames are missing, the hand changes, the near/far size range is absent, or the endpoint is not farther away than the initial placement. Recording stops at eight seconds even if tracking fails. Session-only reference. Zero position offsets by default. Back-wall shifting is bypassed after capture. Contact assistance remains opt-in.
 
-## Touch 1.3
-Removed independent validation at the user's request. Measured anchor + one eight-second sweep now applies a usable fit immediately. Fit error is shown for interpretation, not used as an accuracy acceptance threshold. Reset removes the applied fit. This change does not establish real-world depth accuracy.
+Shares the straight distal-joint depth correction with Alien 18.10. Tests cover one hand, preparation/deadline, missing frames, cancellation, no measurement fields, starting depth retention, endpoint mapping and no live refitting.
