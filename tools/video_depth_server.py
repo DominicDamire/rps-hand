@@ -3,8 +3,9 @@ Official upstream code is installed outside the repository by setup-vda.ps1.
 No camera images or depth outputs are saved by this server.
 """
 import argparse, base64, json, os, sys, threading, time
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlsplit, unquote
 import cv2
 import numpy as np
 import torch
@@ -24,7 +25,7 @@ model.eval()
 lock = threading.Lock()
 last_source = None
 last_shape = None
-allowed = {'https://d14life.github.io', 'http://127.0.0.1:8776', 'http://localhost:8776'}
+allowed = {'https://d14life.github.io', 'http://127.0.0.1:8776', 'http://localhost:8776', 'http://127.0.0.1:8788', 'http://localhost:8788'}
 
 def clear_cache():
     model.transform = None
@@ -48,7 +49,9 @@ def measure(depth, region):
     centre = np.mean(points/[w,h],axis=0)
     return {'label':str(region.get('label',''))[:16], 'meters':float(median), 'spread':float((q3-q1)/median), 'pixels':int(len(values)), 'uv':centre.tolist()}
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(SimpleHTTPRequestHandler):
+    def __init__(self, *a, **kw):
+        super().__init__(*a, directory=str(Path(__file__).resolve().parent.parent / 'docs'), **kw)
     def log_message(self, *args):
         pass
     def send_json_headers(self, status=200):
@@ -73,7 +76,14 @@ class Handler(BaseHTTPRequestHandler):
         self.reply({},200 if self.headers.get('Origin') in allowed else 403)
     def do_GET(self):
         if self.path!='/health':
-            return self.reply({'error':'Not found'},404)
+            root=Path(self.directory).resolve()
+            relative=unquote(urlsplit(self.path).path).lstrip('/')
+            target=(root/relative).resolve()
+            if not target.is_relative_to(root) or any(p.startswith('.') for p in Path(relative).parts):
+                return self.reply({'error':'Not found'},404)
+            if target.is_dir() and not (target/'index.html').is_file():
+                return self.reply({'error':'Not found'},404)
+            return super().do_GET()
         self.reply({'ready':True,'model':'Metric Video Depth Anything Small','device':'CPU','inputSize':args.input_size,'streaming':'official experimental implementation'})
     def do_POST(self):
         global last_source,last_shape
