@@ -1,5 +1,5 @@
 <!doctype html><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"}}</script><pre>Loading</pre><script type="module">
-import * as T from 'three';import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.3';
+import * as T from 'three';import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4';
 const make=()=>Array.from({length:21},()=>({x:.5,y:.6}));let bend=0,pixelError=0,curledChange=0,thumbChange=0;
 for(const perspective of [true,false]){
  const lm=make();lm[0]={x:.5,y:.8};lm[9]={x:.5,y:.5};for(let k=0;k<4;k++)lm[5+k]={x:.4,y:.5-k*.14};

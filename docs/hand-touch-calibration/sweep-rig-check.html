@@ -1,5 +1,5 @@
 <!doctype html><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"}}</script><pre>Loading</pre><script type="module">
-import * as T from 'three';import {DollRig} from '../doll/DollRig.js';import {buildTips} from './contact.mjs';import {directDriver} from './direct.mjs?v=touch2.3';import {OuterCollision} from './outer-collision.mjs?v=touch2.3';import {convexPenetration} from './convex-contact.mjs';
+import * as T from 'three';import {DollRig} from '../doll/DollRig.js';import {buildTips} from './contact.mjs';import {directDriver} from './direct.mjs?v=touch2.4';import {OuterCollision} from './outer-collision.mjs?v=touch2.4';import {convexPenetration} from './convex-contact.mjs';
 try{
  const rig=new DollRig(new T.Scene(),{url:new URL('../doll.glb',location).href,report:new URL('../doll-report.json',location).href});await rig.ready;
  const tips=buildTips(rig),names=['Thumb','Index','Middle','Ring','Pinky'],runs={L:directDriver(rig,tips),R:directDriver(rig,tips)};let lockError=0,bendError=0,lengthError=0,openError=0;
@@ -28,6 +28,16 @@ try{
  collision.resolve(null,rig,{L:true,R:true},shift,false,'1:0',{head:false,hands:true});
  const world=h=>{h.node.updateWorldMatrix(true,false);const normal=new T.Matrix3().getNormalMatrix(h.node.matrixWorld);return {vertices:h.vertices.map(v=>v.clone().applyMatrix4(h.node.matrixWorld).toArray()),normals:h.normals.map(v=>v.clone().applyMatrix3(normal).normalize().toArray())};};
  let remaining=0;for(const a of collision.hand.L)for(const b of collision.hand.R)remaining=Math.max(remaining,convexPenetration(world(a),world(b))?.depth||0);
- document.querySelector('pre').textContent=JSON.stringify({pass:lockError<1e-8&&bendError<1e-6&&lengthError<1e-8&&openError<1e-8&&collision.last.hands>0&&remaining<.001,lockError,bendError,lengthError,openError,handCollisions:collision.last.hands,remainingPenetrationMm:remaining*1000});
+ // Isolated collision regression: touching the head must not move the other hand.
+ const block=(x,r)=>{const node=new T.Object3D();node.position.x=x;node.updateMatrixWorld(true);return {node,vertices:[-r,r].flatMap(a=>[-r,r].flatMap(b=>[-r,r].map(c=>new T.Vector3(a,b,c)))),normals:[new T.Vector3(1,0,0),new T.Vector3(0,1,0),new T.Vector3(0,0,1)]};};
+ const normalTest=new OuterCollision(),left=block(.13,.04),right=block(.5,.04),headBlock=block(0,.1);
+ normalTest.shape='isolated';normalTest.hand={L:[left],R:[right]};normalTest.head=[headBlock];
+ const pushes={L:new T.Vector3(),R:new T.Vector3()},move=(side,d)=>{pushes[side].add(d);normalTest.hand[side][0].node.position.add(d);};
+ normalTest.resolve({group:{visible:true}},null,{L:true,R:true},move,true,'isolated',{head:true,hands:false});
+ const normalOnly=pushes.L.x>0&&Math.abs(pushes.L.y)+Math.abs(pushes.L.z)<1e-10&&pushes.R.length()<1e-10;
+ const beforeSlide=left.node.position.x;left.node.position.y+=.02;
+ normalTest.resolve({group:{visible:true}},null,{L:true,R:true},move,true,'isolated',{head:true,hands:false});
+ const freeSlide=Math.abs(left.node.position.y-.02)<1e-10&&Math.abs(left.node.position.x-beforeSlide)<1e-10;
+ document.querySelector('pre').textContent=JSON.stringify({pass:normalOnly&&freeSlide&&lockError<1e-8&&bendError<1e-6&&lengthError<1e-8&&openError<1e-8&&collision.last.hands>0&&remaining<.001,normalOnly,freeSlide,lockError,bendError,lengthError,openError,handCollisions:collision.last.hands,remainingPenetrationMm:remaining*1000});
 }catch(e){document.querySelector('pre').textContent=e.stack;}
 </script>

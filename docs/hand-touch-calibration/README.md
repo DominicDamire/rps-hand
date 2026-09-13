@@ -30,3 +30,14 @@ Validation: Node regression suite; browser actual DollRig tests with both hands,
 Contact matching now exposes detection range (2–50% of palm span, default 18%), confirmation time (0–500 ms, default 100), and maximum residual sideways correction per hand (0–20 cm, default 3.5). The image tolerance scales with palm span, rather than an additional fixed image-size cap. These are temporary matching controls, not sweep recalibration.
 
 The shared forward/back hand offset is exposed (zero by default; negative toward camera). Calibration removes this offset from its saved base anchors so it is applied only once. Elbow/arm overlay dots and lines are removed; the shoulder tracker and shoulder line remain.
+
+
+## Sweep 2.4
+
+Adds a second capture button alongside the original one-hand sweep. Hold both middle fingertips (MediaPipe landmark 12) physically together, fingers pointing inward, near the camera. After five seconds of preparation, move both hands one way toward the bottom of the neck over eight seconds, maintaining contact. No third validation step or manual distance is required. Face visibility is not used as a gate or a depth anchor for this mode. The endpoint position is an instruction, not an independently verified neck contact.
+
+Each paired frame solves the two wrist camera-ray distances using fixed rig middle-fingertip offsets and the assumed real fingertip contact. It accepts only fresh simultaneous Left/Right results, opposing middle-finger directions, visible palm anchors/tips and a small image gap. The screenshot's drawn line is not used as data. Both endpoint windows and at least twelve motion observations are required. Image proximity remains a contact hypothesis, not physical proof.
+
+All accepted samples fit a robust inverse-palm-span depth curve for each hand (A + B / palmSize). These coefficients are frozen after capture; the head is not repositioned, hands are not forced together afterward unless the separate existing runtime contact option is enabled, and geometry is unchanged. The displayed millimetre value is the residual on the calibration recording, not independent measured depth accuracy. Failed/degenerate recordings keep the previous capture. Models and manual settings can affect the inferred scale; this is still a monocular experiment.
+
+Head collision uses exterior-shell separation along a separating normal, allowing tangential sliding. It no longer automatically shifts the other hand just because runtime hand contact is paired. Existing collision switches and defaults remain; there is no same-hand self-collision. Tests cover known synthetic sweep distances (including unseen positions), missing/stale/wrong-finger contact, UI capture activation/reset, fixed runtime coefficients, normal collision and free sliding, plus existing actual DollRig finger limits and collision separation.

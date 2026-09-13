@@ -1,6 +1,6 @@
-import {OuterCollision} from './outer-collision.mjs?v=touch2.3';
-import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.3';
-import {installExperiment} from './experiment.mjs?v=touch2.3';
+import {OuterCollision} from './outer-collision.mjs?v=touch2.4';
+import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.4';
+import {installExperiment} from './experiment.mjs?v=touch2.4';
 let depthExperiment=null;
 import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=alien18.4';
 import {palmSize} from './palm-distance.mjs?v=alien13';
@@ -8,10 +8,10 @@ import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
-import {installCombinedUI} from './combined-ui.mjs?v=touch2.3';
-import {CombinedHead} from './head-model.mjs?v=touch2.3';
-import {directDriver} from './direct.mjs?v=touch2.3';
-import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.3';
+import {installCombinedUI} from './combined-ui.mjs?v=touch2.4';
+import {CombinedHead} from './head-model.mjs?v=touch2.4';
+import {directDriver} from './direct.mjs?v=touch2.4';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -337,7 +337,7 @@ Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
 Scene: ${measuredScene} measured FPS (target ${o.sceneRate})${Object.keys(s.errors||{}).length?' · '+JSON.stringify(s.errors):''}`;}
 window.combinedLab={version:19,get head(){return combined;},get metrics(){return trackingStats;},get handResult(){return directResult;},get scene(){return scene;}};
-notice('One-hand sweep ready. Manual fit controls available; tracking runs on the PC.');
+notice('Sweep 2.4 ready. Choose one-hand or middle-fingertip calibration; tracking runs on the PC.');
 combined.ready.then(()=>{if(combined.error)notice('Head model failed to load: '+combined.error);});
 
 const fixtureName=new URLSearchParams(location.search).get('fixture');
@@ -492,7 +492,7 @@ if($('captureRestSize'))$('captureRestSize').onclick=()=>{
 // The requested direct mode has no custom temporal jiggle filter or scan.
 for(const id of ['fingerNoise','directionSmoothing','confirmJump','movementThreshold','depthSmooth','headSmooth']){const input=$(id);if(input){input.value=0;input.closest('label').style.display='none';}}
 for(const d of $('directSettings').querySelectorAll('details'))if(d.querySelector('summary')?.textContent==='Jiggle')d.style.setProperty('display','none','important');
-const pipelineInfo=document.createElement('p');pipelineInfo.textContent='One hand. One movement back to your neck. The captured mapping stays fixed; current hand size drives forward/backward motion.';$('directSettings').prepend(pipelineInfo);
+const pipelineInfo=document.createElement('p');pipelineInfo.textContent='Choose a one-hand sweep or the two-hand middle-fingertip sweep. Both move one way toward the neck. After capture, the saved curves stay fixed.';$('directSettings').prepend(pipelineInfo);
 
 depthExperiment=installExperiment({container:$('directSettings'),video:$('video'),getHead:()=>combined,getHandDistance:()=>getCombinedOptions().handDistance||0});
 

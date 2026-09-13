@@ -15,3 +15,16 @@ const locked=calibrated.depth('R',imageHand(1.5),null,.5,1);head.depth=1.5;
 assert.equal(calibrated.depth('R',imageHand(1.5),null,.5,1),locked,'head movement after capture cannot change either hand depth');
 node('touchSweep').onclick();now+=13000;timer();assert.equal(calibrated.active,true,'failed recapture keeps previous valid mapping');
 console.log('PASS: capture activation, shared mapping, independent head movement and no double manual offset');
+
+const {pairFrame}=await import('./paired-sweep-fixture.mjs');
+const twoHand=installExperiment({container:{prepend(){}},getHead:()=>null});
+now=50000;node('pairedSweep').onclick();assert.equal(node('touchSweep').disabled,true);assert.equal(node('pairedSweep').disabled,true);
+for(now=50000;now<63000;now+=100){
+ const z=now<55000?.3:.3+(now-55000)/7900*.35,hands=pairFrame(z,now);
+ const rendered=Object.fromEntries(hands.map(h=>[h.label==='Left'?'L':'R',{result:{points:h.points.map(([x,y,z])=>({x,y,z}))}}]));
+ twoHand.observe(hands,rendered,1);timer();
+}
+timer();assert.equal(twoHand.active,true);assert.match(node('touchStatus').textContent,/Two-hand capture ACTIVE/);
+for(const [i,side] of ['L','R'].entries())assert.ok(Math.abs(twoHand.depth(side,pairFrame(.45,0)[i].landmarks,null,.9,1)-.45)<.001,'two-hand button activates the correct side-specific runtime curve');
+node('touchReset').onclick();assert.equal(twoHand.active,false);
+console.log('PASS: two-hand UI path, buttons, capture without face, both runtime curves and reset');

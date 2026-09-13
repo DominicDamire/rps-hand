@@ -1,4 +1,4 @@
-import {limitBaseSplay} from './base-splay-limit.mjs?v=touch2.3';
+import {limitBaseSplay} from './base-splay-limit.mjs?v=touch2.4';
 import * as T from 'three';
 import {DirectionStabilizer,fingerPlane,constrainFinger} from './stability.mjs?v=17';
 import {ContactLatch,fitContact} from './contact-direct.mjs?v=17';
