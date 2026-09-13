@@ -1,4 +1,4 @@
-const add=(a,b)=>a.map((v,i)=>v+b[i]),sub=(a,b)=>a.map((v,i)=>v-b[i]),mul=(a,k)=>a.map(v=>v*k),dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],triple=(a,b,c)=>cross(cross(a,b),c);
+const add=(a,b)=>a.map((v,i)=>v+b[i]),sub=(a,b)=>a.map((v,i)=>v-b[i]),mul=(a,k)=>a.map(v=>v*k),dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],triple=(a,b,c)=>cross(cross(a,b),c);
 function support(vertices,d){let best=vertices[0],score=-Infinity;for(const v of vertices){const n=dot(v,d);if(n>score){score=n;best=v;}}return best;}
 function intersects(A,B){
  const supportPair=d=>sub(support(A,d),support(B,mul(d,-1)));let d=[1,0,0],simplex=[supportPair(d)];d=mul(simplex[0],-1);
@@ -36,4 +36,27 @@ export function forwardClearance(shapes,obstacles){
  const step=hi/64;for(let z=step;z<=hi;z+=step){if(!overlaps(z)){hi=z;break;}lo=z;}
  for(let i=0;i<16;i++){const mid=(lo+hi)/2;if(overlaps(mid))lo=mid;else hi=mid;}
  return hi+.0003;
+}
+
+// A camera-visible hand must not tunnel through the head between frames.
+// Find any head shell crossed on a +Z path, even if the input hand already
+// landed completely behind it. XY-separated side/top poses remain untouched.
+export function frontClearance(shapes,obstacles){
+ let clearance=0;
+ for(const a of shapes)for(const b of obstacles){
+  const bounds=h=>h.bounds||[0,1,2].map(i=>[Math.min(...h.vertices.map(p=>p[i])),Math.max(...h.vertices.map(p=>p[i]))]);
+  const A=bounds(a),B=bounds(b);if([0,1].some(i=>A[i][1]<=B[i][0]||B[i][1]<=A[i][0])||A[2][0]>=B[2][1])continue;
+  let lo=0,hi=Infinity;
+  for(const n of [...a.normals,...b.normals]){
+   let amin=Infinity,amax=-Infinity,bmin=Infinity,bmax=-Infinity;for(const p of a.vertices){const d=dot(p,n);amin=Math.min(amin,d);amax=Math.max(amax,d);}for(const p of b.vertices){const d=dot(p,n);bmin=Math.min(bmin,d);bmax=Math.max(bmax,d);}
+   const low=bmin-amax,high=bmax-amin,z=n[2];
+   if(Math.abs(z)<1e-10){if(low>=0||high<=0){hi=-1;break;}continue;}
+   const x=low/z,y=high/z;lo=Math.max(lo,Math.min(x,y));hi=Math.min(hi,Math.max(x,y));if(lo>=hi)break;
+  }
+  if(!(hi>lo&&Number.isFinite(hi)))continue;
+  // Conservative face-axis interval: choosing its front exit cannot leave
+  // a real intersection behind. It may add clearance near a hull silhouette.
+  clearance=Math.max(clearance,hi+.0003);
+ }
+ return clearance;
 }

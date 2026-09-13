@@ -1,9 +1,9 @@
-import {fitNeckSweep} from './neck-sweep.mjs?v=touch2.4.11-final';
-import {OneHandSweep} from './one-hand-sweep.mjs?v=touch2.4.11-final';
+import {fitNeckSweep} from './neck-sweep.mjs?v=touch2.4.12-final';
+import {OneHandSweep} from './one-hand-sweep.mjs?v=touch2.4.12-final';
 
 export function installExperiment({container,getHead,getFocal=()=>1,onReference=()=>{},onBegin=()=>{},getNeckReference=()=>null}){
  const panel=document.createElement('section');panel.style.display='block';
- panel.innerHTML=`<h2>Front-to-neck sweep · 2.4.11</h2>
+ panel.innerHTML=`<h2>Front-to-neck sweep · 2.4.12</h2>
  <p>Keep your phone and head still. Extend one open hand toward the camera, palm facing you. Keep the whole hand inside the picture.</p>
  <p>Press Record and hold still for the <b>5-second countdown</b>. Then move the hand <b>back to your neck for 8 seconds, one way</b>. Finish at the bottom of your neck, with your open palm against the neck, keeping the hand and face visible. Hold there for the final second. No upward sweep or return movement.</p>
  <p>The finish aligns hand depth to the displayed neck. Palm size with rotation correction then drives both hands using that fixed reference. Set the head position before recording; it stays unchanged. The neck reference leaves 30 model cm of space behind it. The phone is assumed to lean back about 10 degrees; this angle is not measured. No extra calibration step.</p>

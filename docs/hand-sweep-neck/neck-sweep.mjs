@@ -1,5 +1,5 @@
-import {palmObservation} from './palm-sweep-depth.mjs?v=touch2.4.11-final';
-import {sweepEndpoints} from './one-hand-sweep.mjs?v=touch2.4.11-final';
+import {palmObservation} from './palm-sweep-depth.mjs?v=touch2.4.12-final';
+import {sweepEndpoints} from './one-hand-sweep.mjs?v=touch2.4.12-final';
 const median=a=>[...a].sort((a,b)=>a-b)[Math.floor(a.length/2)];
 export const PHONE_TILT_DEGREES=10;
 // Assume a phone leaning back, with its camera looking 10 degrees upward.
