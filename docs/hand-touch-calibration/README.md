@@ -66,3 +66,11 @@ Private recording verification: 297/297 frames, 74 neck-reference samples, zero 
 ## Sweep 2.4.4: unassisted calibration evaluation
 Recorded-video fitting still uses the user-declared fingertip contact as its calibration constraint. Once the fit is saved, hand-to-hand contact matching, hand collisions, and head collisions automatically switch OFF. Playback then uses the frozen size-to-depth curves and head reference without positional contact corrections. The user can separately enable correction switches, but doing so is no longer a test of calibration accuracy.
 The same 297-frame private clip replayed without correction has a median index-point gap of 66.08 mm and maximum 166.77 mm in model units; all 297 frames exceed 5 mm. This demonstrates that the current fitted size curves do NOT adequately reconstruct the motion by themselves. Prior collision/contact-assisted results must not be cited as calibration accuracy. This is a same-clip reconstruction test, not validation on unseen footage. Penetration is not measured when collisions are disabled.
+
+## Sweep 2.4.5: multiple candidate fits and causal landmark filtering
+
+Recorded fitting compares 20 feature/regularization combinations, using 195 training frames and 102 held-out frames in alternating half-second blocks of the same private clip. Features combine inverse palm size, projection-derived depth and palm orientation. Saved coefficients remain frozen; each hand predicts its own depth independently. Calibration placement translates the rendered hand after articulation, retaining its bone geometry. Contact and collision corrections stay off after calibration.
+
+A default-on Reduce tracking shake checkbox filters landmarks causally before both lines and model retargeting. Duplicate observations are cached; backward seeking resets state. Synthetic noise tests show attenuation and bounded ramp lag; these are not measurements of jitter in the real clip.
+
+Actual unassisted 297-frame replay: median index gap 12.46 mm, maximum 63.77 mm, 260 frames above 5 mm. Held-out candidate selection median 12.54 mm, maximum 51.42 mm. Improvement over 2.4.4 is substantial but contact remains imperfect. This is within-clip selection, not validation on independent footage or metric depth ground truth. Personal media remains private and excluded from Git.
