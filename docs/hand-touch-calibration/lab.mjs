@@ -1,13 +1,14 @@
-import {TrackingJitter} from './tracking-jitter.mjs?v=touch2.4.6';
+import {palmObservation,fitPalmSweep,PalmSweepDepth} from './palm-sweep-depth.mjs?v=touch2.4.7';
+const palmDepth=new PalmSweepDepth();
+import {TrackingJitter} from './tracking-jitter.mjs?v=touch2.4.7';
 const trackingJitter=new TrackingJitter();
-import {fitVideoCalibration,videoDepth,calibratedPlacement} from './video-calibration.mjs?v=touch2.4.6';
-import {video245Fit} from './video245-preset.mjs?v=touch2.4.6';
+import {video247Fit} from './video247-preset.mjs?v=touch2.4.7';
 let recordedFit=null,usingVideoPreset=false;
-import {installVideoReplay} from './video-replay.mjs?v=touch2.4.6';
+import {installVideoReplay} from './video-replay.mjs?v=touch2.4.7';
 let videoReplay=null;
-import {OuterCollision} from './outer-collision.mjs?v=touch2.4.6';
-import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.4.6';
-import {installExperiment} from './experiment.mjs?v=touch2.4.6';
+import {OuterCollision} from './outer-collision.mjs?v=touch2.4.7';
+import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.4.7';
+import {installExperiment} from './experiment.mjs?v=touch2.4.7';
 let depthExperiment=null;
 import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=alien18.4';
 import {palmSize} from './palm-distance.mjs?v=alien13';
@@ -15,10 +16,10 @@ import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
-import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.6';
-import {CombinedHead} from './head-model.mjs?v=touch2.4.6';
-import {directDriver} from './direct.mjs?v=touch2.4.6';
-import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.6';
+import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.7';
+import {CombinedHead} from './head-model.mjs?v=touch2.4.7';
+import {directDriver} from './direct.mjs?v=touch2.4.7';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.7';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -192,7 +193,7 @@ function acceptTracking(data,frame,token=epoch){if($('reduceShake')?.checked)dat
  if($('bothHands').checked){const label=primary?.label;if(label==='Left'||label==='Right')side=label==='Left'?'L':'R';}latest={landmarks:lm,world};$('captureState').textContent='Direct lines · '+Math.round(data.inferenceMs)+' ms inference';
  $('edit').disabled=true;$('resume').disabled=true;
 }
-function stopCamera(){videoReplay?.stop();depthExperiment?.cancel();contactAssist.reset();for(const s of ['L','R']){delete relaxedStates[s];}lastWallZ=-.6;for(const key of Object.keys(depthStates))delete depthStates[key];liveSession?.();liveSession=null;combined?.reset();trackingStats=null;if($('liveFps'))$('liveFps').textContent='CAM — FPS\nHAND — · FACE — · BODY —';allHands=[];recentHands.clear();closureState.reset();if(!editing){thumbReference=0;contactAngles=null;}epoch++;straight={};pinching=false;pinchFinger=null;contactHold=null;for(const f of Object.values(thumbFilters))f.reset();lastTracking=0;smoothPalmQ=previousPalmQ=heldPalmQ=null;palmQuiet=0;for(const f of Object.values(filters))f.reset();positionFilter.reset();curlFilter.reset();posePreview=false;closePhone?.();closePhone=null;phoneActive=false;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
+function stopCamera(){palmDepth.reset();videoReplay?.stop();depthExperiment?.cancel();contactAssist.reset();for(const s of ['L','R']){delete relaxedStates[s];}lastWallZ=-.6;for(const key of Object.keys(depthStates))delete depthStates[key];liveSession?.();liveSession=null;combined?.reset();trackingStats=null;if($('liveFps'))$('liveFps').textContent='CAM — FPS\nHAND — · FACE — · BODY —';allHands=[];recentHands.clear();closureState.reset();if(!editing){thumbReference=0;contactAngles=null;}epoch++;straight={};pinching=false;pinchFinger=null;contactHold=null;for(const f of Object.values(thumbFilters))f.reset();lastTracking=0;smoothPalmQ=previousPalmQ=heldPalmQ=null;palmQuiet=0;for(const f of Object.values(filters))f.reset();positionFilter.reset();curlFilter.reset();posePreview=false;closePhone?.();closePhone=null;phoneActive=false;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
 async function startCamera(){try{stopCamera();editing=false;sampleSource=null;latest=null;notice('Opening camera…');const id=$('cameraSelect').value;stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(id?{deviceId:{exact:id}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:+getCombinedOptions().cameraFps}}});$('video').srcObject=stream;await $('video').play();lastVideo=-1;await listCameras();liveSession=startTracking($('video'),(data,frame)=>{if(data.task==='hands')acceptTracking(data,frame);else{combined.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('Combined DEMO: hands, face and shoulders share this camera. GPU preferred; actual rates below.');updateMode();}catch(e){stopCamera();notice('Camera could not start: '+e.message);}}
 async function listCameras(){const current=$('cameraSelect').value,devices=await navigator.mediaDevices.enumerateDevices();$('cameraSelect').replaceChildren(new Option('Default camera',''));for(const d of devices.filter(d=>d.kind==='videoinput'))$('cameraSelect').add(new Option(d.label||'Camera '+($('cameraSelect').options.length),d.deviceId));$('cameraSelect').value=current;}
 $('phone').onclick=()=>{stopCamera();editing=false;sampleSource=null;latest=null;updateMode();const token=epoch;try{closePhone=receivePhone(async received=>{if(token!==epoch){received.getTracks().forEach(t=>t.stop());return;}try{stream=received;phoneActive=true;$('video').srcObject=received;$('video').muted=true;await $('video').play();if(token!==epoch)return;liveSession=startTracking($('video'),(data,frame)=>{if(data.task==='hands')acceptTracking(data,frame,token);else{combined.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('PHONE VIDEO → PC TRACKING → PC RENDERING. Phone does not calculate landmarks.');updateMode();}catch(e){stopCamera();notice('Received video could not start: '+e.message);}},notice,message=>{stopCamera();notice(message);});}catch(e){notice(e.message);}};
@@ -499,9 +500,9 @@ if($('captureRestSize'))$('captureRestSize').onclick=()=>{
 // The requested direct mode has no custom temporal jiggle filter or scan.
 for(const id of ['fingerNoise','directionSmoothing','confirmJump','movementThreshold','depthSmooth','headSmooth']){const input=$(id);if(input){input.value=0;input.closest('label').style.display='none';}}
 for(const d of $('directSettings').querySelectorAll('details'))if(d.querySelector('summary')?.textContent==='Jiggle')d.style.setProperty('display','none','important');
-const pipelineInfo=document.createElement('p');pipelineInfo.textContent='Choose a one-hand sweep or the two-hand index-fingertip sweep. Both move one way toward the neck. After capture, the saved curves stay fixed.';$('directSettings').prepend(pipelineInfo);
+const pipelineInfo=document.createElement('p');pipelineInfo.textContent='The sweep saves the scale and far reference. Angle-corrected palm size then drives depth; rotation does not add a separate distance. Edge-on palms hold the last reliable depth.';$('directSettings').prepend(pipelineInfo);
 
-depthExperiment=installExperiment({container:$('directSettings'),video:$('video'),getHead:()=>combined,getHandDistance:()=>getCombinedOptions().handDistance||0});
+depthExperiment=installExperiment({container:$('directSettings'),video:$('video'),getHead:()=>combined,getHandDistance:()=>getCombinedOptions().handDistance||0,getFocal:aspect=>1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),onReference:fit=>{if(recordedFit)recordedFit={...recordedFit,palmFit:fit};usingVideoPreset=!!recordedFit;palmDepth.reset();}});
 
 $('relaxedPalm').checked=false;$('contactThreshold').value=0;$('contactThreshold').nextElementSibling.value=0;
 
@@ -513,7 +514,7 @@ if(wallTest){wallTest.style.display='block';contactPanel.after(wallTest);}
 
 const indexLabel=document.createElement('label');indexLabel.style.display='block';indexLabel.innerHTML='<input id="indexContactOnly" type="checkbox"> Match index fingertips only';contactPanel.prepend(indexLabel);
 const replayReport=document.createElement('p');replayReport.setAttribute('role','status');contactPanel.append(replayReport);let replayChecks=new Map(),replayFrame=-1;
-videoReplay=installVideoReplay({container:$('directSettings'),onView:direction=>{const centre=renderedHands.L?.result?.points?.[8]?.clone()||new THREE.Vector3(0,0,-.5);if(renderedHands.R)centre.lerp(renderedHands.R.result.points[8],.5);controls.enabled=true;controls.target.copy(centre);camera.position.copy(centre).add(direction==='top'?new THREE.Vector3(0,.55,.001):new THREE.Vector3(.55,0,0));camera.up.set(0,1,0);camera.lookAt(centre);camera.updateProjectionMatrix();$('scene').style.transform='none';$('cameraFrame').style.display='none';},onCalibrated:()=>{recordedFit=videoReplay.contactDeclared&&videoReplay.neckCalibration?fitVideoCalibration([...replayChecks.values()]):null;replayChecks.clear();for(const id of ['handsTouch','headCollision','outerCollision'])$(id).checked=false;return recordedFit?'Video reference saved from '+recordedFit.frames+' frames; head/neck fit uses '+recordedFit.headSamples+' near-neck frames. '+(recordedFit.comparison?'Compared '+recordedFit.comparison.candidates.length+' fits using '+recordedFit.comparison.validation+' held-out frames; selected '+recordedFit.comparison.selected+'. ':'')+'Replaying saved calibration ONLY: contact correction and collisions are OFF. Depth is estimated, not measured.':'Could not fit video reference; using base depth without corrections.';},onStart:()=>{usingVideoPreset=false;stopCamera();trackingJitter.reset();recordedFit=null;editing=false;sampleSource=null;latest=null;replayChecks.clear();$('handsTouch').checked=true;$('outerCollision').checked=false;$('headCollision').checked=false;$('indexContactOnly').checked=true;notice('Recorded video: index contact matching enabled. Processing stays on this computer.');},onFrame:(record,frame,stamp,changed)=>{recentHands.clear();for(const packet of [record.face,record.pose])if(packet)combined.receive({...packet,time:stamp});acceptTracking({...record.hands,time:stamp},frame);replayFrame=record.index;$('mode').textContent='RECORDED VIDEO';$('liveFps').textContent='VIDEO 30 samples/s · recorded\nHANDS '+(record.hands.landmarks?.length||0);}});
+videoReplay=installVideoReplay({container:$('directSettings'),onView:direction=>{const centre=renderedHands.L?.result?.points?.[8]?.clone()||new THREE.Vector3(0,0,-.5);if(renderedHands.R)centre.lerp(renderedHands.R.result.points[8],.5);controls.enabled=true;controls.target.copy(centre);camera.position.copy(centre).add(direction==='top'?new THREE.Vector3(0,.55,.001):new THREE.Vector3(.55,0,0));camera.up.set(0,1,0);camera.lookAt(centre);camera.updateProjectionMatrix();$('scene').style.transform='none';$('cameraFrame').style.display='none';},onCalibrated:()=>{recordedFit=videoReplay.contactDeclared&&videoReplay.neckCalibration?fitRecordedPalmReference([...replayChecks.values()]):null;replayChecks.clear();for(const id of ['handsTouch','headCollision','outerCollision'])$(id).checked=false;palmDepth.reset();return recordedFit?'Video reference saved from '+recordedFit.frames+' frames; head/neck fit uses '+recordedFit.headSamples+' near-neck frames. '+(recordedFit.comparison?'Compared '+recordedFit.comparison.candidates.length+' fits using '+recordedFit.comparison.validation+' held-out frames; selected '+recordedFit.comparison.selected+'. ':'')+'Replaying saved calibration ONLY: contact correction and collisions are OFF. Depth is estimated, not measured.':'Could not fit video reference; using base depth without corrections.';},onStart:()=>{usingVideoPreset=false;stopCamera();trackingJitter.reset();palmDepth.reset();recordedFit=null;editing=false;sampleSource=null;latest=null;replayChecks.clear();$('handsTouch').checked=true;$('outerCollision').checked=false;$('headCollision').checked=false;$('indexContactOnly').checked=true;notice('Recorded video: index contact matching enabled. Processing stays on this computer.');},onFrame:(record,frame,stamp,changed)=>{recentHands.clear();for(const packet of [record.face,record.pose])if(packet)combined.receive({...packet,time:stamp});acceptTracking({...record.hands,time:stamp},frame);replayFrame=record.index;$('mode').textContent='RECORDED VIDEO';$('liveFps').textContent='VIDEO 30 samples/s · recorded\nHANDS '+(record.hands.landmarks?.length||0);}});
 const originalInteractions=applyHandInteractions;
 applyHandInteractions=function(now){const baseline=Object.fromEntries(['L','R'].filter(s=>renderedHands[s]).map(s=>[s,renderedHands[s].result.points.map(p=>p.toArray())]));const before=renderedHands.L?.result?.points?.[8]?.distanceTo(renderedHands.R?.result?.points?.[8]||new THREE.Vector3());originalInteractions(now);if(!videoReplay?.active)return;const present=allHands.length===2&&allHands.every(h=>h.time===allHands[0].time);if(present){const a=renderedHands.L?.result?.points?.[8],b=renderedHands.R?.result?.points?.[8];if(a&&b)replayChecks.set(replayFrame,{before:before*1000,after:a.distanceTo(b)*1000,zL:-renderedHands.L.result.points[0].z,zR:-renderedHands.R.result.points[0].z,baseline,landmarks:Object.fromEntries(allHands.map(h=>[h.label==='Left'?'L':'R',h.landmarks])),viewAspect:camera.aspect,sourceAspect:captureAspect,reason:contactAssist.status,sizeL:imagePalmSize(allHands.find(h=>h.label==='Left').landmarks,captureAspect),sizeR:imagePalmSize(allHands.find(h=>h.label==='Right').landmarks,captureAspect),neckRatio:recordedNeckRatio(a,b),penetrations:getCombinedOptions().headCollision?(outerCollision.last.remaining||0):null});}const rows=[...replayChecks.values()],current=replayChecks.get(replayFrame);replayReport.textContent='Recorded frame '+replayFrame+': '+(present&&current?'index point gap '+current.before.toFixed(1)+' → '+current.after.toFixed(1)+' mm.':'Both hands not detected; contact cannot be verified.')+' Checked '+rows.length+' paired frames; maximum replay gap '+(rows.length?Math.max(...rows.map(x=>x.after)).toFixed(1):'—')+' mm.';if(location.hostname==='127.0.0.1'&&new URLSearchParams(location.search).has('reviewVideo')){let report=$('videoTestReport');if(!report){report=document.createElement('pre');report.id='videoTestReport';document.body.append(report);}report.textContent=JSON.stringify({fit:recordedFit?{headScale:recordedFit.headScale,comparison:recordedFit.comparison}:null,corrections:{contact:getCombinedOptions().handsTouch,head:getCombinedOptions().headCollision,hands:getCombinedOptions().outerCollision},gapMm:rows.length?{median:rows.map(x=>x.after).sort((a,b)=>a-b)[Math.floor(rows.length/2)],max:Math.max(...rows.map(x=>x.after)),over5mm:rows.filter(x=>x.after>5).length}:null,penetrations:[...replayChecks].filter(([i,x])=>x.penetrations>0),frames:rows.length,over5mm:[...replayChecks].filter(([i,x])=>x.after>5).slice(0,12).map(([frame,x])=>({frame,gap:x.after})),nearFar:rows.length?[Math.min(...rows.map(x=>(x.zL+x.zR)/2)),Math.max(...rows.map(x=>(x.zL+x.zR)/2))]:[]});}};
 if(location.hostname==='127.0.0.1'&&new URLSearchParams(location.search).has('reviewVideo'))videoReplay.load(new URL('../.lab-qa/index-move.mp4',import.meta.url).href);
@@ -532,26 +533,44 @@ function recordedNeckRatio(a,b){
  return best&&best.d<.12?tip.z/best.p.z:null;
 }
 
-const shakeLabel=document.createElement('label');shakeLabel.innerHTML='<input id="reduceShake" type="checkbox" checked> Reduce tracking shake';$('directSettings').prepend(shakeLabel);$('reduceShake').onchange=()=>trackingJitter.reset();
+const shakeLabel=document.createElement('label');shakeLabel.innerHTML='<input id="reduceShake" type="checkbox" checked> Reduce tracking shake';$('directSettings').prepend(shakeLabel);$('reduceShake').onchange=()=>{trackingJitter.reset();palmDepth.reset();};
 
 function applyRecordedPlacement(){
- if(!recordedFit||(!videoReplay?.active&&!usingVideoPreset)||videoReplay?.calibrating)return;
- for(const s of ['L','R']){const result=renderedHands[s]?.result,h=allHands.find(h=>h.label===(s==='L'?'Left':'Right'));if(!result||!h)continue;const p=result.points.map(p=>p.toArray()),base=-p[0][2],depth=calibratedPlacement(recordedFit,s,p,h.landmarks,captureAspect,camera.aspect,base);shiftRenderedHand(s,new THREE.Vector3().fromArray(p[0]).multiplyScalar((depth-base)/base));}
+ if(videoReplay?.calibrating||depthExperiment?.recording)return;
+ const saved=recordedFit?.palmFit||depthExperiment?.fit;
+ for(const s of ['L','R']){
+  const result=renderedHands[s]?.result,h=allHands.find(h=>h.label===(s==='L'?'Left':'Right'));if(!result||!h)continue;
+  const p=result.points.map(p=>p.toArray()),base=-p[0][2];
+  const frame=cameraFrame(captureAspect,camera.aspect),focal=1/(2*Math.tan(Math.PI/6)*frame.height),o=palmObservation(h.landmarks,p,captureAspect,focal);
+  const fit=saved||{scale:(o?.length||.075)*focal,farDepth:4};
+  const depth=palmDepth.update(s,h.confidence>=.5?o:null,fit,base,h.time);
+  shiftRenderedHand(s,new THREE.Vector3().fromArray(p[0]).multiplyScalar((depth-base)/base));
+  // Enforce the rear plane for every joint centre, not only the wrist.
+  if(saved){const backDepth=Math.max(...result.points.map(v=>-v.z));if(backDepth>saved.farDepth){const wrist=result.points[0],z=-wrist.z,excess=backDepth-saved.farDepth;shiftRenderedHand(s,wrist.clone().multiplyScalar(-excess/z));result.wallLimited=true;}}
+ }
+}
+function fitRecordedPalmReference(rows){
+ const valid=rows.filter(r=>r.zL>0&&r.zR>0);if(valid.length<20)return null;
+ const far=[...valid].sort((a,b)=>(b.zL+b.zR)-(a.zL+a.zR)).slice(0,Math.max(10,Math.floor(valid.length*.25)));
+ const ratios=far.map(r=>r.neckRatio).filter(v=>Number.isFinite(v)&&v>.25&&v<4).sort((a,b)=>a-b);
+ const reference={headScale:ratios.length>=8?ratios[Math.floor(ratios.length/2)]:1,frames:valid.length,headSamples:ratios.length};
+ const palmFit=fitPalmSweep(rows.flatMap(r=>['L','R'].map(s=>({observation:palmObservation(r.landmarks[s],r.baseline[s],r.sourceAspect,1/(2*Math.tan(Math.PI/6)*cameraFrame(r.sourceAspect,r.viewAspect).height)),depth:r['z'+s]}))));
+ return palmFit?{headScale:reference.headScale,frames:reference.frames,headSamples:reference.headSamples,palmFit}:null;
 }
 
 // Reuse the demonstrated numerical calibration for live camera testing.
 const savedVideoPanel=document.createElement('section');savedVideoPanel.style.display='block';
-savedVideoPanel.innerHTML='<h2>Settings from the video I sent</h2><button id="loadVideo245">Use saved video calibration</button><p id="videoPresetStatus" role="status">Load the demonstrated hand/head fit. No new sweep needed.</p>';
+savedVideoPanel.innerHTML='<h2>Sweep reference + palm-size depth</h2><button id="loadVideo245">Use saved sweep reference</button><p id="videoPresetStatus" role="status">Reuse the video’s distance reference with angle-corrected palm-size depth. No new sweep needed.</p>';
 $('directSettings').prepend(savedVideoPanel);
 function loadVideo245(){
- depthExperiment?.cancel();recordedFit=structuredClone(video245Fit);usingVideoPreset=true;trackingJitter.reset();
+ depthExperiment?.cancel();recordedFit=structuredClone(video247Fit);usingVideoPreset=true;trackingJitter.reset();palmDepth.reset();
  for(const [id,value] of Object.entries({handsTouch:false,outerCollision:false,headCollision:false,relaxedPalm:false,reduceShake:true,lockUpper:true,falseDepth:true,bothHands:true,handDistance:0,handHeight:0,headSide:0,headHeight:0,headBack:0,headSize:1.2,handSize:1,contactThreshold:0,fingerNoise:0,directionSmoothing:0,confirmJump:0,movementThreshold:0,depthSmooth:0,headSmooth:0,mappedFaceDots:0,dots:false})){
   const e=$(id);if(!e)continue;if(e.type==='checkbox')e.checked=value;else{e.value=value;if(e.nextElementSibling?.tagName==='OUTPUT')e.nextElementSibling.value=value;}
  }
- $('touchProgress').closest('section').style.display='none';
- pipelineInfo.textContent='Saved video calibration active for both hands and head. Connect your camera or use Phone camera · QR. No sweep required.';
- $('videoPresetStatus').textContent='Loaded the calibration used in the 2.4.5 video. Tracking-shake reduction ON; contact forcing and collisions OFF. The saved fit stays fixed.';
+ $('touchProgress').closest('section').style.display='block';
+ pipelineInfo.textContent='Saved video calibration active for both hands and head. Connect your camera or use Phone camera · QR. No new sweep required; recording another sweep replaces this reference.';
+ $('videoPresetStatus').textContent='Saved sweep reference loaded. Palm-size depth with angle correction; rear limit at neck reference + 30 model cm. Tracking-shake reduction ON; contact forcing and collisions OFF.';
  notice('Saved video settings ready. Connect camera or Phone camera · QR.');
 }
 $('loadVideo245').onclick=loadVideo245;
-if(new URLSearchParams(location.search).get('preset')==='video245')loadVideo245();
+if(['video245','sweep'].includes(new URLSearchParams(location.search).get('preset')))loadVideo245();

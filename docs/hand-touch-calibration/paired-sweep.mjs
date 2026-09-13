@@ -1,3 +1,4 @@
+import {palmObservation} from './palm-sweep-depth.mjs?v=touch2.4.7';
 import {imagePalmSize} from './size-wall-depth.mjs';
 import {solveTouchDepth} from './hand-pair-depth.mjs?v=touch2.4.1';
 import {sweepEndpoints} from './one-hand-sweep.mjs?v=touch2.4.1';
@@ -22,7 +23,7 @@ export function indexContactSample(hands,now,aspect=1,manual=0){
  if(!fit)return {reason:'Contact geometry is ambiguous. Keep index fingers extended and pointing inward.'};
  const values=Object.fromEntries(pair.map((h,i)=>{
   const root=h.points[0],delta=i===0?fit.A:fit.B,depth=-(root[2]+delta[2]);
-  return [i===0?'L':'R',{size:sizes[i],depth:depth-manual,ray:root.map(v=>v/-root[2]),offset:sub(h.points[8],root)}];
+  return [i===0?'L':'R',{observation:palmObservation(h.landmarks,h.points,aspect,h.focal),size:sizes[i],depth:depth-manual,ray:root.map(v=>v/-root[2]),offset:sub(h.points[8],root)}];
  }));
  return {sample:{values,gapRatio,time:L.time,manual},reason:null};
 }

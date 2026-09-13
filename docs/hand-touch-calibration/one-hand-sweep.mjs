@@ -26,7 +26,7 @@ export class OneHandSweep {
   else if(h.landmarks?.length!==21||!h.landmarks.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)))reason='Incomplete hand landmarks';
   else if(![0,5,9,13,17].every(i=>inside(h.landmarks[i]))||h.landmarks.filter(inside).length<17)reason='Palm outside camera frame';
   else if(h.time===this.last)reason='Waiting for next hand frame';
-  else if(elapsed>=-1000){this.label=h.label;this.last=h.time;this.samples.push({elapsed,label:h.label,landmarks:h.landmarks.map(p=>({...p})),world:h.world?.map(p=>({...p})),face});}
+  else if(elapsed>=-1000){this.label=h.label;this.last=h.time;this.samples.push({elapsed,label:h.label,landmarks:h.landmarks.map(p=>({...p})),world:h.world?.map(p=>({...p})),points:h.points?.map(p=>[...p]),focal:h.focal,face});}
   if(elapsed<0)return {message:'Starting in '+Math.ceil(-elapsed/1000)+' — hold one extended open hand still, palm facing you. '+(reason||'Start reference ready. Keep your face visible.'),progress:0};
   if(reason)this.rejected[reason]=(this.rejected[reason]||0)+1;
   const count=this.samples.filter(s=>s.elapsed>=0).length;
