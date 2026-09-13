@@ -74,3 +74,7 @@ Recorded fitting compares 20 feature/regularization combinations, using 195 trai
 A default-on Reduce tracking shake checkbox filters landmarks causally before both lines and model retargeting. Duplicate observations are cached; backward seeking resets state. Synthetic noise tests show attenuation and bounded ramp lag; these are not measurements of jitter in the real clip.
 
 Actual unassisted 297-frame replay: median index gap 12.46 mm, maximum 63.77 mm, 260 frames above 5 mm. Held-out candidate selection median 12.54 mm, maximum 51.42 mm. Improvement over 2.4.4 is substantial but contact remains imperfect. This is within-clip selection, not validation on independent footage or metric depth ground truth. Personal media remains private and excluded from Git.
+
+## Sweep 2.4.6: reuse demonstrated calibration live
+
+`?preset=video245` loads the saved 2.4.5 regression coefficients and head scale automatically, with manual position offsets zero, landmark filtering on, and contact/collision correction off. It bypasses the separate live sweep curve and applies the saved rigid hand placement and head fit to camera input. The sweep panel is hidden for this mode. The preset contains numerical coefficients only, no video or landmark recording. All 594 saved hand predictions were checked against the original fit for exact equality. Different camera crops or hand poses can still expose the fit's limitations.
