@@ -1,5 +1,5 @@
-import {palmObservation} from './palm-sweep-depth.mjs?v=touch2.4.9';
-import {sweepEndpoints} from './one-hand-sweep.mjs?v=touch2.4.9';
+import {palmObservation} from './palm-sweep-depth.mjs?v=touch2.4.10-final';
+import {sweepEndpoints} from './one-hand-sweep.mjs?v=touch2.4.10-final';
 const median=a=>[...a].sort((a,b)=>a-b)[Math.floor(a.length/2)];
 export const PHONE_TILT_DEGREES=10;
 // Assume a phone leaning back, with its camera looking 10 degrees upward.
@@ -27,8 +27,10 @@ export function fitNeckSweep(samples){
  // contact; face visibility is only an endpoint quality check.
  const atNeck=end.filter(o=>o.s.face);
  if(atNeck.length<3)return {error:'Keep your face visible as you finish at your neck.'};
- const neckDepth=median(atNeck.map(o=>o.backDepth));
- return {fit:{kind:'neck-sweep',version:1,nearDepth,endDepth,neckDepth,farDepth:neckDepth+.30,phoneTilt:PHONE_TILT_DEGREES,aspect:median(aspects),frames:samples.length}};
+ const headScales=atNeck.map(o=>o.s.face.neckFitScale).filter(v=>Number.isFinite(v)&&v>=.25&&v<=4);
+ if(headScales.length<3)return {error:'Keep your open palm against the visible neck for the final second so the head and neck can be aligned. Previous calibration kept.'};
+ const headScale=median(headScales),neckDepth=median(atNeck.map(o=>o.backDepth));
+ return {fit:{kind:'neck-sweep',version:2,headScale,nearDepth,endDepth,neckDepth,farDepth:neckDepth+.30,phoneTilt:PHONE_TILT_DEGREES,aspect:median(aspects),frames:samples.length}};
 }
 // Return camera-Z movement toward the camera, along the wrist's image ray.
 export function rearPlaneCorrection(points,farDepth,tilt=0){

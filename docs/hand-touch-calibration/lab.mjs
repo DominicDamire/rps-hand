@@ -1,11 +1,11 @@
-import {rearPlaneCorrection} from './neck-sweep.mjs?v=touch2.4.9';
-import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=touch2.4.9';
+import {rearPlaneCorrection} from './neck-sweep.mjs?v=touch2.4.10-final';
+import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=touch2.4.10-final';
 const palmDepth=new PalmSweepDepth();
-import {TrackingJitter} from './tracking-jitter.mjs?v=touch2.4.9';
+import {TrackingJitter} from './tracking-jitter.mjs?v=touch2.4.10-final';
 const trackingJitter=new TrackingJitter();
-import {OuterCollision} from './outer-collision.mjs?v=touch2.4.9';
-import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.4.9';
-import {installExperiment} from './experiment.mjs?v=touch2.4.9';
+import {OuterCollision} from './outer-collision.mjs?v=touch2.4.10-final';
+import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.4.10-final';
+import {installExperiment} from './experiment.mjs?v=touch2.4.10-final';
 let depthExperiment=null;
 import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=alien18.4';
 import {palmSize} from './palm-distance.mjs?v=alien13';
@@ -13,10 +13,10 @@ import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
-import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.9';
-import {CombinedHead} from './head-model.mjs?v=touch2.4.9';
-import {directDriver} from './direct.mjs?v=touch2.4.9';
-import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.9';
+import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.10-final';
+import {CombinedHead} from './head-model.mjs?v=touch2.4.10-final';
+import {directDriver} from './direct.mjs?v=touch2.4.10-final';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.10-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -246,8 +246,8 @@ $('importPaste').onclick=()=>{try{importText($('jsonText').value);}catch(e){noti
 $('png').onclick=()=>{renderDemo();const c=document.createElement('canvas');c.width=1400;c.height=850;const ctx=c.getContext('2d');ctx.fillStyle='#10151d';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#edf6ff';ctx.font='bold 25px system-ui';ctx.fillText('Hand Pose Lab — '+($('poseName').value||'Live comparison'),28,42);ctx.font='16px system-ui';ctx.fillText(editing?'Frozen input and corrected model':'Latest tracked frame and model',28,74);const fit=(img,x,y,w,h)=>{const a=img.width/img.height;let iw=w,ih=w/a;if(ih>h){ih=h;iw=h*a;}if(img===$('scene')&&$('viewMode').value!=='first'){ctx.save();ctx.translate(x+(w+iw)/2,y+(h-ih)/2);ctx.scale(-1,1);ctx.drawImage(img,0,0,iw,ih);ctx.restore();}else ctx.drawImage(img,x+(w-iw)/2,y+(h-ih)/2,iw,ih);};fit($('preview'),24,100,510,710);fit($('scene'),560,100,810,710);c.toBlob(blob=>{if(blob)download(blob,'hand-pose-comparison.png');});};
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set(1-(e.clientX-rect.left)/rect.width*2,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children.filter(m=>m.visible))[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
 await rig.ready;
-tips=buildTips(rig);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>{args[0]=relaxedPoints(args[0],args[1],args[2],args[3]);return keepHandBeforeWall(args[1],drivers[args[1]](...args));};let directResult=null;
-function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,confirmDegrees:0,noiseDegrees:0,smoothingMs:0,movementThresholdMm:0,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,contactPixels:attach,contactReleasePixels:Math.max(attach,+$('contactRelease').value),handSize:+$('handSize').value,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm,width:$('preview').width,height:$('preview').height};}
+tips=buildTips(rig);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>{args[0]=placePalmBeforeFingers(relaxedPoints(args[0],args[1],args[2],args[3]),args[1],args[2]);return keepHandBeforeWall(args[1],drivers[args[1]](...args));};let directResult=null;
+function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,projectionAspect:captureAspect,projectionFocal:1/(2*Math.tan(Math.PI/6)*cameraFrame(captureAspect,camera.aspect).height),confirmDegrees:0,noiseDegrees:0,smoothingMs:0,movementThresholdMm:0,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,contactPixels:attach,contactReleasePixels:Math.max(attach,+$('contactRelease').value),handSize:+$('handSize').value,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm,width:$('preview').width,height:$('preview').height};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
@@ -342,7 +342,7 @@ Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
 Scene: ${measuredScene} measured FPS (target ${o.sceneRate})${Object.keys(s.errors||{}).length?' · '+JSON.stringify(s.errors):''}`;}
 window.combinedLab={version:19,get head(){return combined;},get metrics(){return trackingStats;},get handResult(){return directResult;},get scene(){return scene;}};
-notice('Sweep 2.4.9 ready. Record one front-to-neck sweep; tracking runs on the PC.');
+notice('Sweep 2.4.10 ready. Record one front-to-neck sweep; tracking runs on the PC.');
 combined.ready.then(()=>{if(combined.error)notice('Head model failed to load: '+combined.error);});
 
 const fixtureName=new URLSearchParams(location.search).get('fixture');
@@ -499,7 +499,7 @@ for(const id of ['fingerNoise','directionSmoothing','confirmJump','movementThres
 for(const d of $('directSettings').querySelectorAll('details'))if(d.querySelector('summary')?.textContent==='Jiggle')d.style.setProperty('display','none','important');
 const pipelineInfo=document.createElement('p');pipelineInfo.textContent='Fixed hand geometry and camera projection set the depth scale. One front-to-neck sweep saves the rear reference with a fixed 10-degree phone-tilt assumption. Edge-on palms hold the last reliable depth.';$('directSettings').prepend(pipelineInfo);
 
-depthExperiment=installExperiment({container:$('directSettings'),getHead:()=>combined,getFocal:aspect=>1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),onReference:()=>palmDepth.reset(),onBegin:()=>{controls.enabled=false;$('cameraProjection').value='perspective';$('viewMode').value='mirror';setViewMode();palmDepth.reset();}});
+depthExperiment=installExperiment({container:$('directSettings'),getHead:()=>combined,getFocal:aspect=>1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),onReference:fit=>{palmDepth.reset();if(combined)combined.neckFitScale=fit?.headScale??1;},getNeckReference:(hand,points,aspect)=>{if(!points)return null;const palm=[0,5,9,13,17].reduce((v,i)=>v.add(points[i]),new THREE.Vector3()).multiplyScalar(.2);return combined?.neckReference(palm,1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height));},onBegin:()=>{controls.enabled=false;$('cameraProjection').value='perspective';$('viewMode').value='mirror';setViewMode();palmDepth.reset();}});
 
 $('relaxedPalm').checked=false;$('contactThreshold').value=0;$('contactThreshold').nextElementSibling.value=0;
 
@@ -513,17 +513,20 @@ const indexLabel=document.createElement('label');indexLabel.style.display='block
 
 const shakeLabel=document.createElement('label');shakeLabel.innerHTML='<input id="reduceShake" type="checkbox" checked> Reduce tracking shake';$('directSettings').prepend(shakeLabel);$('reduceShake').onchange=()=>{trackingJitter.reset();palmDepth.reset();};
 
-function applyPalmPlacement(){
+function placePalmBeforeFingers(points,s,q){
+ const h=allHands.find(h=>h.label===(s==='L'?'Left':'Right'));if(!h)return points;
+ const measurement=points.map(p=>p.clone()),wrist=points[0],base=-wrist.z;if(!(base>0))return points;
+ for(const [id,name] of [[5,'Index1'],[9,'Middle1'],[13,'Ring1'],[17,'Pinky1']])measurement[id].copy(rig.rest[s+name].world).sub(rig.rest[s+'Hand'].world).applyQuaternion(q).add(wrist);
+ const focal=1/(2*Math.tan(Math.PI/6)*cameraFrame(captureAspect,camera.aspect).height),o=palmObservation(h.landmarks,measurement,captureAspect,focal);
  const saved=depthExperiment?.recording?null:depthExperiment?.fit;
+ const depth=palmDepth.update(s,h.confidence>=.5?o:null,saved,base,h.time),delta=wrist.clone().multiplyScalar((depth-base)/base);
+ return points.map(p=>p.clone().add(delta));
+}
+function applyPalmPlacement(){
+ const saved=depthExperiment?.recording?null:depthExperiment?.fit;if(!saved)return;
  for(const s of ['L','R']){
   const result=renderedHands[s]?.result,h=allHands.find(h=>h.label===(s==='L'?'Left':'Right'));if(!result||!h)continue;
-  const p=result.points.map(p=>p.toArray()),base=-p[0][2];if(!(base>0))continue;
-  const frame=cameraFrame(captureAspect,camera.aspect),focal=1/(2*Math.tan(Math.PI/6)*frame.height),o=palmObservation(h.landmarks,p,captureAspect,focal);
-  const depth=palmDepth.update(s,h.confidence>=.5?o:null,saved,base,h.time);
-  shiftRenderedHand(s,new THREE.Vector3().fromArray(p[0]).multiplyScalar((depth-base)/base));
-  // The fixed neck reference defines a room-depth plane, accounting for
-  // the assumed phone pitch. Mirror coordinates and joint sizes stay intact.
-  const excess=rearPlaneCorrection(result.points.map(v=>v.toArray()),saved?.farDepth,saved?.phoneTilt);
+  const excess=rearPlaneCorrection(result.points.map(v=>v.toArray()),saved.farDepth,saved.phoneTilt);
   if(excess>0){const wrist=result.points[0],z=-wrist.z;shiftRenderedHand(s,wrist.clone().multiplyScalar(-Math.min(excess,z-.04)/z));result.wallLimited=true;}
  }
 }

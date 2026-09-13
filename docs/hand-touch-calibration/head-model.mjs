@@ -7,7 +7,7 @@ import {faceReference,calibratedDepth,eyeCenter,eyeCenters} from './head-depth.m
 const outline=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10];
 export class CombinedHead {
  constructor(scene,options){
-  this.options=options;this.group=new T.Group();this.group.name='CombinedBlackHeadAndShoulders';this.group.visible=false;scene.add(this.group);this.bones={};this.rest=new Map();this.face=null;this.pose=null;this.seen=0;this.poseSeen=0;this.depthRef=null;this.neutral=new T.Quaternion();this.smoothed=new T.Quaternion();this.position=null;
+  this.options=options;this.neckFitScale=1;this.group=new T.Group();this.group.name='CombinedBlackHeadAndShoulders';this.group.visible=false;scene.add(this.group);this.bones={};this.rest=new Map();this.face=null;this.pose=null;this.seen=0;this.poseSeen=0;this.depthRef=null;this.neutral=new T.Quaternion();this.smoothed=new T.Quaternion();this.position=null;
   this.ready=new GLTFLoader().loadAsync(new URL('../head-shoulders/alien.glb',import.meta.url).href).then(g=>{
    this.asset=g.scene;this.group.add(g.scene);g.scene.traverse(o=>{if(o.isBone){const n=o.name.toLowerCase();if(n.includes('eye'))(this.bones.eyes??=[]).push(o);else if(n.includes('head'))this.bones.head=o;else if(n.includes('neck'))this.bones.neck=o;else if(n.includes('root'))this.bones.root=o;}if(o.isMesh){o.frustumCulled=false;for(const mat of Array.isArray(o.material)?o.material:[o.material]){mat.color?.set(0xcacaca);mat.map=null;mat.roughness=.65;mat.needsUpdate=true;}}});
    scene.updateMatrixWorld(true);for(const b of [this.bones.root,this.bones.neck,this.bones.head,...(this.bones.eyes||[])])if(b)this.rest.set(b,b.getWorldQuaternion(new T.Quaternion()));
@@ -30,6 +30,21 @@ export class CombinedHead {
   const m=this.face.matrix,foreshortening=Math.max(.4,Math.hypot(m[0],m[1]));this.fixedScale=.063/this.restEyeSpan;this.metres=T.MathUtils.clamp(.063*foreshortening*metres/Math.max(.001,eyePoints[0].distanceTo(eyePoints[1])),.08,4);return true;
  }
  setWorld(b,q){if(!b)return;b.parent.updateWorldMatrix(true,false);b.quaternion.copy(b.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(q));b.updateWorldMatrix(false,true);}
+ neckReference(palm,focal){
+  if(!this.loaded||!this.group.visible||!(palm?.z<-.04))return null;
+  const samples=(this.contactSamples||[]).filter(s=>s.region==='neck'),step=Math.max(1,Math.ceil(samples.length/160)),candidates=[];let best=null;
+  const target={x:focal*palm.x/-palm.z,y:focal*palm.y/-palm.z};
+  for(let i=0;i<samples.length;i+=step){const s=samples[i],p=s.mesh.getVertexPosition(s.i,new T.Vector3()).applyMatrix4(s.mesh.matrixWorld);if(p.z>=-.04)continue;
+   const error=(focal*p.x/-p.z-target.x)**2+(focal*p.y/-p.z-target.y)**2;
+   const candidate={depth:-p.z,error};candidates.push(candidate);if(!best||error<best.error)best=candidate;
+  }
+  if(!best||best.error>.12**2)return null;
+  best=candidates.filter(p=>p.error<=best.error+.01**2).sort((a,b)=>a.depth-b.depth)[0];
+  // The palm's skin facing the user is slightly behind its joint centres.
+  // Fit the head once along camera rays, preserving its face projection.
+  const factor=this.neckFitScale*(-palm.z+.006)/best.depth;
+  return factor>=.25&&factor<=4?factor:null;
+ }
  update(dt,aspect,camera,metres,depthGain){
   const o=this.options(),fresh=this.face&&performance.now()-this.seen<(o.faceGrace??1000)&&o.faceRate>0;this.group.visible=!!(o.showHead&&fresh&&this.loaded);if(this.faceDots)this.faceDots.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false;if(this.contactDot)this.contactDot.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false&&(Number.isInteger(this.highlightFaceId)||Number.isInteger(this.highlightBodyId));if(!this.group.visible)return;
   if(!this.depthRef)this.calibrate(metres,aspect,camera.aspect);
@@ -48,6 +63,7 @@ export class CombinedHead {
   const uv=cameraUV(eyeCenter(this.face.points),aspect,camera.aspect),target=camera.isOrthographicCamera?new T.Vector3((uv.x-.5)*camera.aspect,.5-uv.y,-depth):new T.Vector3().fromArray(cameraPosition(uv,depth,camera.aspect));
   this.anchor??=target.clone();target.sub(this.anchor).multiplyScalar(o.moveGain).add(this.anchor);this.position??=target.clone();this.position.lerp(target,alpha);
   this.group.updateMatrixWorld(true);const midpoint=this.bones.eyes.reduce((v,b)=>v.add(b.getWorldPosition(new T.Vector3())),new T.Vector3()).multiplyScalar(.5);this.group.position.add(this.position.clone().add(new T.Vector3(-(o.headSide||0)/100,(o.headHeight||0)/100,0)).sub(midpoint));this.group.updateMatrixWorld(true);
+  if(this.neckFitScale!==1){this.group.position.multiplyScalar(this.neckFitScale);this.group.scale.multiplyScalar(this.neckFitScale);this.group.updateMatrixWorld(true);}
   if(o.faceMapping===false)return;
   this.mappedLandmarks=updateFaceDots(this.faceBindings);this.cameraLandmarks=projectFaceDots(this.face.points,this.face.matrix,aspect);
   const attribute=this.faceDots.geometry.attributes.position;for(let i=0;i<this.mappedLandmarks.length;i++){const p=this.mappedLandmarks[i];attribute.setXYZ(i,p.x,p.y,p.z+.0003);}this.mappedShoulders={};for(let i=0;i<2;i++){const b=this.shoulderBindings[i];if(!b)continue;const p=b.mesh.getVertexPosition(b.i,new T.Vector3()).applyMatrix4(b.mesh.matrixWorld);this.mappedShoulders[i===0?12:11]=p;attribute.setXYZ(this.mappedLandmarks.length+i,p.x,p.y,p.z+.0003);}attribute.needsUpdate=true;

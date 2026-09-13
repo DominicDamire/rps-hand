@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';import {installExperiment} from './exper
 assert.ok(!html.includes('pairedSweep')&&!html.includes('neck endpoint'));
 const head={face:{points:{10:{x:.5,y:.25},152:{x:.5,y:.65},234:{x:.33,y:.45},454:{x:.67,y:.45}}},seen:0};
 const refs=[];
-const calibrated=installExperiment({container:{prepend(){}},getHead:()=>head,getFocal:()=>1,onReference:fit=>refs.push(fit)});
+const calibrated=installExperiment({container:{prepend(){}},getHead:()=>head,getFocal:()=>1,onReference:fit=>refs.push(fit),getNeckReference:()=>1.25});
 const template=Array.from({length:21},()=>[0,0,0]);template[5]=[.025,.065,0];template[9]=[0,.075,0];template[13]=[-.02,.07,0];template[17]=[-.04,.055,0];
 now=20000;node('touchSweep').onclick();
 for(now=20000;now<33000;now+=100){
@@ -17,3 +17,5 @@ const locked=JSON.stringify(calibrated.fit);head.depth=1.5;assert.equal(JSON.str
 node('touchSweep').onclick();now+=13000;timer();assert.equal(calibrated.active,true,'failed recapture retains previous reference');assert.equal(refs.length,1);assert.equal(timer,null);
 node('touchReset').onclick();assert.equal(calibrated.active,false);assert.equal(refs.at(-1),null);
 console.log('PASS: single capture UI path, endpoint activation for both hands, failed recapture retains reference, independent head movement and reset');
+
+assert.equal(refs[0].headScale,1.25,'the active sweep must save the fitted head scale');

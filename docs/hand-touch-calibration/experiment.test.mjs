@@ -14,7 +14,7 @@ function pose({side='L',depth=.6,yaw=0,roll=0,aspect=9/16,viewAspect=16/9,centre
  const dx=((centreX-.5)*aspect/focal-mean(q=>q[0]/-q[2]))/inv,dy=((.5-centreY)/focal-mean(q=>q[1]/-q[2]))/inv;
  for(const q of p){q[0]+=dx;q[1]+=dy;}
  const landmarks=p.map(([X,Y,Z])=>({x:.5+focal*X/-Z/aspect,y:.5-focal*Y/-Z,z:0}));
- return {points:p,landmarks,focal,aspect,face:{top:.25,bottom:.65,left:.33,right:.67}};
+ return {points:p,landmarks,focal,aspect,face:{top:.25,bottom:.65,left:.33,right:.67,neckFitScale:1.25}};
 }
 let checks=0,maxError=0;const tracker=new PalmSweepDepth();
 for(const side of ['L','R'])for(const aspect of [9/16,4/3,16/9])for(const viewAspect of [16/9,9/16])for(const yaw of [0,.5,1,2.7,Math.PI])for(const roll of [0,Math.PI/2,Math.PI])for(const depth of [.3,.6,1.2]){
@@ -57,3 +57,5 @@ for(const height of [-.5,0,.5]){
  assert.ok(Math.abs(roomDepth(p,10)-depth)<1e-12,'10-degree camera coordinates must recover a constant upright-room depth across heights');
 }
 console.log('PASS: assumed upward camera pitch transforms consistently across heights without image scaling');
+
+assert.equal(fit.headScale,1.25);assert.match(fitNeckSweep(samples.map(s=>({...s,face:{...s.face,neckFitScale:null}}))).error,/neck can be aligned/);

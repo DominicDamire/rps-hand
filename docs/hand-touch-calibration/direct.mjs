@@ -1,3 +1,4 @@
+import {fitExtendedFinger} from './finger-image-fit.mjs?v=touch2.4.10-final';
 import {limitBaseSplay} from './base-splay-limit.mjs?v=touch2.4';
 import * as T from 'three';
 import {DirectionStabilizer,fingerPlane,constrainFinger} from './stability.mjs?v=17';
@@ -6,7 +7,7 @@ const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';
  const stabilizer=new DirectionStabilizer(),contactLatch=new ContactLatch();
- return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,upperCoupling=0,lockUpper=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,width,height}){
+ return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,upperCoupling=0,lockUpper=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,width,height,projectionAspect=0,projectionFocal=0}){
   if(lastSide!==side){contact=null;lastSide=side;lastShape='';}
   const p=points.map(v=>v.clone()),chains=[],lengths=[],inversePalm=palmQ.clone().invert();
   // Keep rigid attachments; copy only segment directions from the earlier direct tracker.
@@ -36,6 +37,14 @@ export function directDriver(rig,tips){
    const name=side+FINGERS[f],restDirection=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize();
    const hinge=fingerPlane(restDirection,restAcross,palmQ,baseDirection);hinges.set(f,hinge);
    if(lockUpper)constrainFinger(chain,lengths[f],hinge,upperCoupling);
+  }
+  // Correct extended-finger image placement at the final palm depth. Keep
+  // MCP attachment positions and all segment lengths fixed; fists are skipped.
+  if(projectionAspect>0&&projectionFocal>0)for(let f=1;f<5;f++){
+   const fit=fitExtendedFinger(chains[f].map(v=>v.toArray()),lm,1+4*f,projectionAspect,projectionFocal);
+   if(!fit)continue;
+   chains[f]=fit.points.map(p=>new T.Vector3().fromArray(p));restrictBase(f);
+   if(lockUpper){const name=side+FINGERS[f],rest=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize(),base=chains[f][1].clone().sub(chains[f][0]).normalize(),hinge=fingerPlane(rest,restAcross,palmQ,base);hinges.set(f,hinge);constrainFinger(chains[f],lengths[f],hinge,upperCoupling);}
   }
   let contactGap=contact?fitContact(chains[0],chains[contact/4-1],lengths[0],lengths[contact/4-1],hinges.get(contact/4-1)):null;
   // A fingertip contact solve must also respect the MCP sideways limit.
