@@ -1,6 +1,8 @@
-# Gun Grip Lab — phone camera range v3
+# Gun Grip Lab — phone camera range v4
 
-Use `/gun-lab/play.html?v=3` for one-hand pickup, movement and shooting. `/gun-lab/?v=2` remains the placement/joint editor and has a button to use the edited grip in the camera range.
+Use `/gun-lab/play.html?v=4` for one-hand pickup, movement and shooting. `/gun-lab/?v=4` remains the placement/joint editor and has a button to use the edited grip in the camera range.
+
+Version 4 fixes the gun asset's incorrectly blended metal materials: Gun and ACC are opaque with depth writes, while sight Glass keeps transparency. Ghost inspection can be toggled without losing these defaults. Thumb tracking now combines palm-relative thumb direction and outer-joint bends, removing the diagonal wrist-to-thumb angle that could saturate at 100% with a raised thumb. Optional Set thumb raised / Set thumb wrapped controls calibrate the live signal for the current session without changing the supplied model poses. Stale tracking and near-identical calibration poses are rejected.
 
 Connect phone via QR reuses the sweep phone page and landmark relay. Scan the QR, tap Start camera on the phone, and keep its page visible. Only landmarks arrive at the PC, shown over a plain preview background; the camera image stays on the phone. PC camera remains available. Stop, cancel, switching sources and leaving the page close the receiver and disarm shooting.
 
@@ -26,7 +28,7 @@ The collision stops are authored angular ranges, not an arbitrary mesh collision
 
 ## Verification
 
-- `node --test docs/gun-lab/trigger.test.mjs docs/gun-lab/held-pose.test.mjs`: 19 tests covering exact references, endpoint bounds, thumb-axis compatibility, locked lower fingers, pickup/release confirmation, hysteresis, tracking loss/reacquisition, smoothing and profile validation.
+- `node --test docs/gun-lab/trigger.test.mjs docs/gun-lab/held-pose.test.mjs`: 21 tests, including raised-thumb saturation regression, rotation-invariant thumb motion and calibration.
 - `/gun-lab/grip-check.html`: actual hand/gun geometry, 101 moving assembly poses, nine locked lower joints, exact endpoint values, and neutral barrel direction. Relative matrix drift was below 4e-16.
 - `/gun-lab/play.html?verify=1`: explicit test-only landmark fixture replay through the actual range handler, without opening a webcam. Verified pickup, one shot and target hit, no held-press repeat, loss holding the gun, no shot on reacquisition, and release on an open hand.
 - `/gun-lab/tracker-check.html`: actual tracker inference on the repository reference image, without camera access.

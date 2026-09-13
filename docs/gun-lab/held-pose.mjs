@@ -18,16 +18,31 @@ export function observation(points) {
   const lower = [9, 13, 17].map((i) => bend(p, i, i + 1, i + 2)),
     thumb = [bend(p, 1, 2, 3), bend(p, 2, 3, 4)];
   if ([...lower, ...thumb].some((v) => v === null)) return null;
+  const signal = thumbSignal(p, thumb);
+  if (!Number.isFinite(signal)) return null;
   return {
     points: p,
     lower,
     gripping: lower.every((v) => v > 45),
     open: lower.every((v) => v < 28),
-    thumb: Math.max(
-      clamp((thumb[0] + thumb[1] - 10) / 75),
-      clamp(((bend(p, 0, 1, 2) ?? 0) - 15) / 60),
-    ),
+    // Measure the thumb against the palm's long axis, not wrist-to-thumb-base:
+    // that diagonal is already bent even when a real thumb is fully raised.
+    thumbSignal: signal,
+    thumb: clamp((signal - 20) / 45),
   };
+}
+function thumbSignal(p, bends) {
+  const palm = p[9].map((v, i) => v - p[0][i]);
+  const axis = p[4].map((v, i) => v - p[1][i]);
+  const length = Math.hypot(...palm) * Math.hypot(...axis);
+  if (length < 1e-10) return NaN;
+  const angle =
+    (Math.acos(
+      clamp(palm.reduce((s, v, i) => s + v * axis[i], 0) / length, -1, 1),
+    ) *
+      180) /
+    Math.PI;
+  return 0.65 * angle + 0.35 * (bends[0] + bends[1]);
 }
 // Only these two degrees of freedom can change while held. All other angles,
 // including sideways/twist, come from the user's supplied endpoint poses.
@@ -63,6 +78,7 @@ export function heldAngles(profile, index, thumb) {
 export class GripController {
   constructor() {
     this.trigger = new TriggerTracker();
+    this.thumbCalibration = {};
     this.reset();
   }
   reset() {
@@ -72,16 +88,18 @@ export class GripController {
     this.last = null;
     this.lastLabel = null;
     this.thumb = 1;
+    this.lastThumbSignal = null;
     this.trigger.reset();
   }
   update(world, time, profile, label = "single") {
     const o = observation(world);
     let picked = false,
       dropped = false;
-    if (!o || !Number.isFinite(time)) {
+    if (!o || !Number.isFinite(o.thumbSignal) || !Number.isFinite(time)) {
       this.trigger.reset();
       this.candidate = null;
       this.last = null;
+      this.lastThumbSignal = null;
       return {
         valid: false,
         held: this.held,
@@ -120,7 +138,16 @@ export class GripController {
     const alpha = gap
       ? 1
       : 1 - Math.exp(-dt / Math.max(1, profile.trigger.smoothing));
-    this.thumb += (o.thumb - this.thumb) * alpha;
+    this.lastThumbSignal = o.thumbSignal;
+    const { raised, wrapped } = this.thumbCalibration;
+    const calibrated =
+      Number.isFinite(raised) &&
+      Number.isFinite(wrapped) &&
+      Math.abs(wrapped - raised) >= 10;
+    const thumbValue = calibrated
+      ? clamp((o.thumbSignal - raised) / (wrapped - raised))
+      : o.thumb;
+    this.thumb += (thumbValue - this.thumb) * alpha;
     const t =
       this.held && !picked
         ? this.trigger.update(world, time, profile.trigger)
@@ -142,5 +169,27 @@ export class GripController {
     this.trigger.reset();
     this.candidate = null;
     this.last = null;
+    this.lastThumbSignal = null;
+  }
+  calibrateThumb(endpoint, time) {
+    if (!["raised", "wrapped"].includes(endpoint))
+      throw Error("Unknown thumb pose");
+    if (
+      this.last === null ||
+      !Number.isFinite(this.lastThumbSignal) ||
+      time - this.last > 250
+    )
+      throw Error("Show one clear hand to the camera first.");
+    const next = { ...this.thumbCalibration, [endpoint]: this.lastThumbSignal };
+    if (
+      Number.isFinite(next.raised) &&
+      Number.isFinite(next.wrapped) &&
+      Math.abs(next.wrapped - next.raised) < 10
+    )
+      throw Error(
+        "Those poses look too similar. Raise the thumb fully, then wrap it and capture again.",
+      );
+    this.thumbCalibration = next;
+    return Number.isFinite(next.raised) && Number.isFinite(next.wrapped);
   }
 }

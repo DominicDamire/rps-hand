@@ -1,8 +1,9 @@
 import { loadProvidedProfile } from "./presets.mjs?v=2";
 import * as T from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { GripRig } from "./grip-rig.mjs?v=2";
-import { GripController, heldAngles, observation } from "./held-pose.mjs?v=2";
+import { GripRig } from "./grip-rig.mjs?v=4";
+import { GripController, heldAngles } from "./held-pose.mjs?v=4";
+import { gunMaterials } from "./gun-materials.mjs?v=4";
 import { validateProfile } from "./profile.mjs?v=2";
 import {
   startTracking,
@@ -557,15 +558,23 @@ for (const id of ["index", "thumb"])
     if (mode !== "inspect") inspect();
     pose(+$("index").value, +$("thumb").value);
   };
-$("ghost").onchange = () =>
-  grip.model.traverse((m) => {
-    if (m.isMesh)
-      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) {
-        mat.transparent = $("ghost").checked;
-        mat.opacity = $("ghost").checked ? 0.25 : 1;
-        mat.depthWrite = !$("ghost").checked;
-      }
-  });
+$("ghost").onchange = () => gunMaterials(grip.model, $("ghost").checked);
+for (const endpoint of ["raised", "wrapped"]) {
+  $("thumb-" + endpoint).onclick = () => {
+    try {
+      const ready = controller.calibrateThumb(endpoint, performance.now());
+      $("thumbCalibration").textContent = ready
+        ? "Thumb calibrated. Raised = 0%, wrapped = 100%."
+        : `Saved ${endpoint} thumb. Capture the other pose next.`;
+    } catch (e) {
+      $("thumbCalibration").textContent = e.message;
+    }
+  };
+}
+$("thumb-default").onclick = () => {
+  controller.thumbCalibration = {};
+  $("thumbCalibration").textContent = "Default thumb tracking restored.";
+};
 $("reset").onclick = () => {
   profile = structuredClone(provided);
   inspect();

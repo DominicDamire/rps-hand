@@ -8,6 +8,7 @@ import { startTracking } from "../hand-touch-calibration/tracking-session.mjs?v=
 import { FINGERS, JOINTS, defaults, validateProfile } from "./profile.mjs?v=2";
 import { TriggerTracker } from "./trigger.mjs";
 import { jointAxes } from "./joint-axes.mjs?v=2";
+import { gunMaterials } from "./gun-materials.mjs?v=4";
 
 const $ = (id) => document.getElementById(id),
   RAD = Math.PI / 180,
@@ -233,16 +234,7 @@ function apply() {
       }
   }
   gunGroup.visible = $("showGun").checked;
-  gun.traverse((m) => {
-    if (!m.isMesh) return;
-    for (const material of Array.isArray(m.material)
-      ? m.material
-      : [m.material]) {
-      material.transparent = $("ghostGun").checked;
-      material.opacity = $("ghostGun").checked ? 0.28 : 1;
-      material.depthWrite = !$("ghostGun").checked;
-    }
-  });
+  gunMaterials(gun, $("ghostGun").checked);
   if (triggerMesh)
     triggerMesh.quaternion
       .copy(triggerRest)
@@ -891,7 +883,7 @@ $("useCamera").onclick = () => {
       "gun-grip-camera-profile-v2",
       JSON.stringify(readProfile()),
     );
-    location.href = "play.html?v=3";
+    location.href = "play.html?v=4";
   } catch (e) {
     notice(e.message);
   }

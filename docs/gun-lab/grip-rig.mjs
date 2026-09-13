@@ -2,6 +2,7 @@ import * as T from "three";
 import { DollRig } from "../doll/DollRig.js?v=hand-lab-1";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { JOINTS } from "./profile.mjs?v=2";
+import { gunMaterials } from "./gun-materials.mjs?v=4";
 export function frame(wrist, index, middle, pinky) {
   const z = middle.clone().sub(wrist).normalize(),
     x = index.clone().sub(pinky);
@@ -35,6 +36,7 @@ export class GripRig {
     ]);
     this.gun.add(g.scene);
     this.model = g.scene;
+    gunMaterials(this.model);
     for (const n of ["Bullet_low", "Catridge_low"]) {
       const m = this.model.getObjectByName(n);
       if (m) m.visible = false;

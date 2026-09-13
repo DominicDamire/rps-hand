@@ -22,14 +22,36 @@
 <pre id="result" role="status">Loading actual hand and gun…</pre>
 <script type="module">
   import * as T from "three";
-  import { GripRig } from "./grip-rig.mjs?v=2";
-  import { heldAngles } from "./held-pose.mjs?v=2";
+  import { GripRig } from "./grip-rig.mjs?v=4";
+  import { heldAngles } from "./held-pose.mjs?v=4";
+  import { gunMaterials } from "./gun-materials.mjs?v=4";
   import { loadProvidedProfile } from "./presets.mjs?v=2";
   const out = document.getElementById("result");
   try {
     const profile = await loadProvidedProfile();
     const scene = new T.Scene(),
       g = await new GripRig(scene, profile).ready;
+    const materials = new Set();
+    g.model.traverse((m) => {
+      if (m.isMesh)
+        for (const mat of Array.isArray(m.material) ? m.material : [m.material])
+          materials.add(mat);
+    });
+    const checkMaterials = () => {
+      for (const m of materials) {
+        const glass = m.name === "Glass";
+        if (
+          m.transparent !== glass ||
+          m.depthWrite === glass ||
+          m.opacity !== 1
+        )
+          throw Error("Incorrect solid/glass rendering: " + m.name);
+      }
+    };
+    checkMaterials();
+    gunMaterials(g.model, true);
+    gunMaterials(g.model, false);
+    checkMaterials();
     const relative = () => {
         scene.updateMatrixWorld(true);
         return g.hand.matrixWorld.clone().invert().multiply(g.gun.matrixWorld);
@@ -69,6 +91,7 @@
     out.textContent = JSON.stringify(
       {
         status: "PASS",
+        opaqueGunAndGlassVerified: true,
         poses: 101,
         maxRelativeMatrixDrift: drift,
         lockedJoints: 9,

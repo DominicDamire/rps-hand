@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { GripController, heldAngles, observation } from "./held-pose.mjs";
+import { GripController, heldAngles, observation, bend } from "./held-pose.mjs";
 import { jointAxes } from "./joint-axes.mjs";
 import { validateProfile } from "./profile.mjs";
 import { providedProfile } from "./presets.mjs";
@@ -33,6 +33,50 @@ function hand(lower = 80, index = 5, thumb = 30) {
   }
   return p;
 }
+function positionedThumb(degrees) {
+  const p = hand();
+  const a = Math.atan2(0.1, 0.04) - (degrees * Math.PI) / 180;
+  for (let k = 0; k < 4; k++)
+    p[1 + k] = [
+      -0.055 + k * 0.025 * Math.cos(a),
+      -0.095 + k * 0.025 * Math.sin(a),
+      0,
+    ];
+  return p;
+}
+test("raised thumb is not pinned by its diagonal wrist attachment", () => {
+  const raised = positionedThumb(0),
+    wrapped = positionedThumb(100);
+  assert.ok(
+    bend(raised, 0, 1, 2) > 75,
+    "Fixture reproduces old saturated wrist signal",
+  );
+  assert.equal(observation(raised).thumb, 0);
+  assert.equal(observation(wrapped).thumb, 1);
+  const mid = observation(positionedThumb(60)).thumb;
+  assert.ok(mid > 0.2 && mid < 0.8);
+  const transformed = positionedThumb(60).map(([x, y, z]) => [
+    5 - y * 2,
+    7 + x * 2,
+    z * 2 - 3,
+  ]);
+  assert.ok(Math.abs(observation(transformed).thumb - mid) < 1e-6);
+});
+test("thumb calibration maps measured endpoints without changing authored limits", () => {
+  const c = new GripController(),
+    p = structuredClone(profile);
+  p.trigger.smoothing = 0;
+  assert.throws(() => c.calibrateThumb("raised", 0), /clear hand/);
+  c.update(positionedThumb(20), 0, p);
+  assert.equal(c.calibrateThumb("raised", 0), false);
+  assert.throws(() => c.calibrateThumb("wrapped", 0), /similar/);
+  c.update(positionedThumb(70), 130, p);
+  assert.equal(c.calibrateThumb("wrapped", 130), true);
+  assert.ok(c.update(positionedThumb(20), 170, p).thumb < 1e-6);
+  assert.ok(c.update(positionedThumb(70), 210, p).thumb > 0.999);
+  c.lose();
+  assert.throws(() => c.calibrateThumb("raised", 215), /clear hand/);
+});
 test("saved transforms and pose survive JSON validation unchanged", () => {
   assert.deepEqual(profile.hand.position, [-37, 65, -185]);
   assert.deepEqual(profile.gun.position, [-18, 16, -18]);
