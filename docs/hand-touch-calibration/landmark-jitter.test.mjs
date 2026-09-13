@@ -1,0 +1,2 @@
+import assert from 'node:assert/strict';import {LandmarkJitter} from './landmark-jitter.mjs';
+const f=new LandmarkJitter(),p=x=>[{x,y:0,z:0}];f.update(p(0),p(0));let r=f.update(p(1/480),p(.001));assert(r.lm[0].x<.5/480);r=f.update(p(.1),p(.1));assert.equal(r.lm[0].x,.1);r=f.update(p(.2),p(.2),0);assert.equal(r.lm[0].x,.2);console.log('PASS small jitter attenuated, fast movement immediate, off is raw');
