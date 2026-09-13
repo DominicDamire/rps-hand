@@ -1,4 +1,5 @@
-import {ExtendedReferenceCapture,referenceDepth,validReference} from './extended-reference.mjs?v=alien18.10';
+import {faceImageSize} from './head-depth.mjs?v=alien18.11';
+import {ExtendedReferenceCapture,referenceDepth,validReference} from './extended-reference.mjs?v=alien18.11';
 import {OuterCollision} from './outer-collision.mjs?v=alien18.10';
 import {findTouchPair,solveTouchDepth,closeContact} from './hand-pair-depth.mjs?v=alien18.10';
 import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=alien18.4';
@@ -7,8 +8,8 @@ import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
-import {installCombinedUI} from './combined-ui.mjs?v=alien18.10';
-import {CombinedHead} from './head-model.mjs?v=alien18.10';
+import {installCombinedUI} from './combined-ui.mjs?v=alien18.11';
+import {CombinedHead} from './head-model.mjs?v=alien18.11';
 import {directDriver} from './direct.mjs?v=alien18.10';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=alien18.10';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
@@ -343,7 +344,7 @@ Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
 Scene: ${measuredScene} measured FPS (target ${o.sceneRate})${Object.keys(s.errors||{}).length?' · '+JSON.stringify(s.errors):''}`;}
 window.combinedLab={version:19,get head(){return combined;},get metrics(){return trackingStats;},get handResult(){return directResult;},get scene(){return scene;}};
-notice('Alien 18.10 ready. Extended-hand reference calibration available; tracking runs on the PC.');
+notice('Alien 18.11 ready. Extended-hand reference calibration available; tracking runs on the PC.');
 combined.ready.then(()=>{if(combined.error)notice('Head model failed to load: '+combined.error);});
 
 const fixtureName=new URLSearchParams(location.search).get('fixture');
@@ -498,21 +499,22 @@ if($('captureRestSize'))$('captureRestSize').onclick=()=>{
 // Keep direct joint movement free of custom temporal jiggle filters.
 for(const id of ['fingerNoise','directionSmoothing','confirmJump','movementThreshold','depthSmooth','headSmooth']){const input=$(id);if(input){input.value=0;input.closest('label').style.display='none';}}
 for(const d of $('directSettings').querySelectorAll('details'))if(d.querySelector('summary')?.textContent==='Jiggle')d.style.setProperty('display','none','important');
-const pipelineInfo=document.createElement('p');pipelineInfo.textContent='Capture your fully extended hand once with your face visible. The saved size and distance become a reference; the hand then moves in depth as its apparent size changes. Contact corrections stay off.';$('directSettings').prepend(pipelineInfo);
+const pipelineInfo=document.createElement('p');pipelineInfo.textContent='Capture your fully extended hand once with your face visible. One capture applies to both hands and fits head depth to the same camera scale. Each then follows its own apparent size. Contact corrections stay off.';$('directSettings').prepend(pipelineInfo);
 
 const handPairStatus=document.createElement('p');handPairStatus.id='handPairStatus';handPairStatus.setAttribute('role','status');handPairStatus.textContent='Hand contact: waiting for two visible hands.';$('handsTouch').closest('label').after(handPairStatus);
 
 
 
+function referenceStatus(){return extendedReference?.version===3?'Reference active for both hands and head. Each follows its own captured image-size ratio.':'Previous hand reference active. Capture again to also fit head depth.';}
 function referenceModeUI(){
  if($('manualDepth').checked&&!extendedReference)$('manualDepth').checked=false;
 
- $('manualDepthStatus').textContent=$('manualDepth').checked?'Extended-hand reference active. Depth follows the saved hand-size ratio; automatic hand-to-hand depth correction is off.':extendedReference?'Saved reference available. Enable extended-arm depth reference to use it.':'Extend your open hand below your visible face, then capture. No distance entry needed.';
+ $('manualDepthStatus').textContent=$('manualDepth').checked?referenceStatus():extendedReference?'Saved reference available. Enable extended-arm depth reference to use it.':'Extend your open hand below your visible face, then capture. No distance entry needed.';
 }
 $('manualDepth').addEventListener('input',referenceModeUI);referenceModeUI();
 $('saveManualDepth').onclick=()=>{
  referenceCapture.begin(performance.now());clearInterval(referenceTimer);$('saveManualDepth').disabled=true;
- const tick=()=>{const now=performance.now(),result=referenceCapture.update(now,allHands,combined?.face&&now-combined.seen<250?{raw:Math.abs(combined.face.matrix[14])/100,depth:combined.depth}:null,captureAspect,renderedHands);
+ const tick=()=>{const now=performance.now(),result=referenceCapture.update(now,allHands,combined?.face&&now-combined.seen<250?{raw:Math.abs(combined.face.matrix[14])/100,size:faceImageSize(combined.face,captureAspect),modelEyeSpan:combined.restEyeSpan*combined.fixedScale*getCombinedOptions().headSize}:null,captureAspect,renderedHands);
   if(!result)return; $('manualDepthStatus').textContent=result.message;
   if(result.done){clearInterval(referenceTimer);referenceTimer=null;$('saveManualDepth').disabled=false;
    if(result.reference){extendedReference=result.reference;try{localStorage.setItem('alien-simple-reference-v2',JSON.stringify(extendedReference));}catch{}
@@ -525,5 +527,5 @@ let lastReferenceStatus=0;
 function updateReferenceStatus(now){
  if(referenceTimer||!getCombinedOptions().manualDepth||!extendedReference||now-lastReferenceStatus<250)return;
  lastReferenceStatus=now;
- $('manualDepthStatus').textContent='Reference captured. Move naturally. Hand distance follows the captured size ratio.';
+ $('manualDepthStatus').textContent=referenceStatus();
 }

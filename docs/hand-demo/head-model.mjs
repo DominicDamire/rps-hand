@@ -3,7 +3,7 @@ import {bindFaceDots,updateFaceDots} from './face-bindings.mjs?v=demo9';
 import * as T from 'three';
 import {GLTFLoader} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js';
 import {cameraUV,cameraPosition} from './projection.mjs';
-import {faceReference,calibratedDepth,eyeCenter,eyeCenters} from './head-depth.mjs?v=20';
+import {faceReference,calibratedDepth,eyeCenter,eyeCenters,capturedFaceDepth} from './head-depth.mjs?v=alien18.11';
 const outline=[10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109,10];
 export class CombinedHead {
  constructor(scene,options){
@@ -33,7 +33,7 @@ export class CombinedHead {
  update(dt,aspect,camera,metres,depthGain){
   const o=this.options(),fresh=this.face&&performance.now()-this.seen<(o.faceGrace??1000)&&o.faceRate>0;this.group.visible=!!(o.showHead&&fresh&&this.loaded);if(this.faceDots)this.faceDots.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false;if(this.contactDot)this.contactDot.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false&&(Number.isInteger(this.highlightFaceId)||Number.isInteger(this.highlightBodyId));if(!this.group.visible)return;
   if(!this.depthRef)this.calibrate(metres,aspect,camera.aspect);
-  let depth=o.captureFace?calibratedDepth(faceReference(this.face),o.captureFace.raw,o.captureFace.depth,1):o.headDepth===false?this.metres:calibratedDepth(faceReference(this.face),this.depthRef,this.metres,depthGain);if(!depth)return;
+  let depth=o.captureFace?.mode==='size'?capturedFaceDepth(this.face,aspect,o.captureFace):o.captureFace?calibratedDepth(faceReference(this.face),o.captureFace.raw,o.captureFace.depth,1):o.headDepth===false?this.metres:calibratedDepth(faceReference(this.face),this.depthRef,this.metres,depthGain);if(!depth)return;
   depth=Math.max(.08,depth-o.faceOffset/100+(o.headBack||0)/100);this.depth=depth;
   this.group.scale.setScalar(this.fixedScale*o.headSize);
   const q=new T.Quaternion().setFromRotationMatrix(new T.Matrix4().fromArray(this.face.matrix));if(this.neutral)q.multiply(this.neutral.clone().invert());
