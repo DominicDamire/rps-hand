@@ -78,6 +78,7 @@ function keepHandBeforeWall(S,result){result.wallClearance=0;result.wallLimited=
 const relaxedStates={};
 function relaxedPoints(points,S,q,dt){
  const o=getCombinedOptions(),range=(o.contactThreshold||0)/100,state=relaxedStates[S]??={amount:0,q:q.clone()};
+ if(o.relaxedPalm&&range&&!depthExperiment?.recording)headBackWall(); // bounds only; never translates a hand
  let near=false;if(!depthExperiment?.recording&&o.relaxedPalm&&range&&combined?.group.visible&&headWallCorners){const box=new THREE.Box3().setFromPoints(headWallCorners.map(p=>p.clone().applyMatrix4(combined.bones.head.matrixWorld)));near=points.some(p=>box.distanceToPoint(p)<range);}
  state.amount+=((near?1:0)-state.amount)*(1-Math.exp(-Math.min(dt,.1)/.12));if(state.amount<.001)return points;
  state.q.slerp(q,1-Math.exp(-Math.min(dt,.1)/.06));q.slerp(state.q,state.amount);
