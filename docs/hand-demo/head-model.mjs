@@ -33,8 +33,8 @@ export class CombinedHead {
  update(dt,aspect,camera,metres,depthGain){
   const o=this.options(),fresh=this.face&&performance.now()-this.seen<(o.faceGrace??1000)&&o.faceRate>0;this.group.visible=!!(o.showHead&&fresh&&this.loaded);if(this.faceDots)this.faceDots.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false;if(this.contactDot)this.contactDot.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false&&(Number.isInteger(this.highlightFaceId)||Number.isInteger(this.highlightBodyId));if(!this.group.visible)return;
   if(!this.depthRef)this.calibrate(metres,aspect,camera.aspect);
-  let depth=o.headDepth===false?this.metres:calibratedDepth(faceReference(this.face),this.depthRef,this.metres,depthGain);if(!depth)return;
-  depth=Math.max(.08,depth-o.faceOffset/100+(o.headBack||0)/100);this.depth=depth;
+  let depth=o.manualDepth?o.manualHeadDepth/100:o.headDepth===false?this.metres:calibratedDepth(faceReference(this.face),this.depthRef,this.metres,depthGain);if(!depth)return;
+  depth=Math.max(.08,o.manualDepth?depth:depth-o.faceOffset/100+(o.headBack||0)/100);this.depth=depth;
   this.group.scale.setScalar(this.fixedScale*o.headSize);
   const q=new T.Quaternion().setFromRotationMatrix(new T.Matrix4().fromArray(this.face.matrix));if(this.neutral)q.multiply(this.neutral.clone().invert());
   const e=new T.Euler().setFromQuaternion(q,'YXZ');e.x*=o.turnGain;e.y*=o.turnGain;e.z*=o.turnGain;q.setFromEuler(e);
@@ -46,7 +46,7 @@ export class CombinedHead {
   const eyes=this.face.eyes||{},gx=((eyes.eyeLookInLeft||0)-(eyes.eyeLookOutLeft||0)+(eyes.eyeLookOutRight||0)-(eyes.eyeLookInRight||0))*.2,gy=-((eyes.eyeLookUpLeft||0)+(eyes.eyeLookUpRight||0)-(eyes.eyeLookDownLeft||0)-(eyes.eyeLookDownRight||0))*.12;
   for(const b of this.bones.eyes)this.setWorld(b,this.smoothed.clone().multiply(new T.Quaternion().setFromEuler(new T.Euler(gy,gx,0))).multiply(this.rest.get(b)));
   const uv=cameraUV(eyeCenter(this.face.points),aspect,camera.aspect),target=camera.isOrthographicCamera?new T.Vector3((uv.x-.5)*camera.aspect,.5-uv.y,-depth):new T.Vector3().fromArray(cameraPosition(uv,depth,camera.aspect));
-  this.anchor??=target.clone();target.sub(this.anchor).multiplyScalar(o.moveGain).add(this.anchor);this.position??=target.clone();this.position.lerp(target,alpha);
+  this.anchor??=target.clone();target.sub(this.anchor).multiplyScalar(o.moveGain).add(this.anchor);this.position??=target.clone();this.position.lerp(target,alpha);if(o.manualDepth)this.position.z=-depth;
   this.group.updateMatrixWorld(true);const midpoint=this.bones.eyes.reduce((v,b)=>v.add(b.getWorldPosition(new T.Vector3())),new T.Vector3()).multiplyScalar(.5);this.group.position.add(this.position.clone().add(new T.Vector3(-(o.headSide||0)/100,(o.headHeight||0)/100,0)).sub(midpoint));this.group.updateMatrixWorld(true);
   if(o.faceMapping===false)return;
   this.mappedLandmarks=updateFaceDots(this.faceBindings);this.cameraLandmarks=projectFaceDots(this.face.points,this.face.matrix,aspect);
