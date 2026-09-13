@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {palmSize,sizeDistance} from './palm-distance.mjs';
+const lm=Array.from({length:21},(_,i)=>({x:.4+(i%5)*.02,y:.4+i*.005,z:0}));
+const world=lm.map(p=>({...p}));
+const size=palmSize(lm,world,1);
+const larger=lm.map(p=>({...p,x:.5+(p.x-.5)*2,y:.5+(p.y-.5)*2}));
+assert.ok(Math.abs(palmSize(larger,world,1)-size*2)<1e-9);
+assert.equal(sizeDistance(size*2,{size,depth:.5},1),.25);
+const spread=lm.map(p=>({...p}));for(const i of [4,8,12,16,20])spread[i].x+=.3;
+assert.equal(palmSize(spread,world,1),size);
+assert.equal(sizeDistance(null,{size,depth:.5},.4),.4);
+assert.equal(sizeDistance(size*100,{size,depth:.5},.4),.08);
+console.log('Palm distance: inverse size, finger-spread independence, invalid input and near bound passed.');
