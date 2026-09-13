@@ -74,6 +74,24 @@ export function validateProfile(value) {
       throw Error("Invalid joint " + n);
     out.angles[n] = [...a];
   }
+  for (const [key, finger] of [
+    ["thumbOpen", "Thumb"],
+    ["indexPressed", "Index"],
+  ])
+    if (value[key] !== undefined) {
+      out[key] = {};
+      for (let k = 1; k <= 3; k++) {
+        const n = finger + k,
+          a = value[key]?.[n];
+        if (
+          !Array.isArray(a) ||
+          a.length !== 3 ||
+          a.some((v) => !num(v, -180, 180))
+        )
+          throw Error("Invalid " + key + " endpoint: " + n);
+        out[key][n] = [...a];
+      }
+    }
   for (const [key, min, max] of [
     ["released", 0, 160],
     ["pressed", 0, 160],

@@ -1,15 +1,18 @@
+import { loadProvidedProfile } from "./presets.mjs?v=2";
 import * as T from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { TransformControls } from "three/addons/controls/TransformControls.js";
 import { DollRig } from "../doll/DollRig.js?v=hand-lab-1";
 import { startTracking } from "../hand-touch-calibration/tracking-session.mjs?v=touch2.4.9";
-import { FINGERS, JOINTS, defaults, validateProfile } from "./profile.mjs";
+import { FINGERS, JOINTS, defaults, validateProfile } from "./profile.mjs?v=2";
 import { TriggerTracker } from "./trigger.mjs";
+import { jointAxes } from "./joint-axes.mjs?v=2";
 
 const $ = (id) => document.getElementById(id),
   RAD = Math.PI / 180,
-  KEY = "gun-grip-lab-v1";
+  KEY = "gun-grip-lab-v2";
+let suppliedGrip = null;
 let state = defaults(),
   target = "hand",
   finger = "Index",
@@ -167,6 +170,7 @@ function palmRotation(S) {
   ));
 }
 function freshPose() {
+  if (suppliedGrip) return structuredClone(suppliedGrip);
   const p = defaults();
   if (!rig.loaded) return p;
   const S = p.side,
@@ -413,15 +417,15 @@ function renderFingers() {
       joint - 1
     ];
   $("angles").replaceChildren();
-  ["Bend", "Sideways", "Twist"].forEach((name, i) =>
+  jointAxes(n).forEach(({ name, axis, sign }) =>
     slider(
       $("angles"),
       name,
-      state.angles[n][i],
+      state.angles[n][axis] * sign,
       -180,
       180,
       1,
-      (v) => (state.angles[n][i] = v),
+      (v) => (state.angles[n][axis] = v * sign),
       "°",
     ),
   );
@@ -564,13 +568,22 @@ $("resetJoint").onclick = () => {
   apply();
 };
 $("straighten").onclick = () => {
-  for (let k = 1; k <= 3; k++) state.angles[finger + k] = [0, 0, 0];
+  for (let k = 1; k <= 3; k++)
+    state.angles[finger + k] =
+      finger === "Thumb" && state.thumbOpen
+        ? [...state.thumbOpen["Thumb" + k]]
+        : [0, 0, 0];
   renderFingers();
   apply();
 };
 $("curl").onclick = () => {
   for (let k = 1; k <= 3; k++)
-    state.angles[finger + k] = [k === 1 ? 65 : k === 2 ? 90 : 75, 0, 0];
+    state.angles[finger + k] =
+      finger === "Thumb"
+        ? [...suppliedGrip.angles["Thumb" + k]]
+        : finger === "Index" && state.indexPressed
+          ? [...state.indexPressed["Index" + k]]
+          : [k === 1 ? 65 : k === 2 ? 90 : 75, 0, 0];
   renderFingers();
   apply();
 };
@@ -844,6 +857,7 @@ try {
     markers.set(n, marker);
     markerGroup.add(marker);
   }
+  suppliedGrip = await loadProvidedProfile();
   state = freshPose();
   try {
     const saved = localStorage.getItem(KEY);
@@ -870,3 +884,23 @@ try {
 } catch (e) {
   notice("Models could not load: " + e.message + " Reload to retry.");
 }
+
+$("useCamera").onclick = () => {
+  try {
+    sessionStorage.setItem(
+      "gun-grip-camera-profile-v2",
+      JSON.stringify(readProfile()),
+    );
+    location.href = "play.html?v=2";
+  } catch (e) {
+    notice(e.message);
+  }
+};
+
+// Camera pickup and held-finger limits are shared in the camera range.
+$("start").onclick = $("useCamera").onclick;
+$("stop").hidden = true;
+$("captureReleased").parentElement.hidden = true;
+$("trackingHand").closest("label").hidden = true;
+$("trackingStatus").textContent =
+  "Open the camera range with this edited grip.";

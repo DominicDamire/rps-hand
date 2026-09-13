@@ -20,11 +20,12 @@
       <div class="brand">
         <span class="logo">G / H</span>
         <div>
-          <h1>Gun Grip Lab <small>01</small></h1>
+          <h1>Gun Grip Lab <small>02</small></h1>
           <p>Placement, fingers & trigger tracking</p>
         </div>
       </div>
       <nav>
+        <a href="play.html?v=2">Camera pickup &amp; shoot ↗</a>
         <a href="../hand-touch-calibration/">Sweep ↗</a
         ><a href="../hand-lab/">Hand lab ↗</a
         ><a href="../movement/?v=90">Game ↗</a
@@ -37,6 +38,9 @@
         <section>
           <div class="eyebrow">01 / PLACEMENT</div>
           <h2>Fit the grip</h2>
+          <button id="useCamera" class="primary">
+            Use this grip with camera
+          </button>
           <p>
             Thumb up. Index toward the front camera. Three fingers curled. Edit
             immediately; no camera required.
@@ -85,7 +89,7 @@
             <button id="save">Save in browser</button
             ><button id="load">Load saved</button>
           </div>
-          <button id="initial">Initial pointing pose</button>
+          <button id="initial">Reset to supplied grip</button>
           <details>
             <summary>JSON backup / import</summary>
             <textarea
@@ -196,6 +200,6 @@
         </section>
       </aside>
     </main>
-    <script type="module" src="lab.mjs?v=1"></script>
+    <script type="module" src="lab.mjs?v=2"></script>
   </body>
 </html>

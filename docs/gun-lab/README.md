@@ -1,19 +1,30 @@
-# Gun Grip Lab
+# Gun Grip Lab — camera grip v2
 
-Standalone lab at `/gun-lab/` for adjusting a fixed hand pose around the existing pistol. It reuses the sweep's `DollRig`, `doll.glb`, `doll-report.json`, and hand tracking session. It does not start a camera until Connect camera is clicked.
+Use `/gun-lab/play.html?v=2` for one-hand pickup, movement and shooting. `/gun-lab/?v=2` remains the placement/joint editor and has a button to use the edited grip in the camera range.
 
-The initial pose has a raised thumb, extended index toward the Front camera, and curled middle/ring/pinky. The orbit view exposes the hand side of the gun. Hand and gun have independent position (millimetres), XYZ Euler rotation (degrees), and uniform scale. Move gun with hand preserves their relative transform. Optional 3D handles translate or rotate the selected object; orbit, front, side, top and first-person views aid alignment.
+## Supplied references
 
-All 15 finger joints expose bend, sideways and twist. Geometry remains the sweep's articulated rigid hand, with its default 1.3× finger thickness. Fingertip extension is left at the model's original length. Joint markers can be clicked to select a joint. The gun can be hidden or made transparent to inspect overlap. There is no automatic collision fitting.
+- `released-grip.json`: exact user `gun-grip (2).json`; released index angles are **0 / -3 / -19** degrees.
+- `pressed-grip.json`: exact user `gun-grip (4).json`; fully pressed index angles are **-3 / 78 / 69** degrees. This file also supplies the held assembly placement, lower-finger pose and maximum inward thumb pose.
+- `thumb-up-grip.json`: first supplied JSON, retained as the raised/outward thumb endpoint.
 
-Save in browser stores one named preset under `gun-grip-lab-v1`. JSON export/import preserves both transforms, hand side, all joint rotations, thickness, and trigger calibration. Import validates finite bounds, rig/schema, release/press calibration, and threshold hysteresis before replacing the current state. The saved preset loads on page entry. Initial pointing pose resets the working state; Save explicitly replaces the saved preset. Presets currently affect this lab only.
+`presets.mjs` combines those references without rewriting their raw XYZ joint values. Optional `indexPressed` and `thumbOpen` fields survive profile validation, export and import. Version-1 files still load. The v2 browser-storage key keeps old saved editor profiles separate; they cannot silently override the new supplied endpoints on first entry.
 
-Live trigger mode uses one confident, selected tracker hand label. The edited grip and placement stay fixed; only index middle/tip bends follow measured 3D landmark bends. The smoothing setting filters both rendered bends and the trigger meter. Capture released/pressed calibrates the index middle-joint range. Hysteresis counts one press per release, with no looping or timed animation. Loss or a >250 ms result gap disarms; a released observation is required to rearm. Stopping, leaving or hiding the page closes the tracking workers and camera stream.
+Thumb controls now use their actual hinge convention: displayed Bend reads/writes the legacy Y axis, Sideways the legacy X axis, and Twist remains Z. The outer-thumb bend sign is reversed so inward bending reads positive. This preserves existing saved poses exactly. Other fingers retain their original controls.
 
-## Validation
+## Held behavior
 
-Run `node --test docs/gun-lab/trigger.test.mjs` from the repository root. Eight tests cover 3D bend invariance, press/release hysteresis, tracking loss and invalid input, long result gaps, time-based smoothing, and profile round-trips/rejection.
+Show one hand and curl middle/ring/pinky to pick up (120 ms confirmation). The hand and pistol preserve the exact saved relative transform during translation and palm rotation. Lower three fingers remain fixed while held. Index and thumb follow measured flexion only within the authored endpoint ranges; the index cannot overshoot JSON 4. Straighten the index to rearm, then curl it for one shot. Opening the lower three fingers for 220 ms returns the pistol to its stand. No firing occurs on pickup with an already bent index, while tracking is missing/ambiguous, or on bent-finger reacquisition.
 
-Serve `docs` and open `/gun-lab/tracker-check.html` to run the actual sweep tracker on `test/count5.png` without camera access. This verifies inference and index-bend extraction, not the user's live camera accuracy. Browser checks exercised numeric joint edits, saved-preset restoration, linked object translation, direct 3D handle dragging, visual grip alignment, and a 390 px phone layout.
+The range includes barrel-ray target hits, a brief tracer/muzzle light, optional synthesized sound, shot/hit counters, camera preview, automatic one-hand selection, camera selection, palm rotation, movement sensitivity, and camera-free endpoint inspection. Stop/hidden/page-exit releases camera resources. This changes only the gun lab; the movement game is unchanged.
 
-Live grip occlusion, phone latency and comfort still need testing with the user's camera. The public movement game is not modified by this lab.
+The collision stops are authored angular ranges, not an arbitrary mesh collision/physics solver. Moving the gun or changing geometry in the editor requires refitting the endpoint poses. Camera depth is estimated from palm image size; live grip occlusion and camera latency need user testing. Thumb measurement includes base motion plus outer-joint bends.
+
+## Verification
+
+- `node --test docs/gun-lab/trigger.test.mjs docs/gun-lab/held-pose.test.mjs`: 19 tests covering exact references, endpoint bounds, thumb-axis compatibility, locked lower fingers, pickup/release confirmation, hysteresis, tracking loss/reacquisition, smoothing and profile validation.
+- `/gun-lab/grip-check.html`: actual hand/gun geometry, 101 moving assembly poses, nine locked lower joints, exact endpoint values, and neutral barrel direction. Relative matrix drift was below 4e-16.
+- `/gun-lab/play.html?verify=1`: explicit test-only landmark fixture replay through the actual range handler, without opening a webcam. Verified pickup, one shot and target hit, no held-press repeat, loss holding the gun, no shot on reacquisition, and release on an open hand.
+- `/gun-lab/tracker-check.html`: actual tracker inference on the repository reference image, without camera access.
+
+All normal pages remain camera-free until Connect camera is clicked. Fixture replay runs only with the explicit verification query.
