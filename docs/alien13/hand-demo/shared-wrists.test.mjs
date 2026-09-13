@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {sharedWrists} from './shared-wrists.mjs';
+const pose={points:{15:{x:.2,y:.4,z:.1},16:{x:.8,y:.4,z:.2}}};
+const hands={landmarks:[[{x:.75,y:.3}],[{x:.25,y:.3}]]};
+const result=sharedWrists(pose,hands);
+assert.deepEqual(result.map,{L:1,R:0});
+assert.equal(result.pose.points[15].x,hands.landmarks[1][0].x);
+assert.equal(result.pose.points[16].y,hands.landmarks[0][0].y);
+assert.equal(result.pose.points[15].z,.1);
+assert.equal(pose.points[15].x,.2);
+assert.deepEqual(sharedWrists(pose,null).map,{L:-1,R:-1});
+assert.equal(sharedWrists(pose,{landmarks:[[{x:.18,y:.4}]]}).map.L,0);
+console.log('Shared wrists: single/two hands, unique assignment, preserved depth, unchanged raw data passed.');
