@@ -1,4 +1,4 @@
-import {limitBaseSplay} from './base-splay-limit.mjs?v=touch2.2';
+import {limitBaseSplay} from './base-splay-limit.mjs?v=touch2.3';
 import * as T from 'three';
 import {DirectionStabilizer,fingerPlane,constrainFinger} from './stability.mjs?v=17';
 import {ContactLatch,fitContact} from './contact-direct.mjs?v=17';
@@ -22,7 +22,11 @@ export function directDriver(rig,tips){
   const restAcross=rig.rest[side+'Index1'].world.clone().sub(rig.rest[side+'Pinky1'].world);
   function restrictBase(f){
    const chain=chains[f],name=side+FINGERS[f],before=chain[1].clone().sub(chain[0]).normalize(),rest=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize();
-   const local=before.clone().applyQuaternion(inversePalm),after=new T.Vector3().fromArray(limitBaseSplay(local.toArray(),rest.toArray(),restAcross.toArray())).applyQuaternion(palmQ);
+   // A fist can have a 40-degree base and a 90-degree middle joint.
+   // Folded upper joints also lock base splay, without locking forward flexion.
+   const middle=chain[2].clone().sub(chain[1]).normalize(),tip=chain[3].clone().sub(chain[2]).normalize();
+   const upperBend=Math.max(before.angleTo(middle),middle.angleTo(tip))*180/Math.PI;
+   const local=before.clone().applyQuaternion(inversePalm),after=new T.Vector3().fromArray(limitBaseSplay(local.toArray(),rest.toArray(),restAcross.toArray(),70,upperBend)).applyQuaternion(palmQ);
    const correction=new T.Quaternion().setFromUnitVectors(before,after);for(let k=1;k<4;k++)chain[k].sub(chain[0]).applyQuaternion(correction).add(chain[0]);
   }
   for(let f=1;f<5;f++)restrictBase(f);

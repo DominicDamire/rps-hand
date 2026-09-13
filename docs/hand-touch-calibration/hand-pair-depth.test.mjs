@@ -20,4 +20,10 @@ assert.ok(shared.depthA<.5&&shared.depthB<.5,'both hands must move closer togeth
 assert.ok(Math.hypot(...add(leftTip,shared.A).map((v,i)=>v-add(rightTip,shared.B)[i]))<=.0010001,'close the visible fingertip gap');
 console.log('PASS: shared camera-distance correction, near/far contact, rigid bone geometry, invalid estimates and image separation');
 
+const almost=far.map(p=>({...p}));almost[8]={...lm[8],y:lm[8].y+.01};
+assert.equal(findTouchPair({lm,points:pts},{lm:almost,points:pts},1,null,{rangePercent:2}),null,'small detection range rejects a visible gap');
+assert.ok(findTouchPair({lm,points:pts},{lm:almost,points:pts},1,null,{rangePercent:50}),'larger detection range accepts the same gap');
+assert.equal(solveTouchDepth([0,0,-.5],[0,.08,-.5],[-.1,0,-.5],[.1,0,-.5],{maxSideChange:.01}),null,'sideways correction limit is enforced');
+assert.ok(solveTouchDepth([0,0,-.5],[0,.08,-.5],[-.1,0,-.5],[.1,0,-.5],{maxSideChange:.05}),'raising sideways limit permits the same correction');
+
 const easedA=shared.A.map(v=>v*.5),easedB=shared.B.map(v=>v*.5),closed=closeContact(leftTip,rightTip,easedA,easedB,.001);assert.ok(Math.hypot(...add(leftTip,closed.A).map((v,i)=>v-add(rightTip,closed.B)[i]))<=.00100001,'easing cannot reopen a confirmed contact');

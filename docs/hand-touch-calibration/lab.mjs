@@ -1,6 +1,6 @@
-import {OuterCollision} from './outer-collision.mjs?v=touch2.2';
-import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.2';
-import {installExperiment} from './experiment.mjs?v=touch2.2';
+import {OuterCollision} from './outer-collision.mjs?v=touch2.3';
+import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.3';
+import {installExperiment} from './experiment.mjs?v=touch2.3';
 let depthExperiment=null;
 import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=alien18.4';
 import {palmSize} from './palm-distance.mjs?v=alien13';
@@ -8,10 +8,10 @@ import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
-import {installCombinedUI} from './combined-ui.mjs?v=touch2.2';
-import {CombinedHead} from './head-model.mjs?v=touch2';
-import {directDriver} from './direct.mjs?v=touch2.2';
-import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.2';
+import {installCombinedUI} from './combined-ui.mjs?v=touch2.3';
+import {CombinedHead} from './head-model.mjs?v=touch2.3';
+import {directDriver} from './direct.mjs?v=touch2.3';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.3';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -72,13 +72,9 @@ function headBackWall(){
  }
  lastWallZ=Math.min(...headWallCorners.map(p=>p.clone().applyMatrix4(bone.matrixWorld).z));return lastWallZ;
 }
-function keepHandBeforeWall(S,result){if(depthExperiment?.active){result.wallClearance=0;result.wallLimited=false;return result;}
- const hand=rig.joints[S+'Hand'];hand.updateWorldMatrix(true,true);let back=Infinity;
- hand.traverse(mesh=>{if(!mesh.isMesh||!mesh.geometry)return;mesh.geometry.boundingBox||mesh.geometry.computeBoundingBox();wallBox.copy(mesh.geometry.boundingBox).applyMatrix4(mesh.matrixWorld);back=Math.min(back,wallBox.min.z);});
- if(!Number.isFinite(back))return result;
- const shift=wallShift(back,headBackWall());if(shift){const target=hand.getWorldPosition(new THREE.Vector3());target.z+=shift;hand.position.copy(hand.parent.worldToLocal(target));hand.updateWorldMatrix(false,true);for(const p of result.points)p.z+=shift;}
- result.wallClearance=back+shift-lastWallZ;result.wallLimited=shift>0;return result;
-}
+// Sweep placement is independent of head sliders and live head movement.
+// Head contact is an explicit optional collision pass, never a depth wall.
+function keepHandBeforeWall(S,result){result.wallClearance=0;result.wallLimited=false;return result;}
 const relaxedStates={};
 function relaxedPoints(points,S,q,dt){
  const o=getCombinedOptions(),range=(o.contactThreshold||0)/100,state=relaxedStates[S]??={amount:0,q:q.clone()};
@@ -94,20 +90,25 @@ function shiftRenderedHand(S,delta){
  const hand=rig.joints[S+'Hand'],target=hand.getWorldPosition(new THREE.Vector3()).add(delta);
  hand.position.copy(hand.parent.worldToLocal(target));hand.updateWorldMatrix(false,true);
  for(const point of result.points)point.add(delta);result.wallClearance+=delta.z;
+ if(interactionShifts[S])interactionShifts[S].add(delta);
 }
+const interactionShifts={L:new THREE.Vector3(),R:new THREE.Vector3()};
 function applyHandInteractions(now){
+ interactionShifts.L.set(0,0,0);interactionShifts.R.set(0,0,0);
  const options=getCombinedOptions(),status=$('handContactStatus');
- if(!options.handsTouch&&!options.outerCollision){contactAssist.reset();if(status.textContent!=='Contact assistance and outer collisions off.')status.textContent='Contact assistance and outer collisions off.';return;}
+ if(!options.handsTouch&&!options.outerCollision&&!options.headCollision){contactAssist.reset();if(status.textContent!=='Contact assistance and outer collisions off.')status.textContent='Contact assistance and outer collisions off.';return;}
  if(depthExperiment?.recording){contactAssist.reset();status.textContent='Recording: contact and collision corrections paused.';return;}
  const packet=label=>{const h=allHands.find(h=>h.label===label),r=renderedHands[label==='Left'?'L':'R'];return h&&r?{...h,lm:h.landmarks,points:r.result.points.map(p=>p.toArray())}:null;};
  const left=packet('Left'),right=packet('Right');
- const fit=contactAssist.update({left,right,aspect:captureAspect,now,enabled:options.handsTouch&&!editing});
+ const fit=contactAssist.update({left,right,aspect:captureAspect,now,enabled:options.handsTouch&&!editing,rangePercent:options.touchRange,confirmMs:options.touchConfirm,maxSideChange:options.touchSideLimit/100});
  if(fit){shiftRenderedHand('L',new THREE.Vector3().fromArray(fit.A));shiftRenderedHand('R',new THREE.Vector3().fromArray(fit.B));}
- if(options.outerCollision){
+ if(options.outerCollision||options.headCollision){
   const visible={L:!!left&&rig.parts.some(m=>m.name.startsWith('LHand')&&m.visible),R:!!right&&rig.parts.some(m=>m.name.startsWith('RHand')&&m.visible)};
-  outerCollision.resolve(combined,rig,visible,shiftRenderedHand,!!fit,+$('fingerThickness').value+':'+$('tipInset').value+':'+visible.L+':'+visible.R,{head:true,hands:true});
+  outerCollision.resolve(combined,rig,visible,shiftRenderedHand,!!fit,+$('fingerThickness').value+':'+$('tipInset').value+':'+visible.L+':'+visible.R,{head:options.headCollision,hands:options.outerCollision});
  }
- status.textContent=fit?'Visible hand contact matched. '+(options.outerCollision?'Outer surfaces protected. ':'')+'Sweep calibration unchanged.':options.handsTouch?'Contact assistance: waiting for fresh touching landmarks.':options.outerCollision?'Outer collisions on. Contact matching off.':'Contact assistance and outer collisions off.';
+ const gap=fit?new THREE.Vector3().fromArray(fit.pair.a).add(interactionShifts.L).distanceTo(new THREE.Vector3().fromArray(fit.pair.b).add(interactionShifts.R)):null;
+ status.textContent=fit?'Contact corrected; model contact-point gap '+(gap*1000).toFixed(1)+' mm'+(gap>fit.pair.surfaceGap+.003?' — outer collision separation prevents this pair closing.':'.')+' Sweep calibration unchanged.':contactAssist.status;
+ if(options.outerCollision||options.headCollision)status.textContent+=' Outer collisions ON: '+outerCollision.last.head+' head / '+outerCollision.last.hands+' hand corrections.';
 }
 function cameraPoints(world,lm){const points=rawSizePoints(world,lm);return $('falseDepth')?.checked?reduceFalseDepthBends(points,lm,$('preview').width,$('preview').height,!camera.isOrthographicCamera):points;}
 function rawSizePoints(world,lm){
@@ -248,7 +249,7 @@ configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready
 let timingAt=0,timingTotal=0,timingCount=0;
 const wallTest=new URLSearchParams(location.search).has('fixture')?document.createElement('p'):null;if(wallTest)$('directSettings').prepend(wallTest);
 let sceneFrames=0,sceneWindow=performance.now(),measuredScene=0,lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(stream&&!editing)drawPreview($('video'),latest?.landmarks);if(+getCombinedOptions().handRate===0){latest=null;allHands=[];}
- if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(stream&&$('video').readyState>=2)drawPreview($('video'),latest?.landmarks);const calculationStart=performance.now();if(getCombinedOptions().rawOnly){measuredScene=0;sceneFrames=0;sceneWindow=now;$('scene').style.visibility='hidden';$('calculationTiming').textContent='RAW: model calculations and 3D rendering OFF. Read tracking FPS on camera preview.';return;}$('scene').style.visibility='';if(sampleSource&&combined){combined.seen=combined.poseSeen=now;}combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.wallLimited?'Hand at head back-wall limit':directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Fixed hand proportions · tracked segment directions';}renderOtherHand(renderDt);depthExperiment?.observe(allHands,renderedHands,captureAspect);applyHandInteractions(now);if(wallTest)wallTest.textContent='Back-wall clearance: '+Object.entries(renderedHands).map(([s,h])=>s+' '+(1000*h.result.wallClearance).toFixed(3)+' mm').join(' / ');if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&!!latest;
+ if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(stream&&$('video').readyState>=2)drawPreview($('video'),latest?.landmarks);const calculationStart=performance.now();if(getCombinedOptions().rawOnly){measuredScene=0;sceneFrames=0;sceneWindow=now;$('scene').style.visibility='hidden';$('calculationTiming').textContent='RAW: model calculations and 3D rendering OFF. Read tracking FPS on camera preview.';return;}$('scene').style.visibility='';if(sampleSource&&combined){combined.seen=combined.poseSeen=now;}combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.wallLimited?'Hand at head back-wall limit':directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Fixed hand proportions · tracked segment directions';}renderOtherHand(renderDt);depthExperiment?.observe(allHands,renderedHands,captureAspect);applyHandInteractions(now);if(wallTest)wallTest.textContent='Test wrist coordinates: '+Object.entries(renderedHands).map(([s,h])=>s+' '+h.result.points[0].toArray().map(v=>(v*1000).toFixed(2)).join(', ')).join(' / ');if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&!!latest;
  for(const n of JOINTS){const dot=jointDots[n];dot.visible=true;dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  for(const [i,f] of FINGERS.entries())tipDots[f].position.copy(directResult?directResult.points[4+i*4]:tipWorld(rig,tips,side,f));
  modelLines.visible=false;let lineIndex=0;const linePoints=lineGeometry.attributes.position;
@@ -479,7 +480,7 @@ if($('captureRestSize'))$('captureRestSize').onclick=()=>{
  for(const [id,max,value] of [['fingerNoise',15,1],['directionSmoothing',500,25],['confirmJump',90,0],['depthSmooth',500,25],['headSmooth',500,0]]){const e=$(id);e.max=max;e.value=value;e.nextElementSibling.value=value;const label=e.closest('label');label.style.display='block';jiggle.append(label);}
  const view=document.createElement('button');view.textContent='Explore in 3D — rotate / pan / zoom';let explore=false;
  view.onclick=()=>{explore=!explore;controls.enabled=explore;controls.enablePan=true;controls.maxDistance=8;if(explore){controls.target.set(0,0,-(combined?.depth||.5));$('scene').style.transform='none';$('cameraFrame').style.display='none';}else setViewMode();view.textContent=explore?'Return to camera mirror':'Explore in 3D — rotate / pan / zoom';};panel.prepend(view,jiggle);
- const allowed=new Set(['handsTouch','outerCollision','relaxedPalm','handHeight','headSide','contactThreshold','headHeight','headSize','headBack','fingerThickness','tipInset','lockBody','turnGain','moveGain','neckShare','trackingGrace','faceGrace','showHead','mappedFaceDots','fingerNoise','directionSmoothing','confirmJump','depthSmooth','headSmooth']);
+ const allowed=new Set(['handsTouch','outerCollision','headCollision','relaxedPalm','handDistance','handHeight','headSide','contactThreshold','headHeight','headSize','headBack','fingerThickness','tipInset','lockBody','turnGain','moveGain','neckShare','trackingGrace','faceGrace','showHead','mappedFaceDots','fingerNoise','directionSmoothing','confirmJump','depthSmooth','headSmooth']);
  for(const label of panel.querySelectorAll('label')){const input=label.querySelector('input,select');if(input&&!allowed.has(input.id))label.style.display='none';}
  for(const el of panel.querySelectorAll('p,small,button'))if(el!==view&&!jiggle.contains(el)&&el.id!=='calculationTiming')el.style.display='none';
  for(const d of panel.querySelectorAll('details')){if(d===jiggle)continue;const visible=[...d.querySelectorAll('label')].some(l=>l.style.display!=='none');if(!visible)d.style.setProperty('display','none','important');}
@@ -492,8 +493,12 @@ for(const id of ['fingerNoise','directionSmoothing','confirmJump','movementThres
 for(const d of $('directSettings').querySelectorAll('details'))if(d.querySelector('summary')?.textContent==='Jiggle')d.style.setProperty('display','none','important');
 const pipelineInfo=document.createElement('p');pipelineInfo.textContent='One hand. One movement back to your neck. The captured mapping stays fixed; current hand size drives forward/backward motion.';$('directSettings').prepend(pipelineInfo);
 
-depthExperiment=installExperiment({container:$('directSettings'),video:$('video'),getHead:()=>combined});
+depthExperiment=installExperiment({container:$('directSettings'),video:$('video'),getHead:()=>combined,getHandDistance:()=>getCombinedOptions().handDistance||0});
 
 $('relaxedPalm').checked=false;$('contactThreshold').value=0;$('contactThreshold').nextElementSibling.value=0;
 
 const handContactStatus=document.createElement('p');handContactStatus.id='handContactStatus';handContactStatus.setAttribute('role','status');$('outerCollision').closest('label').after(handContactStatus);
+const contactPanel=document.createElement('section');contactPanel.style.display='block';contactPanel.innerHTML='<h2>Optional contact</h2><p>Off by default. Enable contact matching to close touching finger lines; enable outer collisions to protect the two hands. Hand/head collisions are separate and off by default so moving the head does not push your hands. Finger joints within one hand use bending limits, not self-collision.</p>';
+contactPanel.append($('handsTouch').closest('label'),$('outerCollision').closest('label'),$('headCollision').closest('label'),handContactStatus);$('touchProgress').closest('section').after(contactPanel);
+for(const id of ['touchRange','touchConfirm','touchSideLimit']){const label=$(id).closest('label');label.style.display='block';contactPanel.append(label);}
+if(wallTest){wallTest.style.display='block';contactPanel.after(wallTest);}

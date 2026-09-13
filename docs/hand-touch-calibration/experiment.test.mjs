@@ -8,5 +8,9 @@ const moving=samples.map((s,i)=>({...s,landmarks:lm(i<5?2:i>=75?1:1.5)}));
 const endpointFit=fitSweep(moving,1);assert.ok(endpointFit);
 assert.ok(Math.abs(sweepDepth(lm(2),1,endpointFit,.5)-.3)<1e-9,'first half-second anchors start, not two seconds of moving hand');
 assert.ok(Math.abs(sweepDepth(lm(1),1,endpointFit,.5)-.65)<1e-9,'last half-second anchors neck endpoint');
-assert.equal(fitSweep(moving.filter(s=>s.elapsed>=500),1),null,'missing real start cannot silently use mid-sweep samples');
+assert.equal(fitSweep(moving.filter(s=>s.elapsed>=1000),1),null,'missing real start cannot silently use mid-sweep samples');
 console.log('PASS: endpoint windows exclude middle motion');
+
+const prep=Array.from({length:5},(_,i)=>({...moving[0],elapsed:-500+i*100}));
+const dropout=[...prep,...moving.filter(s=>s.elapsed>=1000&&s.elapsed<7700).map(s=>s.elapsed>2000&&s.elapsed<6000?{...s,face:null}:s)];
+assert.ok(fitSweep(dropout,1),'countdown anchor and last available neck frames survive brief endpoint gaps and missing face mid-sweep');

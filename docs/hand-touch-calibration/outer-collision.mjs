@@ -1,6 +1,6 @@
 import * as T from 'three';
 import {ConvexGeometry} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/geometries/ConvexGeometry.js';
-import {convexPenetration} from './convex-contact.mjs?v=touch2.2';
+import {convexPenetration} from './convex-contact.mjs?v=touch2.3';
 const groups=['Hand',...['Thumb','Index','Middle','Ring','Pinky'].flatMap(f=>[1,2,3].map(i=>f+i))];
 function hull(points,node){if(points.length<4)return null;const geometry=new ConvexGeometry(points),p=geometry.attributes.position,n=geometry.attributes.normal,vertices=[],normals=[],seen=new Set(),directions=new Set();
  for(let i=0;i<p.count;i++){const v=new T.Vector3().fromBufferAttribute(p,i),key=v.toArray().map(x=>x.toFixed(6)).join(',');if(!seen.has(key)){seen.add(key);vertices.push(v);}const normal=new T.Vector3().fromBufferAttribute(n,i),nk=normal.toArray().map(x=>x.toFixed(3)).join(',');if(!directions.has(nk)){directions.add(nk);normals.push(normal);}}

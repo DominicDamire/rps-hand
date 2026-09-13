@@ -1,11 +1,11 @@
 <!doctype html><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.js"}}</script><pre>Loading</pre><script type="module">
-import * as T from 'three';import {DollRig} from '../doll/DollRig.js';import {buildTips} from './contact.mjs';import {directDriver} from './direct.mjs?v=touch2.2';import {OuterCollision} from './outer-collision.mjs?v=touch2.2';import {convexPenetration} from './convex-contact.mjs';
+import * as T from 'three';import {DollRig} from '../doll/DollRig.js';import {buildTips} from './contact.mjs';import {directDriver} from './direct.mjs?v=touch2.3';import {OuterCollision} from './outer-collision.mjs?v=touch2.3';import {convexPenetration} from './convex-contact.mjs';
 try{
  const rig=new DollRig(new T.Scene(),{url:new URL('../doll.glb',location).href,report:new URL('../doll-report.json',location).href});await rig.ready;
  const tips=buildTips(rig),names=['Thumb','Index','Middle','Ring','Pinky'],runs={L:directDriver(rig,tips),R:directDriver(rig,tips)};let lockError=0,bendError=0,lengthError=0,openError=0;
- function pose(side,bend,spread,q){const root=new T.Vector3(0,0,-.6),p=[root],across=rig.rest[side+'Index1'].world.clone().sub(rig.rest[side+'Pinky1'].world);
+ function pose(side,bend,spread,q,fold=0){const root=new T.Vector3(0,0,-.6),p=[root],across=rig.rest[side+'Index1'].world.clone().sub(rig.rest[side+'Pinky1'].world);
   for(const f of names){const name=side+f,base=rig.rest[name+'1'].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(q).add(root),forward=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize(),x=across.clone().addScaledVector(forward,-across.dot(forward)).normalize(),z=new T.Vector3().crossVectors(x,forward),a=(f==='Thumb'?0:bend)*Math.PI/180,b=(f==='Thumb'?0:spread)*Math.PI/180,dir=forward.clone().multiplyScalar(Math.cos(a)*Math.cos(b)).addScaledVector(z,Math.sin(a)*Math.cos(b)).addScaledVector(x,Math.sin(b)).applyQuaternion(q);p.push(base);
-   for(let k=1;k<=3;k++){const len=k<3?rig.rest[name+(k+1)].world.distanceTo(rig.rest[name+k].world):tips[name].length();p.push(p[p.length-1].clone().addScaledVector(dir,len));}}
+   for(let k=1;k<=3;k++){const len=k<3?rig.rest[name+(k+1)].world.distanceTo(rig.rest[name+k].world):tips[name].length();const segment=dir.clone();if(k>1&&f!=='Thumb')segment.applyAxisAngle(x.clone().applyQuaternion(q),fold*Math.PI/180);p.push(p[p.length-1].clone().addScaledVector(segment,len));}}
   return p;
  }
  for(const side of ['L','R'])for(const q of [new T.Quaternion(),new T.Quaternion().setFromEuler(new T.Euler(.3,.5,.2))])for(const bend of [0,60,70,85]){
@@ -14,6 +14,13 @@ try{
    if(bend>=70)lockError=Math.max(lockError,Math.abs(dir.dot(x)));if(bend<=60)openError=Math.max(openError,Math.abs(dir.dot(x)-Math.sin(20*Math.PI/180)));
    bendError=Math.max(bendError,Math.abs(Math.atan2(dir.dot(z),dir.dot(forward))*180/Math.PI-bend));
    for(let k=0;k<3;k++)lengthError=Math.max(lengthError,Math.abs(result.points[i+k+1].distanceTo(result.points[i+k])-p[i+k+1].distanceTo(p[i+k])));
+  }
+ }
+ // Reproduce a fist: base below 70 degrees, upper joints curled, noisy base spread.
+ for(const side of ['L','R'])for(const q of [new T.Quaternion(),new T.Quaternion().setFromEuler(new T.Euler(.5,-.4,.3))])for(const spread of [-25,0,25]){
+  const p=pose(side,40,spread,q,90),result=runs[side](p,side,q,.016,{noiseDegrees:0,lm:p.map(v=>({x:v.x,y:v.y})),width:480,height:480});
+  for(let f=1;f<5;f++){const name=side+names[f],i=1+4*f,forward=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize(),x=rig.rest[side+'Index1'].world.clone().sub(rig.rest[side+'Pinky1'].world);x.addScaledVector(forward,-x.dot(forward)).normalize();
+   const dir=result.points[i+1].clone().sub(result.points[i]).normalize().applyQuaternion(q.clone().invert());lockError=Math.max(lockError,Math.abs(dir.dot(x)));
   }
  }
  for(const side of ['L','R']){const p=pose(side,0,0,new T.Quaternion());runs[side](p,side,new T.Quaternion(),.016,{noiseDegrees:0,lm:p.map(v=>({x:v.x,y:v.y})),width:480,height:480});}

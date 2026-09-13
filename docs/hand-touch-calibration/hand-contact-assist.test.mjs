@@ -11,3 +11,8 @@ assert.equal(run(150),null,'re-contact must confirm again');assert.equal(run(270
 assert.equal(run(280),null);assert.equal(run(600,true,packet(true,280),packet(false,280)),null,'lost hands do not stick');
 assert.equal(run(610),null);assert.equal(run(730,false),null,'switching off clears a pending latch');
 console.log('PASS: contact confirmation, full closing, immediate release, off reset, stale/asynchronous frame rejection');
+
+const immediate=new HandContactAssist();assert.ok(immediate.update({left:packet(true,0),right:packet(false,0),now:0,enabled:true,confirmMs:0}),'zero confirmation applies immediately');
+const slow=new HandContactAssist();assert.equal(slow.update({left:packet(true,0),right:packet(false,0),now:0,enabled:true,confirmMs:500}),null);
+assert.equal(slow.update({left:packet(true,300),right:packet(false,300),now:300,enabled:true,confirmMs:500}),null);
+assert.ok(slow.update({left:packet(true,500),right:packet(false,500),now:500,enabled:true,confirmMs:500}),'confirmation setting controls when attachment activates');

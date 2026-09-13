@@ -54,12 +54,10 @@ export class CombinedHead {
   if(this.contactDot.visible){const point=this.mappedLandmarks[this.highlightFaceId]||this.mappedShoulders[this.highlightBodyId];if(point)this.contactDot.position.copy(point);}
  }
  overlay(ctx,w,h){const o=this.options();if(!o.overlayRate)return;
-  const line=(points,color,closed=false)=>{ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.beginPath();points.forEach((p,i)=>ctx[i?'lineTo':'moveTo']((1-p.x)*w,p.y*h));if(closed)ctx.closePath();ctx.stroke();};
   if(this.face&&o.faceRate>0&&performance.now()-this.seen<(o.faceGrace??1000)){const p=this.face.points;drawFace(ctx,p,w,h,this.face.matrix,this.highlightFaceId);}
 
   if(this.pose&&o.shoulderRate>0&&performance.now()-this.poseSeen<250){
    drawShoulders(ctx,this.pose,this.face,w,h,this.highlightBodyId);
-   for(const ids of [[11,13,15],[12,14,16]]){const points=ids.map(i=>this.pose.points[i]);if(points.every(p=>p&&p.visibility>=.65&&(p.presence??1)>=.65)){line(points,'#8ee3bf');for(const p of points){ctx.beginPath();ctx.arc((1-p.x)*w,p.y*h,2.5,0,Math.PI*2);ctx.fillStyle='#8ee3bf';ctx.fill();}}}
   }
  }
 }

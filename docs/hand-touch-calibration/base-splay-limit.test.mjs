@@ -12,3 +12,10 @@ const a=limitBaseSplay(dir(69.999,25),[0,1,0],[1,0,0]),b=limitBaseSplay(dir(70.0
 assert.ok(Math.hypot(...a.map((v,i)=>v-b[i]))<.0001,'continuous threshold');
 assert.deepEqual(limitBaseSplay([0,0,0],[0,1,0],[1,0,0]),[0,0,0]);
 console.log('PASS: mirrored hands, 70-degree threshold, preserved bend, open-hand freedom and continuous transition');
+
+for(const bend of [0,30,50])for(const spread of [-25,25]){
+ const result=limitBaseSplay(dir(bend,spread),[0,1,0],[1,0,0],70,90);
+ assert.ok(Math.abs(result[0])<1e-10,'folded upper joint locks sideways base even below 70-degree base bend');
+ assert.ok(Math.abs(Math.atan2(result[2],result[1])*180/Math.PI-bend)<1e-8,'forward base flexion remains');
+}
+console.log('PASS: fist with a shallow base bend locks sideways when the middle joint folds');
