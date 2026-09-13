@@ -23,3 +23,17 @@ export function convexPenetration(A,B,padding=.0003){
  let best=null;for(const n of [...A.normals,...B.normals]){let amin=Infinity,amax=-Infinity,bmin=Infinity,bmax=-Infinity;for(const p of A.vertices){const d=dot(p,n);amin=Math.min(amin,d);amax=Math.max(amax,d);}for(const p of B.vertices){const d=dot(p,n);bmin=Math.min(bmin,d);bmax=Math.max(bmax,d);}if(amax<=bmin||bmax<=amin)return null;const negative=bmin-amax,positive=bmax-amin,d=Math.abs(negative)<positive?negative:positive;if(!best||Math.abs(d)<best.depth)best={depth:Math.abs(d),delta:mul(n,d+Math.sign(d)*padding)};}
  return best&&intersects(A.vertices,B.vertices)?best:null;
 }
+
+// Translate a contacting pair together along camera-forward (+Z). This preserves
+// fingertip contact and avoids competing left/right collision corrections.
+export function forwardClearance(shapes,obstacles){
+ const moved=(a,z)=>({...a,vertices:a.vertices.map(p=>[p[0],p[1],p[2]+z]),bounds:undefined});
+ const overlaps=z=>shapes.some(a=>obstacles.some(b=>convexPenetration(moved(a,z),b)));
+ if(!overlaps(0))return 0;
+ const maxZ=Math.max(...obstacles.flatMap(h=>h.vertices.map(p=>p[2]))),minZ=Math.min(...shapes.flatMap(h=>h.vertices.map(p=>p[2])));
+ let lo=0,hi=Math.max(.001,maxZ-minZ+.001);
+ // Find the first clear position, then refine that boundary (not a head-wide wall).
+ const step=hi/64;for(let z=step;z<=hi;z+=step){if(!overlaps(z)){hi=z;break;}lo=z;}
+ for(let i=0;i<16;i++){const mid=(lo+hi)/2;if(overlaps(mid))lo=mid;else hi=mid;}
+ return hi+.0003;
+}

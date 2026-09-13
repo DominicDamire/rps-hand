@@ -4,3 +4,5 @@ for(const angle of [0,.2,.6,1.1])for(const center of [[.7,0,0],[0,.7,0],[.3,.3,.
 assert.equal(convexPenetration(box(0,0,0),box(2,0,0)),null);
 assert.equal(convexPenetration(box(0,0,0),box(1,0,0)),null,'touching is not penetration');
 console.log('PASS: outer convex shells, rotated contact, containment, separation and touching boundary');
+
+const {forwardClearance}=await import('./convex-contact.mjs'); const pair=[box(-.3,0,0,.2),box(.1,0,0,.2)],head=[box(0,0,0,.5)];const z=forwardClearance(pair,head);assert.ok(z>0);for(const h of pair)assert.equal(convexPenetration({...h,vertices:h.vertices.map(p=>[p[0],p[1],p[2]+z])},head[0]),null);assert.equal(forwardClearance([box(2,0,0)],head),0);console.log('PASS: common forward shift clears both contacting hands');
