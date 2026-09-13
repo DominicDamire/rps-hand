@@ -1,11 +1,11 @@
-import {rearPlaneCorrection} from './neck-sweep.mjs?v=touch2.4.12-final';
-import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=touch2.4.12-final';
+import {rearPlaneCorrection} from './neck-sweep.mjs?v=touch2.4.13-final';
+import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=touch2.4.13-final';
 const palmDepth=new PalmSweepDepth();
-import {TrackingJitter} from './tracking-jitter.mjs?v=touch2.4.12-final';
+import {TrackingJitter} from './tracking-jitter.mjs?v=touch2.4.13-final';
 const trackingJitter=new TrackingJitter();
-import {OuterCollision} from './outer-collision.mjs?v=touch2.4.12-final';
-import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.4.12-final';
-import {installExperiment} from './experiment.mjs?v=touch2.4.12-final';
+import {OuterCollision} from './outer-collision.mjs?v=touch2.4.13-final';
+import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.4.13-final';
+import {installExperiment} from './experiment.mjs?v=touch2.4.13-final';
 let depthExperiment=null;
 import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=alien18.4';
 import {palmSize} from './palm-distance.mjs?v=alien13';
@@ -13,10 +13,10 @@ import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
-import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.12-final';
-import {CombinedHead} from './head-model.mjs?v=touch2.4.12-final';
-import {directDriver} from './direct.mjs?v=touch2.4.12-final';
-import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.12-final';
+import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.13-final';
+import {CombinedHead} from './head-model.mjs?v=touch2.4.13-final';
+import {directDriver} from './direct.mjs?v=touch2.4.13-final';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.13-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -342,7 +342,7 @@ Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
 Scene: ${measuredScene} measured FPS (target ${o.sceneRate})${Object.keys(s.errors||{}).length?' · '+JSON.stringify(s.errors):''}`;}
 window.combinedLab={version:19,get head(){return combined;},get metrics(){return trackingStats;},get handResult(){return directResult;},get scene(){return scene;}};
-notice('Sweep 2.4.12 ready. Record one front-to-neck sweep; tracking runs on the PC.');
+notice('Sweep 2.4.13 ready. Record one front-to-neck sweep; tracking runs on the PC.');
 combined.ready.then(()=>{if(combined.error)notice('Head model failed to load: '+combined.error);});
 
 const fixtureName=new URLSearchParams(location.search).get('fixture');
@@ -497,14 +497,14 @@ if($('captureRestSize'))$('captureRestSize').onclick=()=>{
 // The requested direct mode has no custom temporal jiggle filter or scan.
 for(const id of ['fingerNoise','directionSmoothing','confirmJump','movementThreshold','depthSmooth','headSmooth']){const input=$(id);if(input){input.value=0;input.closest('label').style.display='none';}}
 for(const d of $('directSettings').querySelectorAll('details'))if(d.querySelector('summary')?.textContent==='Jiggle')d.style.setProperty('display','none','important');
-const pipelineInfo=document.createElement('p');pipelineInfo.textContent='The sweep anchors hand depth to the displayed neck once. Rotation-corrected palm size drives movement afterward; head movement does not refit the saved reference. Edge-on palms hold the last reliable depth.';$('directSettings').prepend(pipelineInfo);
+const pipelineInfo=document.createElement('p');pipelineInfo.textContent='Palm geometry and rotation-corrected size place both hands. The sweep fits the head, neck and shoulders to the finishing palm once; it does not change hand depth or spacing. Edge-on palms hold the last reliable depth.';$('directSettings').prepend(pipelineInfo);
 
-depthExperiment=installExperiment({container:$('directSettings'),getHead:()=>combined,getFocal:aspect=>1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),onReference:()=>palmDepth.reset(),getNeckReference:(hand,points,aspect)=>{if(!points)return null;const palm=[0,5,9,13,17].reduce((v,i)=>v.add(points[i]),new THREE.Vector3()).multiplyScalar(.2);return combined?.neckReference(palm,1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),points[0]);},onBegin:()=>{controls.enabled=false;$('cameraProjection').value='perspective';$('viewMode').value='mirror';setViewMode();palmDepth.reset();}});
+depthExperiment=installExperiment({container:$('directSettings'),getHead:()=>combined,getFocal:aspect=>1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),onReference:fit=>{palmDepth.reset();if(combined){combined.neckFitScale=fit?.headScale??1;combined.neckFitOffset.fromArray(fit?.headOffset??[0,0,0]);}},getNeckReference:(hand,points,aspect)=>{if(!points)return null;const palm=[0,5,9,13,17].reduce((v,i)=>v.add(points[i]),new THREE.Vector3()).multiplyScalar(.2);return combined?.neckReference(palm,1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),points[0]);},onBegin:()=>{controls.enabled=false;$('cameraProjection').value='perspective';$('viewMode').value='mirror';setViewMode();palmDepth.reset();}});
 
 $('relaxedPalm').checked=false;$('contactThreshold').value=0;$('contactThreshold').nextElementSibling.value=0;
 
 const handContactStatus=document.createElement('p');handContactStatus.id='handContactStatus';handContactStatus.setAttribute('role','status');$('outerCollision').closest('label').after(handContactStatus);
-const contactPanel=document.createElement('section');contactPanel.style.display='block';contactPanel.innerHTML='<h2>Optional contact</h2><p>Contact matching and outer hand/head collisions start on. Touching finger lines close the model gap after confirmation; separating the lines releases it. The head surface blocks the hands, so it can push an overlapping hand. These contact corrections do not change the saved sweep. Finger joints within one hand use bending limits, not self-collision.</p>';
+const contactPanel=document.createElement('section');contactPanel.style.display='block';contactPanel.innerHTML='<h2>Optional contact</h2><p>Contact matching and collisions start off so you can judge the calibrated positioning directly. Touching finger lines close the model gap after confirmation; separating the lines releases it. When enabled, head collision blocks the hands and can push an overlapping hand. These contact corrections do not change the saved sweep. Finger joints within one hand use bending limits, not self-collision.</p>';
 contactPanel.append($('handsTouch').closest('label'),$('outerCollision').closest('label'),$('headCollision').closest('label'),handContactStatus);$('touchProgress').closest('section').after(contactPanel);
 for(const id of ['touchRange','touchConfirm','touchSideLimit']){const label=$(id).closest('label');label.style.display='block';contactPanel.append(label);}
 if(wallTest){wallTest.style.display='block';contactPanel.after(wallTest);}
@@ -532,7 +532,7 @@ function applyPalmPlacement(){
 }
 
 // Depth offsets and old capture coefficients cannot override this estimator.
-for(const [id,value] of Object.entries({handsTouch:true,outerCollision:true,headCollision:true,relaxedPalm:false,lockUpper:true,falseDepth:true,bothHands:true,handDistance:0,handHeight:0,contactThreshold:0,fingerNoise:0,directionSmoothing:0,confirmJump:0,movementThreshold:0,depthSmooth:0,headSmooth:0})){
+for(const [id,value] of Object.entries({handsTouch:false,outerCollision:false,headCollision:false,relaxedPalm:false,lockUpper:true,falseDepth:true,bothHands:true,handDistance:0,handHeight:0,contactThreshold:0,fingerNoise:0,directionSmoothing:0,confirmJump:0,movementThreshold:0,depthSmooth:0,headSmooth:0})){
  const e=$(id);if(!e)continue;if(e.type==='checkbox')e.checked=value;else{e.value=value;if(e.nextElementSibling?.tagName==='OUTPUT')e.nextElementSibling.value=value;}
 }
 for(const id of ['handDistance','handHeight','relaxedPalm','contactThreshold'])$(id)?.closest('label')?.style.setProperty('display','none','important');
