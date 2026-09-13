@@ -5,10 +5,10 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
  let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0,cameraCallbacks=0,lastPresented=null,handStreak=0,lastAccepted=-Infinity,lastClockProgress=performance.now(),capturePolls=0;
  const frameMeter=measureVideoFrames(video);
  const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},errors:{}};
- const slots=['hands','face','pose'].map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
+ const slots=(getOptions().holistic?['holistic','face']:['hands','face','pose']).map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
  function startWorker(s){
   const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;s.fullBody=!!opts.fullBody;s.poseModel=opts.poseModel;
-  const url=new URL('./tracker.mjs?v=alien15.19',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);url.searchParams.set('fullBody',s.fullBody?'1':'0');url.searchParams.set('poseModel',s.poseModel||'lite');
+  const url=new URL(s.task==='holistic'?'./holistic-tracker.mjs?v=alien16.3':'./tracker.mjs?v=alien15.19',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);url.searchParams.set('fullBody',s.fullBody?'1':'0');url.searchParams.set('poseModel',s.poseModel||'lite');
   const w=s.worker=new Worker(url,{type:'module'});
   s.timer=setTimeout(()=>{if(!s.ready){stats.errors[s.task]='Tracker initialization timed out';w.terminate();s.busy=false;}},60000);
   w.onerror=e=>{clearTimeout(s.timer);stats.errors[s.task]=e.message;s.busy=false;s.ready=false;};
@@ -16,12 +16,12 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
    if(data.type==='ready'){clearTimeout(s.timer);s.ready=true;stats.delegate[s.task]=data.delegate;return;}
    s.busy=false;
    if(data.type==='error'){stats.errors[s.task]=data.message;return;}
-   if(data.type==='result'){delete stats.errors[s.task];s.count++;stats.ms[s.task]=data.inferenceMs??data.ms;onResult(data,s.canvas);}
+   if(data.type==='result'){delete stats.errors[s.task];s.count++;stats.ms[s.task]=data.inferenceMs??data.ms;if(s.task==='holistic'){stats.maskAvailable=data.maskAvailable;stats.rejected=data.rejected;onResult({...data,task:'pose'},s.canvas);onResult({...data,task:'hands'},s.canvas);}else onResult(data,s.canvas);}
   };w.postMessage({type:'init'});
  }
- const enabled=(s,o)=>+(s.task==='hands'?o.handRate:s.task==='face'?o.faceRate:o.shoulderRate)>0;
+ const enabled=(s,o)=>+(['hands','holistic'].includes(s.task)?o.handRate:s.task==='face'?o.faceRate:o.shoulderRate)>0;
  async function dispatch(s,now,opts){
-  s.busy=true;s.sent=now;const w=s.worker,width=s.task==='hands'?+opts.trackingWidth:Math.min(320,+opts.trackingWidth);
+  s.busy=true;s.sent=now;const w=s.worker,width=['hands','holistic'].includes(s.task)?+opts.trackingWidth:Math.min(320,+opts.trackingWidth);
   try{const c=s.canvas;c.width=width;c.height=Math.max(1,Math.round(width*video.videoHeight/video.videoWidth));if(captureOptions.copyPreview!==false)c.getContext('2d').drawImage(video,0,0,c.width,c.height);
    const time=Math.max(now,s.last+.001);s.last=time;
    let bitmap;try{bitmap=await createImageBitmap(captureOptions.copyPreview===false?video:c,{resizeWidth:c.width,resizeHeight:c.height,resizeQuality:'low'});}catch{}
@@ -39,7 +39,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
    if(!enabled(s,opts)){if(s.worker){s.worker.terminate();clearTimeout(s.timer);s.worker=null;s.ready=s.busy=false;}stats[s.task]=0;continue;}
    if(s.worker&&(s.delegate!==opts.trackerDelegate||s.fullBody!==!!opts.fullBody||s.poseModel!==opts.poseModel)){s.worker.terminate();clearTimeout(s.timer);s.worker=null;s.ready=s.busy=false;}
    if(!s.worker)startWorker(s);
-   const rate=+(s.task==='hands'?opts.handRate:s.task==='face'?opts.faceRate:opts.shoulderRate);
+   const rate=+(['hands','holistic'].includes(s.task)?opts.handRate:s.task==='face'?opts.faceRate:opts.shoulderRate);
    if(s.rate!==rate){s.rate=rate;s.next=now;}
    if(s.ready&&!s.busy&&(opts.uncappedTracking||now>=s.next-1))due.push(s);
   }
@@ -61,7 +61,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
  // Initialization and telemetry must not depend on delivery of the first video callback.
  for(const s of slots)if(enabled(s,{...defaults,...getOptions()}))startWorker(s);
  const reportTimer=setInterval(()=>{const now=performance.now(),opts={...defaults,...getOptions()};
-  if(now-windowStart>=950){const seconds=(now-windowStart)/1000;const measured=frameMeter.read();stats.camera=measured.fps;stats.cameraCallbacks=Math.round(cameraCallbacks/seconds);stats.capturePolls=capturePolls;capturePolls=0;stats.cameraCounter=measured.source;cameraFrames=0;cameraCallbacks=0;for(const s of slots){stats[s.task]=Math.round(s.count/seconds);s.count=0;}windowStart=now;onStats({...stats,requested:opts.cameraFps,cameraSettings:video.srcObject?.getVideoTracks()[0]?.getSettings()});}
+  if(now-windowStart>=950){const seconds=(now-windowStart)/1000;const measured=frameMeter.read();stats.camera=measured.fps;stats.cameraCallbacks=Math.round(cameraCallbacks/seconds);stats.capturePolls=capturePolls;capturePolls=0;stats.cameraCounter=measured.source;cameraFrames=0;cameraCallbacks=0;for(const s of slots){stats[s.task]=Math.round(s.count/seconds);if(s.task==='holistic'){stats.hands=stats.pose=stats[s.task];stats.ms.hands=stats.ms.pose=stats.ms.holistic;stats.delegate.hands=stats.delegate.pose=stats.delegate.holistic;}s.count=0;}windowStart=now;onStats({...stats,requested:opts.cameraFps,cameraSettings:video.srcObject?.getVideoTracks()[0]?.getSettings()});}
  },1000);
 
  rafHandle=requestAnimationFrame(fallbackTick);
