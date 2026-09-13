@@ -1,6 +1,10 @@
-# Gun Grip Lab — camera grip v2
+# Gun Grip Lab — phone camera range v3
 
-Use `/gun-lab/play.html?v=2` for one-hand pickup, movement and shooting. `/gun-lab/?v=2` remains the placement/joint editor and has a button to use the edited grip in the camera range.
+Use `/gun-lab/play.html?v=3` for one-hand pickup, movement and shooting. `/gun-lab/?v=2` remains the placement/joint editor and has a button to use the edited grip in the camera range.
+
+Connect phone via QR reuses the sweep phone page and landmark relay. Scan the QR, tap Start camera on the phone, and keep its page visible. Only landmarks arrive at the PC, shown over a plain preview background; the camera image stays on the phone. PC camera remains available. Stop, cancel, switching sources and leaving the page close the receiver and disarm shooting.
+
+Five labeled targets sit at 2, 3, 5, 7 and 10 metres of range depth. Shots use the actual barrel ray, with a 25 m limit and nearest-target hits. The moving aim dot turns green over a target. Each shot gives hit/miss feedback, tracer, muzzle flash and optional sound. Per-target hits, accuracy and targets-hit count can be reset independently of the grip. Every target center is checked for an unobstructed shot in the browser verification fixture.
 
 ## Supplied references
 

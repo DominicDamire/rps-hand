@@ -4,7 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Gun Grip · Camera Range</title>
-    <link rel="stylesheet" href="play.css?v=2" />
+    <link rel="stylesheet" href="play.css?v=3" />
+    <script src="../vendor/qrcode.min.js"></script>
     <script type="importmap">
       {
         "imports": {
@@ -18,7 +19,7 @@
     <header>
       <a href="./?v=2">← Grip editor</a
       ><strong>GUN GRIP <span>/ CAMERA RANGE</span></strong
-      ><span class="version">02</span>
+      ><span class="version">03</span>
     </header>
     <main>
       <section class="stage">
@@ -28,6 +29,8 @@
           ><span id="score">0 shots · 0 hits</span>
         </div>
         <div id="crosshair">+</div>
+        <div id="aim" hidden aria-hidden="true"></div>
+        <output id="shotFeedback" aria-live="polite"></output>
         <div class="instructions">
           <h1>One hand. Your grip.</h1>
           <p id="notice" role="status">Loading your hand placement…</p>
@@ -50,7 +53,14 @@
             curled to hold. Bend your index to shoot; straighten to rearm. Open
             the three lower fingers to put the gun back.
           </p>
-          <button id="start" class="primary" disabled>Connect camera</button
+          <button id="phone" class="primary" disabled>
+            Connect phone via QR
+          </button>
+          <p>
+            Scan on your phone and tap Start camera. Keep its camera page open;
+            hand tracking controls this range.
+          </p>
+          <button id="start" disabled>Connect PC camera</button
           ><button id="stop" disabled>Stop camera</button
           ><label
             >Camera<select id="camera">
@@ -80,6 +90,17 @@
             >Movement sensitivity
             <input id="gain" type="range" min=".3" max="2" step=".1" value="1"
           /></label>
+        </section>
+        <section>
+          <h2>Five-target range</h2>
+          <p>
+            Aim the small dot with your hand. Bend your index for one shot, then
+            straighten it before firing again.
+          </p>
+          <ol id="targetScores" class="targetScores"></ol>
+          <p id="accuracy">Accuracy — · 0 / 5 targets hit</p>
+          <button id="rangeView">Show shooting range</button>
+          <button id="resetScore">Reset score</button>
         </section>
         <section>
           <h2>Locked to your preset</h2>
@@ -127,6 +148,6 @@
         </section>
       </aside>
     </main>
-    <script type="module" src="play.mjs?v=2"></script>
+    <script type="module" src="play.mjs?v=3"></script>
   </body>
 </html>

@@ -891,7 +891,7 @@ $("useCamera").onclick = () => {
       "gun-grip-camera-profile-v2",
       JSON.stringify(readProfile()),
     );
-    location.href = "play.html?v=2";
+    location.href = "play.html?v=3";
   } catch (e) {
     notice(e.message);
   }

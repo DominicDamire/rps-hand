@@ -1,5 +1,12 @@
 // Test-only fixture replay through the real range handler; no webcam is opened.
-export async function verifyRange({ accept, begin, snapshot }) {
+import { packHands, unpackHands } from "../movement/link.mjs?v=91";
+export async function verifyRange({
+  accept,
+  begin,
+  snapshot,
+  resetScore,
+  checkTargetRays,
+}) {
   const output = document.createElement("pre");
   output.id = "rangeCheck";
   output.setAttribute("role", "status");
@@ -52,6 +59,14 @@ export async function verifyRange({ accept, begin, snapshot }) {
   const send = (lower, index) => accept(packet(lower, index), canvas);
   try {
     begin();
+    assert(
+      snapshot().distances.join(",") === "2,3,5,7,10",
+      "Target distances incorrect",
+    );
+    assert(
+      checkTargetRays().every(Boolean),
+      "A target is occluded or outside shot range",
+    );
     send(80, 0);
     await wait(150);
     send(80, 0);
@@ -78,6 +93,30 @@ export async function verifyRange({ accept, begin, snapshot }) {
     await wait(235);
     send(0, 0);
     assert(!snapshot().held, "Opening fingers did not release");
+    resetScore();
+    assert(
+      snapshot().shots === 0 && snapshot().hits === 0,
+      "Score reset failed",
+    );
+    const phoneFrame = { width: 640, height: 480, landmarksOnly: true };
+    const phoneSend = (index) =>
+      accept(
+        { ...unpackHands(packHands(packet(80, index))), task: "hands" },
+        phoneFrame,
+      );
+    phoneSend(0);
+    await wait(150);
+    phoneSend(0);
+    assert(snapshot().held, "Phone landmarks did not pick up");
+    await wait(40);
+    phoneSend(0);
+    await wait(100);
+    phoneSend(90);
+    assert(
+      snapshot().shots === 1 && snapshot().hits === 1,
+      "Phone landmarks did not shoot and hit",
+    );
+    resetScore();
     output.textContent = JSON.stringify(
       {
         status: "PASS",
@@ -88,6 +127,9 @@ export async function verifyRange({ accept, begin, snapshot }) {
         trackingLossHeldGrip: true,
         reacquisitionSuppressed: true,
         openHandReleased: true,
+        fiveDistancesReachable: true,
+        scoreReset: true,
+        phonePacketPickupAndHit: true,
       },
       null,
       2,

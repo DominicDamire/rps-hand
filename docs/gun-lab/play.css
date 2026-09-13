@@ -211,6 +211,89 @@ h1 {
 #limits {
   color: #b7d9ca;
 }
+#aim {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #fff0ce;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px #14242e;
+  pointer-events: none;
+}
+#aim.onTarget {
+  background: #b3e4cb;
+  border-color: #b3e4cb;
+}
+#shotFeedback {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 7px 14px;
+  background: #14242eea;
+  border: 1px solid #99745b;
+  border-radius: 6px;
+  color: #ffd49b;
+  opacity: 0;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+  pointer-events: none;
+}
+#shotFeedback.active {
+  opacity: 1;
+}
+#shotFeedback.hit {
+  color: #b3e4cb;
+  border-color: #b3e4cb;
+}
+.targetScores {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  font: 12px/2 monospace;
+  color: #a6bfc0;
+}
+.targetScores li {
+  border-bottom: 1px solid #31424a;
+  padding: 4px 0;
+}
+.targetScores .hit {
+  color: #b3e4cb;
+}
+.phonePair {
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 24px;
+  background: #17252d;
+  color: #deebe8;
+  border: 1px solid #54736c;
+  border-radius: 14px;
+  text-align: center;
+}
+.phonePair::backdrop {
+  background: #061016cc;
+}
+.phonePair .qr {
+  background: white;
+  width: 244px;
+  padding: 12px;
+  margin: 18px auto;
+  border-radius: 5px;
+}
+.phonePair .qr img,
+.phonePair .qr canvas {
+  display: block;
+}
+.phonePair .code {
+  font: 16px monospace;
+  color: #b3e4cb;
+}
+.phonePair .row {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
 @media (max-width: 760px) {
   header {
     padding: 0 14px;

@@ -4,13 +4,17 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GripRig } from "./grip-rig.mjs?v=2";
 import { GripController, heldAngles, observation } from "./held-pose.mjs?v=2";
 import { validateProfile } from "./profile.mjs?v=2";
-import { startTracking } from "../hand-sweep-247/tracking-session.mjs";
+import {
+  startTracking,
+  defaults,
+} from "../hand-sweep-247/tracking-session.mjs";
+import { receivePhone } from "../hand-sweep-247/phone-link.mjs";
 const $ = (id) => document.getElementById(id),
   notice = (t) => ($("notice").textContent = t);
 const scene = new T.Scene();
 scene.background = new T.Color("#14242e");
-scene.fog = new T.Fog("#14242e", 3, 9);
-const camera = new T.PerspectiveCamera(45, 1, 0.005, 20),
+scene.fog = new T.Fog("#14242e", 10, 24);
+const camera = new T.PerspectiveCamera(45, 1, 0.005, 30),
   renderer = new T.WebGLRenderer({ canvas: $("scene"), antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
 renderer.toneMapping = T.ACESFilmicToneMapping;
@@ -30,18 +34,28 @@ for (const [pos, power] of [
 }
 const room = new T.Group();
 scene.add(room);
-const floor = new T.GridHelper(10, 50, 0x50766c, 0x273e49);
-floor.position.set(0, -0.65, -3);
+const floor = new T.GridHelper(24, 96, 0x50766c, 0x273e49);
+floor.position.set(0, -0.65, -10);
 room.add(floor);
-const targets = [];
-for (const [x, y, z] of [
-  [-0.75, 0.1, -2.6],
-  [0, 0.1, -2.9],
-  [0.75, 0.1, -2.6],
+const targets = [],
+  targetSurfaces = [];
+for (const [x, y, distance] of [
+  [-0.55, -0.05, 2],
+  [0, 0.1, 3],
+  [0.9, 0.25, 5],
+  [-0.95, 0.75, 7],
+  [3, 1.1, 10],
 ]) {
   const group = new T.Group();
-  group.position.set(x, y, z);
+  group.position.set(x, y, -distance);
   room.add(group);
+  const target = {
+    group,
+    distance,
+    id: targets.length + 1,
+    hits: 0,
+    hitAt: -Infinity,
+  };
   for (const [r, col] of [
     [0.24, 0xe6e1cc],
     [0.17, 0x344b51],
@@ -53,15 +67,43 @@ for (const [x, y, z] of [
       new T.MeshStandardMaterial({ color: col, side: T.DoubleSide }),
     );
     disk.position.z = (0.24 - r) * 0.015;
+    disk.userData.target = target;
+    targetSurfaces.push(disk);
     group.add(disk);
   }
-  targets.push({ group, hitAt: -Infinity });
+  const label = document.createElement("canvas");
+  label.width = 256;
+  label.height = 64;
+  const ctx = label.getContext("2d");
+  ctx.fillStyle = "#14242e";
+  ctx.fillRect(0, 0, 256, 64);
+  ctx.fillStyle = "#b7efd2";
+  ctx.font = "bold 30px monospace";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(`#${target.id} · ${distance} m`, 128, 32);
+  const sprite = new T.Sprite(
+    new T.SpriteMaterial({ map: new T.CanvasTexture(label) }),
+  );
+  sprite.position.y = -0.32;
+  sprite.scale.set(0.64, 0.16, 1);
+  group.add(sprite);
+  const stem = new T.Mesh(
+    new T.BoxGeometry(0.025, y + 0.65, 0.025),
+    new T.MeshStandardMaterial({ color: 0x39525b }),
+  );
+  stem.position.set(x, (y - 0.65) / 2, -distance - 0.02);
+  room.add(stem);
+  targets.push(target);
+  const row = document.createElement("li");
+  row.id = `target-${target.id}`;
+  $("targetScores").append(row);
 }
 const table = new T.Mesh(
-  new T.BoxGeometry(0.45, 0.025, 0.32),
+  new T.BoxGeometry(0.3, 0.025, 0.2),
   new T.MeshStandardMaterial({ color: 0x334c52 }),
 );
-table.position.set(0, -0.12, -0.54);
+table.position.set(0.22, -0.32, -0.74);
 room.add(table);
 const controller = new GripController();
 let profile,
@@ -69,6 +111,8 @@ let profile,
   grip,
   stream = null,
   session = null,
+  closePhone = null,
+  source = "PC camera",
   token = 0,
   mode = "inspect",
   lastResult = 0,
@@ -81,7 +125,7 @@ let profile,
   currentLabel = null;
 const parked = new T.Group();
 scene.add(parked);
-parked.position.set(0, -0.1, -0.5);
+parked.position.set(0.22, -0.3, -0.7);
 parked.rotation.y = Math.PI;
 const tracer = new T.Line(
   new T.BufferGeometry().setFromPoints([new T.Vector3(), new T.Vector3()]),
@@ -119,35 +163,65 @@ function sound() {
   osc.start(now);
   osc.stop(now + 0.13);
 }
+function updateScore() {
+  $("score").textContent = `${shots} shots · ${hits} hits`;
+  $("accuracy").textContent =
+    `Accuracy ${shots ? Math.round((hits / shots) * 100) + "%" : "—"} · ${targets.filter((t) => t.hits).length} / 5 targets hit`;
+  for (const t of targets) {
+    const row = $("target-" + t.id);
+    row.textContent = `#${t.id} · ${t.distance} m — ${t.hits} ${t.hits === 1 ? "hit" : "hits"}`;
+    row.classList.toggle("hit", t.hits > 0);
+  }
+}
+function resetScore() {
+  shots = hits = 0;
+  for (const t of targets) {
+    t.hits = 0;
+    t.hitAt = -Infinity;
+  }
+  $("shotFeedback").textContent = "";
+  updateScore();
+}
+function barrelRay() {
+  grip.gun.updateWorldMatrix(true, true);
+  return new T.Raycaster(
+    grip.gun.localToWorld(grip.muzzle.clone()),
+    new T.Vector3(0, 0, -1).transformDirection(grip.gun.matrixWorld),
+    0.001,
+    25,
+  );
+}
 function shoot(time) {
   if (time - lastShot < 120) return;
   shots++;
   lastShot = time;
-  grip.gun.updateWorldMatrix(true, true);
-  const from = grip.gun.localToWorld(grip.muzzle.clone()),
-    direction = new T.Vector3(0, 0, -1).transformDirection(
-      grip.gun.matrixWorld,
-    ),
-    ray = new T.Raycaster(from, direction, 0.001, 8),
-    result = ray.intersectObjects(
-      targets.map((t) => t.group),
-      true,
-    )[0];
-  const end = result?.point || from.clone().addScaledVector(direction, 5);
+  const ray = barrelRay(),
+    from = ray.ray.origin,
+    direction = ray.ray.direction;
+  scene.updateMatrixWorld(true);
+  const result = ray.intersectObjects(targetSurfaces, false)[0];
+  const end = result?.point || from.clone().addScaledVector(direction, 20);
+  const feedback = $("shotFeedback");
   if (result) {
     hits++;
-    targets.find((t) => t.group === result.object.parent).hitAt = time;
-  }
+    const target = result.object.userData.target;
+    target.hitAt = time;
+    target.hits++;
+    feedback.textContent = `HIT · #${target.id} · ${target.distance} m`;
+  } else feedback.textContent = "MISS · adjust your aim";
+  feedback.classList.toggle("hit", !!result);
+  feedback.classList.add("active");
   tracer.geometry.setFromPoints([from, end]);
   tracer.visible = true;
   flash.position.copy(from);
   flash.intensity = 1.5;
   sound();
-  $("score").textContent = shots + " shots · " + hits + " hits";
+  updateScore();
 }
 function inspect(view = "side") {
   stop();
   mode = "inspect";
+  $("crosshair").hidden = true;
   room.visible = false;
   grip.hand.visible = true;
   grip.assembly.add(grip.gun);
@@ -174,6 +248,7 @@ function inspect(view = "side") {
 }
 function cameraView() {
   mode = "camera";
+  $("crosshair").hidden = false;
   room.visible = true;
   orbit.enabled = false;
   camera.position.set(0, 0, 0);
@@ -207,7 +282,10 @@ function drawPreview(frame, lm) {
   ctx.save();
   ctx.translate(c.width, 0);
   ctx.scale(-1, 1);
-  ctx.drawImage(frame, 0, 0, c.width, c.height);
+  if (frame.landmarksOnly) {
+    ctx.fillStyle = "#0b151d";
+    ctx.fillRect(0, 0, c.width, c.height);
+  } else ctx.drawImage(frame, 0, 0, c.width, c.height);
   ctx.restore();
   if (!lm) return;
   for (let f = 0; f < 5; f++) {
@@ -297,6 +375,8 @@ function accept(data, frame) {
     $("state").textContent = "CLOSE THREE FINGERS TO PICK UP";
   }
   $("tracking").textContent =
+    source +
+    " · " +
     one.label +
     " hand · " +
     Math.round(data.inferenceMs || 0) +
@@ -307,6 +387,8 @@ function stop() {
   token++;
   session?.();
   session = null;
+  closePhone?.();
+  closePhone = null;
   stream?.getTracks().forEach((t) => t.stop());
   stream = null;
   $("video").srcObject = null;
@@ -315,6 +397,7 @@ function stop() {
   lastResult = 0;
   currentLabel = null;
   $("start").disabled = !grip;
+  $("phone").disabled = !grip;
   $("stop").disabled = true;
   $("tracking").textContent = "Camera off";
   if (mode === "camera") {
@@ -326,6 +409,7 @@ function stop() {
 }
 $("start").onclick = async () => {
   stop();
+  source = "PC camera";
   const epoch = token;
   $("start").disabled = true;
   $("stop").disabled = false;
@@ -391,6 +475,69 @@ $("start").onclick = async () => {
     }
   }
 };
+$("phone").onclick = () => {
+  stop();
+  const epoch = token;
+  source = "Phone · landmarks only";
+  cameraView();
+  $("stop").disabled = false;
+  try {
+    audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    audio.resume().catch(() => {});
+  } catch {
+    audio = null;
+  }
+  try {
+    closePhone = receivePhone(
+      (data, size) => {
+        if (epoch !== token) return;
+        $("preview").classList.add("active");
+        accept(
+          { ...data, task: "hands" },
+          { width: size.w, height: size.h, landmarksOnly: true },
+        );
+      },
+      (status) => {
+        if (epoch === token) {
+          $("tracking").textContent = status;
+          notice(status);
+        }
+      },
+      (reason) => {
+        if (epoch === token) {
+          stop();
+          notice(reason);
+        }
+      },
+      () => {},
+      () => ({
+        ...defaults,
+        handRate: 30,
+        faceRate: 0,
+        shoulderRate: 0,
+        fullBody: false,
+        trackingWidth: 480,
+        cameraFps: 30,
+      }),
+      (stats) => {
+        if (epoch === token && stats.errors?.hands)
+          notice("Phone tracker: " + stats.errors.hands);
+      },
+    );
+  } catch (e) {
+    stop();
+    notice("Phone pairing could not start: " + e.message);
+  }
+};
+$("resetScore").onclick = resetScore;
+$("rangeView").onclick = () => {
+  if (!grip) return;
+  if (mode !== "camera") cameraView();
+  notice(
+    "Five targets at 2–10 m. Connect a camera, close three fingers to pick up, then aim and bend your index.",
+  );
+};
+updateScore();
 $("stop").onclick = stop;
 $("selection").onchange = () => {
   controller.reset();
@@ -446,6 +593,9 @@ function resize() {
   const { width, height } = $("scene").getBoundingClientRect();
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
+  camera.fov = T.MathUtils.radToDeg(
+    2 * Math.atan(Math.tan(Math.PI / 8) / Math.min(1, camera.aspect)),
+  );
   camera.updateProjectionMatrix();
 }
 new ResizeObserver(resize).observe($("scene"));
@@ -468,9 +618,14 @@ try {
       )
       .join(" / ") +
     ". Thumb stays between your two supplied poses.";
-  inspect();
+  cameraView();
+  $("state").textContent = "CONNECT A CAMERA TO BEGIN";
+  notice(
+    "Five targets at 2–10 m. Connect your phone via QR or use the PC camera.",
+  );
   resize();
   $("start").disabled = false;
+  $("phone").disabled = false;
   renderer.setAnimationLoop((now) => {
     if (mode === "camera" && lastResult && now - lastResult > 250) {
       controller.lose();
@@ -487,15 +642,54 @@ try {
     }
     for (const t of targets)
       t.group.scale.setScalar(now - t.hitAt < 180 ? 1.07 : 1);
-    orbit.update();
+    $("shotFeedback").classList.toggle("active", now - lastShot < 1200);
+    $("aim").hidden = mode !== "camera" || !controller.held || !lastResult;
+    if (!$("aim").hidden) {
+      scene.updateMatrixWorld(true);
+      const ray = barrelRay(),
+        hit = ray.intersectObjects(targetSurfaces, false)[0];
+      const point = (hit?.point || ray.ray.at(12, new T.Vector3()))
+        .clone()
+        .project(camera);
+      $("aim").hidden =
+        point.z < -1 ||
+        point.z > 1 ||
+        Math.abs(point.x) > 1 ||
+        Math.abs(point.y) > 1;
+      $("aim").style.left = (point.x + 1) * 50 + "%";
+      $("aim").style.top = (1 - point.y) * 50 + "%";
+      $("aim").classList.toggle("onTarget", !!hit);
+    }
+    if (orbit.enabled) orbit.update();
     renderer.render(scene, camera);
   });
   if (new URLSearchParams(location.search).get("verify") === "1") {
-    const { verifyRange } = await import("./range-check.mjs?v=2");
+    const { verifyRange } = await import("./range-check.mjs?v=3");
     await verifyRange({
       accept,
       begin: cameraView,
-      snapshot: () => ({ held: controller.held, shots, hits }),
+      snapshot: () => ({
+        held: controller.held,
+        shots,
+        hits,
+        distances: targets.map((t) => t.distance),
+      }),
+      resetScore,
+      checkTargetRays: () => {
+        scene.updateMatrixWorld(true);
+        return targets.map((t) => {
+          const ray = new T.Raycaster(
+            new T.Vector3(),
+            t.group.position.clone().normalize(),
+            0.001,
+            25,
+          );
+          return (
+            ray.intersectObjects(targetSurfaces, false)[0]?.object.userData
+              .target.id === t.id
+          );
+        });
+      },
     });
   }
 } catch (e) {
