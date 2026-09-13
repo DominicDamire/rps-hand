@@ -1,13 +1,13 @@
-import {fitWholeHand} from './whole-hand-placement.mjs?v=touch2.4.16-final';
-import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=touch2.4.16-final';
-import {rearPlaneCorrection} from './neck-sweep.mjs?v=touch2.4.16-final';
-import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=touch2.4.16-final';
+import {fitWholeHand} from './whole-hand-placement.mjs?v=touch2.4.17-final';
+import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=touch2.4.17-final';
+import {rearPlaneCorrection} from './neck-sweep.mjs?v=touch2.4.17-final';
+import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=touch2.4.17-final';
 const palmDepth=new PalmSweepDepth();
-import {TrackingJitter} from './tracking-jitter.mjs?v=touch2.4.16-final';
+import {TrackingJitter} from './tracking-jitter.mjs?v=touch2.4.17-final';
 const trackingJitter=new TrackingJitter();
-import {OuterCollision} from './outer-collision.mjs?v=touch2.4.16-final';
-import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.4.16-final';
-import {installExperiment} from './experiment.mjs?v=touch2.4.16-final';
+import {OuterCollision} from './outer-collision.mjs?v=touch2.4.17-final';
+import {HandContactAssist} from './hand-contact-assist.mjs?v=touch2.4.17-final';
+import {installExperiment} from './experiment.mjs?v=touch2.4.17-final';
 let depthExperiment=null;
 import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=alien18.4';
 import {palmSize} from './palm-distance.mjs?v=alien13';
@@ -15,10 +15,10 @@ import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
-import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.16-final';
-import {CombinedHead} from './head-model.mjs?v=touch2.4.16-final';
-import {directDriver} from './direct.mjs?v=touch2.4.16-final';
-import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.16-final';
+import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.17-final';
+import {CombinedHead} from './head-model.mjs?v=touch2.4.17-final';
+import {directDriver} from './direct.mjs?v=touch2.4.17-final';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.17-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
@@ -346,7 +346,7 @@ Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
 Scene: ${measuredScene} measured FPS (target ${o.sceneRate})${Object.keys(s.errors||{}).length?' · '+JSON.stringify(s.errors):''}`;}
 window.combinedLab={version:19,get head(){return combined;},get metrics(){return trackingStats;},get handResult(){return directResult;},get scene(){return scene;}};
-notice('Sweep 2.4.16 ready. Record one front-to-neck sweep; tracking runs on the PC.');
+notice('Sweep 2.4.17 ready. Record one front-to-neck sweep; tracking runs on the PC.');
 combined.ready.then(()=>{if(combined.error)notice('Head model failed to load: '+combined.error);});
 
 const fixtureName=new URLSearchParams(location.search).get('fixture');

@@ -1,9 +1,9 @@
-# Sweep 2.4.16: whole-hand placement and joint neck-contact calibration
+# Sweep 2.4.17: whole-hand placement and joint neck-contact calibration
 
 ## Three changes
 
 1. Both hands and the head/neck/shoulder bust participate in calibration. A shared hand model scale changes hand geometry and camera-space depth together, preserving projection. Bust scale and XYZ offset meet the captured neck contact. All scales are frozen after capture; proportions do not change live.
-2. All 21 landmarks contribute to a rigid XYZ translation fit after finger articulation. Wrist and MCPs receive half the total nominal weight, other finger points the other half. Three iteratively reweighted least-squares passes reduce individual outlier influence. At least 17 visible points are required; invalid fits fall back to the existing rotation-corrected palm estimate. This does not move fingers independently or force two hands together.
+2. The wrist and four base knuckles determine depth using rotation-corrected palm size. All 21 landmarks contribute only to a rigid XY translation fit at that fixed depth after finger articulation. Wrist and MCPs receive half the total nominal weight, other finger points the other half. Three iteratively reweighted least-squares passes reduce individual outlier influence. At least 17 visible points are required; invalid fits fall back to the existing rotation-corrected palm estimate. This does not move fingers independently or force two hands together.
 3. Calibration raycasts through the palm centre against the rendered palm meshes, taking the rear surface facing the neck. The corresponding sampled outer neck surface is fitted to that surface with zero added gap. The former 6 mm joint-centre allowance is removed. Missing surface observations reject capture rather than silently guessing an offset.
 
 ## Procedure and assumptions
@@ -20,7 +20,7 @@ There is no enabled fist-to-fist attachment. Hand-to-hand matching, both collisi
 
 ## Verification
 
-540 ideal actual-doll palm projections, 48 whole-hand XYZ recovery cases, both-hand scale and projection invariance, surface-contact endpoint equations, capture timing, invalid observations, failed recapture and reset are tested. Actual-model browser checks cover 30 open/curled hand cases across changing calibration scales with no accumulated joint drift or projection change; every case found a palm mesh surface. The prior full-bust transform test verifies coherent head/neck/root placement and reset. These are software/geometry checks, not proof of perfect live depth or contact. Private recordings and QA data are excluded from publication.
+540 ideal actual-doll palm projections, 48 whole-hand fixed-depth XY recovery cases, both-hand scale and projection invariance, surface-contact endpoint equations, capture timing, invalid observations, failed recapture and reset are tested. Actual-model browser checks cover 30 open/curled hand cases across changing calibration scales with no accumulated joint drift or projection change; every case found a palm mesh surface. The prior full-bust transform test verifies coherent head/neck/root placement and reset. These are software/geometry checks, not proof of perfect live depth or contact. Private recordings and QA data are excluded from publication.
 
 ## 2.4.15 fingertip proximity controls
 
@@ -33,3 +33,7 @@ Between-hand separation now moves the complete compounds onto opposite sides of 
 Contact controls have their own Contact detection tab. Tracking & calibration exposes the existing head tracking-loss hold next to the hand hold (default 1000 ms; head range now up to 5000 ms). This holds old observations, not prediction or smoothing.
 
 The yellow-tip toggle now defaults its target gap to zero (existing settings migrate once). It matches the rendered result.points endpoints that draw the yellow markers. A confirmed zero-gap tip match takes priority over between-hand collision separation: that separation is paused while the lock is active, while head clearance translates the pair together. This priority can allow other hand parts to overlap during a tip lock; it is not a simultaneous nonpenetration and exact-contact solver. Separation resumes upon release. Tests cover exact dot-point gap, compound overlap removal and unchanged already-separated shapes; actual-doll geometry check reports no remaining overlap in the constructed overlapping-hands pose. Live poses remain to be tested.
+
+## 2.4.17 open-hand / fist depth regression
+
+The 2.4.14–16 whole-hand XYZ fit could absorb finger articulation or length mismatch by moving the entire hand in Z. It now fits XY only, keeping the depth supplied by the palm solver. A regression deliberately collapses distal finger image points while holding palm observations constant: both the root-depth estimate and added Z correction stay unchanged. This addresses a code path, not every possible source of live depth drift. Palm occlusion, changing knuckle estimates, rotation uncertainty and explicitly enabled contact/collision corrections can still change depth. Neither open hands nor fists have a preferred front/back ordering. See depth-mapping-notes.md for researched alternatives.
