@@ -1,12 +1,12 @@
-import {fitNeckSweep} from './neck-sweep.mjs?v=touch2.4.17-final';
-import {OneHandSweep} from './one-hand-sweep.mjs?v=touch2.4.17-final';
+import {fitNeckSweep} from './neck-sweep.mjs?v=touch2.4.18-final';
+import {OneHandSweep} from './one-hand-sweep.mjs?v=touch2.4.18-final';
 
 export function installExperiment({container,getHead,getFocal=()=>1,onReference=()=>{},onBegin=()=>{},getNeckReference=()=>null}){
  const panel=document.createElement('section');panel.style.display='block';
- panel.innerHTML=`<h2>Front-to-neck sweep · 2.4.17</h2>
+ panel.innerHTML=`<h2>Front-to-neck sweep · 2.4.18</h2>
  <p>Keep your phone and head still. Extend one open hand toward the camera, palm facing you. Keep the whole hand inside the picture.</p>
  <p>Press Record and hold still for the <b>5-second countdown</b>. Then move the hand <b>back to your neck for 8 seconds, one way</b>. Finish with the palm gently against your neck just below the jaw, keeping the hand and face visible. Hold there for the final second. No upward sweep or return movement.</p>
- <p>The finish jointly fits both hands and the head, neck and shoulders. The wrist and base knuckles estimate depth. Fingers help sideways/vertical alignment but cannot change depth when they curl. Hand model size and depth change together. The palm surface targets the neck surface without an added gap. The two hands share one fixed scale. The neck reference leaves 30 model cm of space behind it. The phone is assumed to lean back about 10 degrees; this angle is not measured. No extra calibration step.</p>
+ <p>The finish jointly fits both hands and the head, neck and shoulders. The wrist and base knuckles estimate depth. Wrist and base knuckles control all hand placement; finger curl only changes articulation. Hand model size and depth change together. The palm surface targets the neck surface without an added gap. The two hands share one fixed scale. The neck reference leaves 30 model cm of space behind it. The phone is assumed to lean back about 10 degrees; this angle is not measured. No extra calibration step.</p>
  <button id="touchSweep">Record sweep to neck (8 seconds)</button> <button id="touchReset">Reset capture</button>
  <p id="touchStatus" role="status" aria-live="polite">Ready. Corrected palm-size depth is active; record to save your neck reference.</p>
  <progress id="touchProgress" max="8" value="0" aria-label="Sweep recording progress" style="width:100%"></progress>`;

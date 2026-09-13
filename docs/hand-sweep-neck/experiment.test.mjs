@@ -88,14 +88,14 @@ for(const side of ['L','R'])for(const depth of [.4,.8,1.2])for(const yaw of [0,.
 }
 const whole=pose({aspect:4/3,depth:.7}),altered=whole.landmarks.map((p,i)=>i===8?{...p,x:p.x+.1}:p);
 assert.ok(Math.hypot(...fitWholeHand(whole.points,altered,whole.aspect,whole.focal))<.02,'single bad tip must not move the whole hand over 2 cm in this fixture');
-assert.equal(fitWholeHand(whole.points,whole.landmarks.slice(0,10),whole.aspect,whole.focal),null);
+assert.equal(fitWholeHand(whole.points,whole.landmarks.slice(0,5),whole.aspect,whole.focal),null);
 console.log('PASS: '+wholeCases+' whole-hand fixed-depth XY fits, invalid-input fallback and fingertip outlier handling');
 
 // Gesture mismatch: keep wrist/base knuckles fixed while observed distal
 // fingers collapse into a fist. Their changing image extent cannot alter Z.
 const stable=pose({aspect:4/3,depth:.7}),palmIds=new Set([0,5,9,13,17]);
 for(const amount of [0,.25,.5,.75,1]){const landmarks=stable.landmarks.map((p,i)=>{if(palmIds.has(i))return p;const base=stable.landmarks[1+4*Math.floor((i-1)/4)];return {...p,x:p.x*(1-amount)+base.x*amount,y:p.y*(1-amount)+base.y*amount};});
- const correction=fitWholeHand(stable.points,landmarks,stable.aspect,stable.focal);assert.ok(correction);assert.equal(correction[2],0,'finger curl cannot move whole-hand depth');
+ const correction=fitWholeHand(stable.points,landmarks,stable.aspect,stable.focal);assert.ok(correction);assert.ok(Math.hypot(...correction)<1e-12,'finger curl cannot move hand XYZ');
  const obs=palmObservation(landmarks,stable.points,stable.aspect,stable.focal);assert.ok(Math.abs(new PalmSweepDepth().update('L',obs,fit,.5,amount)-.7)<1e-9,'unchanged palm preserves depth despite finger extent changes');
 }
 console.log('PASS: open-to-fist landmark mismatch cannot change depth when palm input is fixed');

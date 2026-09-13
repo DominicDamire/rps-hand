@@ -1,9 +1,9 @@
-# Sweep 2.4.17: whole-hand placement and joint neck-contact calibration
+# Sweep 2.4.18: whole-hand placement and joint neck-contact calibration
 
 ## Three changes
 
 1. Both hands and the head/neck/shoulder bust participate in calibration. A shared hand model scale changes hand geometry and camera-space depth together, preserving projection. Bust scale and XYZ offset meet the captured neck contact. All scales are frozen after capture; proportions do not change live.
-2. The wrist and four base knuckles determine depth using rotation-corrected palm size. All 21 landmarks contribute only to a rigid XY translation fit at that fixed depth after finger articulation. Wrist and MCPs receive half the total nominal weight, other finger points the other half. Three iteratively reweighted least-squares passes reduce individual outlier influence. At least 17 visible points are required; invalid fits fall back to the existing rotation-corrected palm estimate. This does not move fingers independently or force two hands together.
+2. The wrist and four base knuckles determine depth using rotation-corrected palm size and refine XY placement at that fixed depth. Distal fingers control articulation only. Three robust fitting passes reduce outlier influence; at least four valid palm landmarks are required. This does not force two hands together.
 3. Calibration raycasts through the palm centre against the rendered palm meshes, taking the rear surface facing the neck. The corresponding sampled outer neck surface is fitted to that surface with zero added gap. The former 6 mm joint-centre allowance is removed. Missing surface observations reject capture rather than silently guessing an offset.
 
 ## Procedure and assumptions
@@ -37,3 +37,7 @@ The yellow-tip toggle now defaults its target gap to zero (existing settings mig
 ## 2.4.17 open-hand / fist depth regression
 
 The 2.4.14–16 whole-hand XYZ fit could absorb finger articulation or length mismatch by moving the entire hand in Z. It now fits XY only, keeping the depth supplied by the palm solver. A regression deliberately collapses distal finger image points while holding palm observations constant: both the root-depth estimate and added Z correction stay unchanged. This addresses a code path, not every possible source of live depth drift. Palm occlusion, changing knuckle estimates, rotation uncertainty and explicitly enabled contact/collision corrections can still change depth. Neither open hands nor fists have a preferred front/back ordering. See depth-mapping-notes.md for researched alternatives.
+
+## 2.4.18 palm-only placement
+
+Only wrist and four MCP points now contribute to XYZ placement. Distal finger curl no longer changes the rigid XY fit either. Four valid palm points are required. Sweep joint hand/bust calibration and rotation-corrected palm depth are retained. The old saved 0.092535 scale is not applied. Curl invariance is tested in all three axes.
