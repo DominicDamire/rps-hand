@@ -47,3 +47,11 @@ The PC preview paints a solid black background and overlays tracking lines/dots 
 ## Sweep 2.4.1 — index contact correction
 
 Two-hand calibration now uses index fingertips (landmark 8), with direction from index base knuckle 5. Hold index fingertips touching as in the requested pose. The countdown and one-way eight-second sweep are unchanged. Middle-finger contact does not substitute for index contact. One-hand calibration is unchanged.
+
+## Sweep 2.4.2 — local video replay and declared index contact
+
+Load movement video processes a local file using the existing MediaPipe workers, sampling hands at 30/s and face/shoulders at 10/s. It then replays the cached estimates at the video's timestamps, with pause, restart, seek, side and top views. No video is uploaded or committed. HEVC MOV support depends on the browser; an H.264 MP4 copy is supported for the supplied review clip.
+
+The video option “Index fingertips stay touching throughout this video” declares known contact. While enabled, with contact matching on and two confident hands available, the solver uses index tips directly even if image landmarks momentarily separate, with zero confirmation delay. This is an explicit contact constraint, not proof of contact inferred from monocular RGB. Unchecking it restores visual proximity gating. Camera input still uses normal optional contact settings; missing/asynchronous/uncertain hand packets are rejected. Hand dimensions stay fixed; correction translates the two hands and does not rewrite the sweep curve.
+
+The supplied approximately ten-second clip was tested privately via an H.264 copy: 297/297 sampled frames detected both hands; all 297 rendered frames had an index-point gap of 1 mm after correction. Side and top views were inspected. Estimated shared depth changed through the movement, rather than locking the hands in place. This is model-space contact verification, not measured camera-distance accuracy or proof that every joint matches the real hand. The review media stays under the git-excluded `docs/.lab-qa/` folder.

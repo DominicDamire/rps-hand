@@ -27,3 +27,9 @@ assert.equal(solveTouchDepth([0,0,-.5],[0,.08,-.5],[-.1,0,-.5],[.1,0,-.5],{maxSi
 assert.ok(solveTouchDepth([0,0,-.5],[0,.08,-.5],[-.1,0,-.5],[.1,0,-.5],{maxSideChange:.05}),'raising sideways limit permits the same correction');
 
 const easedA=shared.A.map(v=>v*.5),easedB=shared.B.map(v=>v*.5),closed=closeContact(leftTip,rightTip,easedA,easedB,.001);assert.ok(Math.hypot(...add(leftTip,closed.A).map((v,i)=>v-add(rightTip,closed.B)[i]))<=.00100001,'easing cannot reopen a confirmed contact');
+
+const indexLeft={lm,points:pts},indexRight={lm:far,points:pts};
+assert.equal(findTouchPair(indexLeft,indexRight,1,null,{indexOnly:true}),null,'index mode still requires observed proximity unless explicitly declared');
+assert.equal(findTouchPair(indexLeft,indexRight,1,null,{indexOnly:true,assumeIndexContact:true}).key,'8:8','declared recording contact uses index tips despite landmark gap noise');
+const middleOnly=far.map(p=>({...p}));middleOnly[12]={...lm[12]};
+assert.equal(findTouchPair(indexLeft,{lm:middleOnly,points:pts},1,null,{indexOnly:true}),null,'middle tips cannot substitute in index mode');

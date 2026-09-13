@@ -16,3 +16,8 @@ const immediate=new HandContactAssist();assert.ok(immediate.update({left:packet(
 const slow=new HandContactAssist();assert.equal(slow.update({left:packet(true,0),right:packet(false,0),now:0,enabled:true,confirmMs:500}),null);
 assert.equal(slow.update({left:packet(true,300),right:packet(false,300),now:300,enabled:true,confirmMs:500}),null);
 assert.ok(slow.update({left:packet(true,500),right:packet(false,500),now:500,enabled:true,confirmMs:500}),'confirmation setting controls when attachment activates');
+
+const declared=new HandContactAssist(),declaredArgs={left:packet(true,0),right:{...packet(false,0),lm:other.map(p=>({...p,x:p.x+.05}))},now:0,enabled:true,confirmMs:0,indexOnly:true,assumeIndexContact:true};
+assert.ok(declared.update(declaredArgs),'declared touching recording closes on the initial frame');
+assert.equal(declared.update({...declaredArgs,now:400}),null,'declared contact cannot resurrect stale tracking');
+assert.equal(declared.update({...declaredArgs,enabled:false}),null,'contact switch still disables declared recording correction');
