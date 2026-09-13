@@ -1,4 +1,4 @@
-import {installExperiment} from './experiment.mjs?v=touch1final';
+import {installExperiment} from './experiment.mjs?v=touch1.1';
 let depthExperiment=null;
 import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=alien18.4';
 import {palmSize} from './palm-distance.mjs?v=alien13';
