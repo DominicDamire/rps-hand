@@ -43,3 +43,7 @@ All accepted samples fit a robust inverse-palm-span depth curve for each hand (A
 Head collision uses exterior-shell separation along a separating normal, allowing tangential sliding. It no longer automatically shifts the other hand just because runtime hand contact is paired. Existing collision switches and defaults remain; there is no same-hand self-collision. Tests cover known synthetic sweep distances (including unseen positions), missing/stale/wrong-finger contact, UI capture activation/reset, fixed runtime coefficients, normal collision and free sliding, plus existing actual DollRig finger limits and collision separation.
 
 The PC preview paints a solid black background and overlays tracking lines/dots only. The original camera/video frames still feed MediaPipe; no black frame is sent to inference.
+
+## Sweep 2.4.1 — index contact correction
+
+Two-hand calibration now uses index fingertips (landmark 8), with direction from index base knuckle 5. Hold index fingertips touching as in the requested pose. The countdown and one-way eight-second sweep are unchanged. Middle-finger contact does not substitute for index contact. One-hand calibration is unchanged.

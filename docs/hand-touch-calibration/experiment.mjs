@@ -1,6 +1,6 @@
-import {PairedSweep,fitPairedSweep,pairedSweepDepth} from './paired-sweep.mjs?v=touch2.4';
+import {PairedSweep,fitPairedSweep,pairedSweepDepth} from './paired-sweep.mjs?v=touch2.4.1';
 import {imagePalmSize} from './size-wall-depth.mjs';
-import {OneHandSweep,sweepEndpoints} from './one-hand-sweep.mjs?v=touch2.4';
+import {OneHandSweep,sweepEndpoints} from './one-hand-sweep.mjs?v=touch2.4.1';
 const median=a=>[...a].sort((a,b)=>a-b)[Math.floor(a.length/2)];
 export function sweepFailure(samples,aspect){
  const {early,late}=sweepEndpoints(samples);
@@ -27,12 +27,12 @@ export function sweepDepth(lm,aspect,fit,fallback){
  return Math.max(.04,Math.min(4,fit.startDepth+t*(fit.endDepth-fit.startDepth)));
 }
 export function installExperiment({container,getHead,getHandDistance=()=>0}){
- const panel=document.createElement('section');panel.style.display='block';panel.innerHTML=`<h2>Sweep calibration</h2><p><b>One-hand method:</b> Hold one extended open hand still during the five-second countdown, palm facing yourself. The start is captured automatically. Then move back toward your shoulder/neck for eight seconds, ONE WAY ONLY. Finish at your neck. Keep your face visible at the start and finish. No return sweep or second hand.</p><p><b>New two-hand test:</b> Extend both hands near the camera, middle fingertips touching and pointing toward each other. Hold through the countdown, then move both hands back to the bottom of your neck over eight seconds. Keep the same contact and hand orientation throughout. One way only. The face is not required for this contact-based fit.</p><button id="pairedSweep">Record two-hand sweep (8 seconds)</button><br><button id="touchSweep">Record 8-second sweep to neck</button> <button id="touchReset">Reset capture</button><p id="touchStatus" role="status" aria-live="polite">Ready. No capture yet.</p><progress id="touchProgress" max="8" value="0" aria-label="Sweep recording progress" style="width:100%"></progress>`;container.prepend(panel);
+ const panel=document.createElement('section');panel.style.display='block';panel.innerHTML=`<h2>Sweep calibration</h2><p><b>One-hand method:</b> Hold one extended open hand still during the five-second countdown, palm facing yourself. The start is captured automatically. Then move back toward your shoulder/neck for eight seconds, ONE WAY ONLY. Finish at your neck. Keep your face visible at the start and finish. No return sweep or second hand.</p><p><b>New two-hand test:</b> Extend both hands near the camera, index fingertips touching and pointing toward each other. Hold through the countdown, then move both hands back to the bottom of your neck over eight seconds. Keep the same contact and hand orientation throughout. One way only. The face is not required for this contact-based fit.</p><button id="pairedSweep">Record two-hand sweep (8 seconds)</button><br><button id="touchSweep">Record 8-second sweep to neck</button> <button id="touchReset">Reset capture</button><p id="touchStatus" role="status" aria-live="polite">Ready. No capture yet.</p><progress id="touchProgress" max="8" value="0" aria-label="Sweep recording progress" style="width:100%"></progress>`;container.prepend(panel);
  const $=id=>panel.querySelector('#'+id),oneCapture=new OneHandSweep(),pairCapture=new PairedSweep();let capture=oneCapture,active=null,timer=null,latest={hands:[],face:null,aspect:1};
  function cancel(){clearInterval(timer);timer=null;capture.cancel();$('touchSweep').disabled=false;$('pairedSweep').disabled=false;}
  function tick(){const result=capture.update(performance.now(),latest.hands,latest.face,latest.aspect,getHandDistance()/100);if(!result)return;$('touchStatus').textContent=result.message;$('touchProgress').value=result.progress;
   if(result.done){const paired=capture===pairCapture;cancel();if(result.samples){
-   if(paired){const report=fitPairedSweep(result.samples);if(report.fit){active=report.fit;$('touchStatus').textContent='Two-hand capture ACTIVE. '+active.frames+' paired frames; fitted middle-tip gap '+active.residualMm.toFixed(1)+' mm (recording fit, not measured real-world accuracy). Each hand now uses its saved curve. No live refitting.';}else $('touchStatus').textContent=report.error;}
+   if(paired){const report=fitPairedSweep(result.samples);if(report.fit){active=report.fit;$('touchStatus').textContent='Two-hand capture ACTIVE. '+active.frames+' paired frames; fitted index-tip gap '+active.residualMm.toFixed(1)+' mm (recording fit, not measured real-world accuracy). Each hand now uses its saved curve. No live refitting.';}else $('touchStatus').textContent=report.error;}
    else{const fit=fitSweep(result.samples,latest.aspect);if(fit){active=fit;$('touchStatus').textContent='Sweep captured and ACTIVE for both hands. Move naturally. The saved mapping stays unchanged until you record again.';}else $('touchStatus').textContent='Sweep not captured: '+sweepFailure(result.samples,latest.aspect);}
   }}
  }
@@ -41,7 +41,7 @@ export function installExperiment({container,getHead,getHandDistance=()=>0}){
  $('pairedSweep').onclick=()=>begin(pairCapture);
  $('touchReset').onclick=()=>{cancel();active=null;$('touchProgress').value=0;$('touchStatus').textContent='Capture reset.';};
  return {get active(){return !!active;},get recording(){return capture.started!==null;},get faceReference(){return active?.face;},cancel,
- depth(side,lm,world,base,aspect){return active?.kind==='middle-pair'?pairedSweepDepth(side,lm,aspect,active,base):sweepDepth(lm,aspect,active,base);},
+ depth(side,lm,world,base,aspect){return active?.kind==='index-pair'?pairedSweepDepth(side,lm,aspect,active,base):sweepDepth(lm,aspect,active,base);},
  observe(hands,rendered,aspect){const head=getHead(),now=performance.now();let face=null;
   if(head?.face&&now-head.seen<1000&&head.depth>0){const sample=hands.find(h=>(!capture.label||h.label===capture.label)&&now-h.seen<350),points=rendered[sample?.label==='Left'?'L':'R']?.result?.points;
    const offset=points?[0,5,9,13,17].reduce((sum,i)=>sum+points[i].z-points[0].z,0)/5:0;
