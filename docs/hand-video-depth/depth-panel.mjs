@@ -1,8 +1,8 @@
 import {DepthFusion} from './depth-fusion.mjs';
-export function installDepthMap({getSource,getHands}){
+export function installDepthMap({getSource,getHands,getSourceLabel=()=>"Camera video",connectPhone=()=>{}}){
  const panel=document.createElement('section');panel.id='videoDepthPanel';
  panel.style.cssText='padding:12px;background:#101820;border:1px solid #49687d;margin:10px 0';
- panel.innerHTML=`<h2>Video Depth Anything · separate experiment</h2><button id="depthStart">Start depth map</button> <button id="depthStop" disabled>Stop depth map</button><label style="display:block;margin:10px 0"><input id="depthUse" type="checkbox"> Use depth map to help hand depth</label><p id="depthStatus" role="status">Connect the camera, then start. The local PC depth engine is required.</p><img id="depthImage" alt="Estimated depth map" hidden style="max-width:100%;max-height:300px"><p id="depthSamples"></p><p>Preview only by default. Red/yellow is nearer; blue is farther. Colours rescale per frame. Distances are model estimates. Optional correction uses a frozen reference, rejects stale or disagreeing estimates, and pauses during sweep calibration.</p><a href="http://127.0.0.1:8788/hand-video-depth/?v=vda1" target="_blank">Open direct PC preview</a> · <a href="./setup.html" target="_blank">PC engine setup and limitations</a>`;
+ panel.innerHTML=`<h2>Video Depth Anything · separate experiment</h2><button id="depthPhone">Connect iPhone / phone · QR</button> <button id="depthStart">Start depth map</button> <button id="depthStop" disabled>Stop depth map</button><label style="display:block;margin:10px 0"><input id="depthUse" type="checkbox"> Use depth map to help hand depth</label><p id="depthStatus" role="status">Connect your iPhone using QR on this page, then start the map. No PC webcam is needed. The PC depth engine is required.</p><img id="depthImage" alt="Estimated depth map" hidden style="max-width:100%;max-height:300px"><p id="depthSamples"></p><p>Preview only by default. Red/yellow is nearer; blue is farther. Colours rescale per frame. Distances are model estimates. Optional correction uses a frozen reference, rejects stale or disagreeing estimates, and pauses during sweep calibration.</p><a href="http://127.0.0.1:8788/hand-video-depth/?v=vda1" target="_blank">Open direct PC preview</a> · <a href="./setup.html" target="_blank">PC engine setup and limitations</a>`;
  document.querySelector('.workspace').prepend(panel);
  const el=id=>panel.querySelector('#'+id),fusion=new DepthFusion(),canvas=document.createElement('canvas');
  let active=false,timer=null,abort=null,session='',lastSource=null,lastDone=0,generation=0;
@@ -11,7 +11,7 @@ export function installDepthMap({getSource,getHands}){
  async function step(){
   if(!active)return;const run=generation;
   const source=getSource(),w=source?.videoWidth||source?.naturalWidth||source?.width,h=source?.videoHeight||source?.naturalHeight||source?.height;
-  if(!w||!h){el('depthStatus').textContent='Waiting for camera or sample image…';timer=setTimeout(step,500);return;}
+  if(!w||!h){el('depthStatus').textContent='No video connected. Click Connect iPhone / phone · QR here, scan it, and start the camera on your phone. This button does not open the PC webcam.';timer=setTimeout(step,500);return;}
   if(source!==lastSource){lastSource=source;reset();}
   const captured=performance.now(),requestSession=session,regions=getHands().filter(h=>!source.videoWidth||captured-h.seen<250).map(h=>({label:h.label,polygon:[0,5,9,13,17].map(i=>[h.landmarks[i].x,h.landmarks[i].y])}));
   canvas.width=Math.min(640,w);canvas.height=Math.round(h*canvas.width/w);canvas.getContext('2d').drawImage(source,0,0,canvas.width,canvas.height);
@@ -21,12 +21,13 @@ export function installDepthMap({getSource,getHands}){
    const data=await response.json();if(!response.ok)throw Error(data.error||response.status);
    if(!active||run!==generation||session!==requestSession)return;const now=performance.now(),fps=lastDone?1000/(now-lastDone):1000/(now-captured);lastDone=now;
    fusion.accept(data.samples,captured);el('depthImage').src='data:image/jpeg;base64,'+data.image;el('depthImage').hidden=false;
-   el('depthStatus').textContent=`Depth: ${fps.toFixed(2)} updates/s · inference ${Math.round(data.ms)} ms · map age ${Math.round(now-captured)} ms · ${data.device}. Camera and hand FPS are separate.`;
+   el('depthStatus').textContent=`Source: ${getSourceLabel()} · Depth: ${fps.toFixed(2)} updates/s · inference ${Math.round(data.ms)} ms · map age ${Math.round(now-captured)} ms · ${data.device}. Camera and hand FPS are separate.`;
    el('depthSamples').textContent=data.samples.length?data.samples.map(s=>`${s.label} palm: ${s.meters.toFixed(2)} m estimated`).join(' · '):'No fresh palm region to sample. Map preview is still available.';
   }catch(e){if(active&&run===generation){el('depthStatus').textContent='Depth unavailable: '+e.message+'. Start the PC engine; allow local-network access if the browser asks, or use Open direct PC preview. Palm tracking continues.';}}
   finally{clearTimeout(timeout);if(active&&run===generation)timer=setTimeout(step,200);}
  }
- el('depthStart').onclick=()=>{generation++;active=true;reset();lastDone=0;el('depthStart').disabled=true;el('depthStop').disabled=false;el('depthStatus').textContent='Processing first depth frame…';step();};
+ el('depthPhone').onclick=connectPhone;
+ el('depthStart').onclick=()=>{generation++;active=true;reset();lastDone=0;el('depthStart').disabled=true;el('depthStop').disabled=false;el('depthStatus').textContent='Reading the connected video source…';step();};
  el('depthStop').onclick=stop;el('depthUse').onchange=()=>fusion.reset();window.addEventListener('pagehide',stop);
  return {stop,reset,correct:(label,base,lm,now)=>{const uv=[0,5,9,13,17].reduce((a,i)=>[a[0]+lm[i].x/5,a[1]+lm[i].y/5],[0,0]);return fusion.correct(label,base,uv,now,active&&el('depthUse').checked);}};
 }

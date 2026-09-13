@@ -1,4 +1,4 @@
-import {installDepthMap} from './depth-panel.mjs?v=vda1-pc';
+import {installDepthMap} from './depth-panel.mjs?v=vda1-phone2';
 let depthMap=null;
 import {fitWholeHand} from './whole-hand-placement.mjs?v=vda1-final';
 import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=vda1-final';
@@ -24,7 +24,7 @@ import {reduceFalseDepthBends} from './depth-lines.mjs?v=vda1-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './video-link.mjs?v=alien15.18';
+import {receivePhone} from './video-link.mjs?v=vda1-phone2';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -558,4 +558,5 @@ const settingsTabs=document.createElement('div');settingsTabs.setAttribute('role
 for(const [name,panel] of [['Tracking & calibration',settingsMain],['Contact detection',contactPanel]]){const button=document.createElement('button');button.textContent=name;button.setAttribute('role','tab');button.setAttribute('aria-controls',panel.id);button.onclick=()=>{for(const b of settingsTabs.children)b.setAttribute('aria-selected',String(b===button));for(const p of [settingsMain,contactPanel])p.style.setProperty('display',p===panel?'block':'none','important');};settingsTabs.append(button);}
 $('directSettings').append(settingsTabs,settingsMain,contactPanel);settingsTabs.firstElementChild.click();
 
-depthMap=installDepthMap({getSource:()=>sampleSource||$('video'),getHands:()=>allHands});
+$('start').textContent='Use PC webcam';
+depthMap=installDepthMap({getSource:()=>sampleSource||(stream&&$('video').srcObject===stream&&$('video').readyState>=2?$('video'):null),getHands:()=>allHands,getSourceLabel:()=>sampleSource?'Sample image':phoneActive?'Phone video (QR)':'PC webcam',connectPhone:()=>$('phone').click()});
