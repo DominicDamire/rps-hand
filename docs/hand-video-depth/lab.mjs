@@ -1,4 +1,4 @@
-import {installDepthMap} from './depth-panel.mjs';
+import {installDepthMap} from './depth-panel.mjs?v=vda1-pc';
 let depthMap=null;
 import {fitWholeHand} from './whole-hand-placement.mjs?v=vda1-final';
 import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=vda1-final';
