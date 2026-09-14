@@ -21,3 +21,9 @@ peer.events.call({answer(){answered=true;},on(n,fn){events[n]=fn;},close(){}});
 const remote={getTracks:()=>[]};events.stream(remote);
 assert.equal(answered,true);assert.equal(received,remote);assert.equal(cameraRequests,0);close();
 console.log('PASS: local/public QR targets public HTTPS; phone stream received without PC camera access');
+
+const {sendPhone}=await import('./video-link.mjs');let stopped=0,ended=0,lastStatus='';
+navigator.mediaDevices.getUserMedia=async()=>({getTracks:()=>[{stop(){stopped++;}}]});
+const video={play:async()=>{}};const finish=await sendPhone(id,video,t=>lastStatus=t,'user','720',()=>ended++);
+peer.events.error({type:'peer-unavailable'});assert.equal(stopped,1);assert.equal(ended,1);assert.equal(video.srcObject,null);assert.match(lastStatus,/current QR|current.*QR/);finish();assert.equal(stopped,1);
+console.log('PASS: sender error stops camera once, releases retry UI and reports unavailable pairing ID');

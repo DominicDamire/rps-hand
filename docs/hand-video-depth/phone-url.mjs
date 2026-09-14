@@ -7,6 +7,6 @@ export function phoneCameraURL(moduleURL,id,quality='720'){
  }
  url.searchParams.set('pair',id);
  url.searchParams.set('quality',['480','720','1080'].includes(quality)?quality:'720');
- url.searchParams.set('v','vda1-phone2');
+ url.searchParams.set('v','phone3');
  return url;
 }

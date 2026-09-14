@@ -24,7 +24,7 @@ import {reduceFalseDepthBends} from './depth-lines.mjs?v=vda2';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=vda2';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=vda2';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=vda2';
-import {receivePhone} from './video-link.mjs?v=vda2';
+import {receivePhone} from './video-link.mjs?v=phone3';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
