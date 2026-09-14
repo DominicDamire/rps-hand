@@ -5,7 +5,7 @@
 // ("take v62, add a table, a gun, a shooting range and a mirror"); the player's body is body.mjs.
 import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
-import { makeGun, fingersUp } from "../gun.mjs";
+import { makeGun, fingersUp } from "../gun.mjs?v=map9";
 import { setupPunch } from "./punch.mjs?v=90";
 import * as sfx from "./sound.mjs?v=90";
 

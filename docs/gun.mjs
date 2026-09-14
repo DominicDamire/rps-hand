@@ -173,9 +173,10 @@ export async function makeGun({ scene, worldObjs = [], floorY = -0.28, place = {
     const off = _w.distanceTo(_g), k = 1 - off / SIGHT_R;
     st.dotOn = off < SIGHT_R; dot.visible = st.dotOn; if (st.dotOn) { dot.position.copy(_w); dot.material.opacity = 0.5 + 0.5 * Math.min(1, k * 3); }
   }
-  function fire() {
+  function fire(externalRay) {
     st.shots++; st.kick = 0.16; st.slideT = 0; st.flashT = 0.06; bang();
     gun.updateMatrixWorld(true); _w.copy(MUZZLE).applyMatrix4(gun.matrixWorld); _dir.copy(BARREL).transformDirection(gun.matrixWorld);
+    if(externalRay){_w.copy(externalRay.from);_dir.copy(externalRay.direction).normalize();}
     light.position.copy(_w); light.intensity = 6; flash.material.rotation = Math.random() * Math.PI * 2; flash.visible = true;
     ray.set(_w, _dir); const hit = ray.intersectObjects(targets, true)[0]; st.lastRay = { from: _w.toArray().map(x => +x.toFixed(3)), dir: _dir.toArray().map(x => +x.toFixed(3)), at: hit ? hit.point.toArray().map(x => +x.toFixed(3)) : null, dist: hit ? +hit.distance.toFixed(3) : null };
     const pts = tracer.geometry.attributes.position; pts.setXYZ(0, _w.x, _w.y, _w.z);
@@ -219,7 +220,7 @@ export async function makeGun({ scene, worldObjs = [], floorY = -0.28, place = {
   }
 
   return {
-    obj: gun, range, table: top, get state() { return st; }, fireNow: fire, testShootAt, handPose, get marks() { return marks.children.length; }, get cans() { return cans.map(c => c.state); },
+    obj: gun, range, table: top, get state() { return st; }, fireNow: fire, fireFrom: (from,direction)=>fire({from,direction}), testShootAt, handPose, get marks() { return marks.children.length; }, get cans() { return cans.map(c => c.state); },
     get sight() { gun.updateMatrixWorld(true); const g = SIGHT.clone().applyMatrix4(gun.matrixWorld), d = BARREL.clone().transformDirection(gun.matrixWorld); return { g: g.toArray(), d: d.toArray() }; },
     hud() { const sc = st.shots ? ` · ${st.hits}/${st.shots} hits` : ""; return st.mode === "held" ? `gun held${st.dotOn ? " · ON TARGET" : ""}${sc}` : `gun on the table${sc}`; },
     update(dt, hands, now, camera) {   // hands: [{ key, group, pts (WORLD Vector3[21]), right, ext: [index, middle, ring, pinky extended] }]
