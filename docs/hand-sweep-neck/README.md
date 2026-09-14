@@ -49,3 +49,9 @@ Sweep settings now have six tabs: Hand model, Distance, Assistance, Contact, Con
 Hand model capture averages at least 12 distinct, steady frontal open-hand frames over 1.5 seconds. It applies mirrored proportions once to both models, retaining the palm reference scale, existing flat shell, and live joint constraints. It rejects tilted, curled, incomplete, uncertain, and excessively small observations. Captured proportions last for the session; they can be toggled off or reset. Shape changes clear the distance capture and geometry-dependent caches. Distance calibration remains the existing sweep-to-neck procedure. Neither a frontal image nor this shape capture establishes absolute millimetres.
 
 Checks cover capture validation, duplicate frame rejection, mirrored equivalence, actual-model dimension changes and exact reset, plus browser tab and fixture tracking checks. The new UI is installed only on Sweep, not the map or PnP pages.
+
+## Straight13: captured open hand is the straight zero pose
+
+Open-palm capture now straightens all three segments of every finger, including the thumb, onto its captured base-to-tip axis while retaining segment lengths and finger spread. All reference joints lie in the palm plane. Averaged camera observations also establish fixed per-segment direction offsets in a mirrored palm coordinate frame. Those offsets are applied before the existing live joint constraints; subsequent movement still drives articulation. They do not refit geometry each frame or hold fingers straight during a fist. Disabling the captured model or restoring the reference removes these offsets together with the captured shape.
+
+Tests cover exact straightness through the actual constrained model driver for both hands, mirrored equivalence, camera rotation/translation invariance, retained lengths and roots, and subsequent bending. Head geometry and depth calibration algorithms are unchanged.
