@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {calibratedReference} from './reference-scale.mjs';
+const fit={handScale:.8,depthGain:.8,headScale:1.25,headOffset:[.02,.03,-.04],nearDepth:.3,endDepth:.6,neckDepth:.65,farDepth:.95,shoulderDepth:.6,shoulderPoint:[0,.45,-.6],shoulderDistance:.75};
+const copy=JSON.stringify(fit),at50=calibratedReference(fit,true,true,50),factor=2/3;
+assert.ok(Math.abs(Math.hypot(...at50.shoulderPoint)-.5)<1e-12);
+const hand=[.1,.2,-.6],headLocal=hand.map((v,i)=>(v*fit.handScale-fit.headOffset[i])/fit.headScale);
+const H=hand.map(v=>v*at50.handScale),B=headLocal.map((v,i)=>v*at50.headScale+at50.headOffset[i]);
+assert.ok(Math.hypot(...H.map((v,i)=>v-B[i]))<1e-12,'contact survives global scale');
+assert.ok(Math.abs(H[0]/H[2]-hand[0]/hand[2])<1e-12,'projection preserved');
+assert.equal(calibratedReference(fit,true,false,50),fit);assert.equal(calibratedReference(fit,false,true,50),null);
+assert.equal(JSON.stringify(fit),copy);assert.deepEqual(calibratedReference(fit,true,true,50),at50);
+console.log('PASS: measured shoulder distance, head/hand contact, projection, toggle-off restore, no accumulated scale');
