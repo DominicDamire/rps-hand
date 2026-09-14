@@ -1,6 +1,6 @@
-import {calibratedReference} from './reference-scale.mjs?v=check1';
-import {fitNeckSweep} from './neck-sweep.mjs?v=check1';
-import {StableCapture,contactCheck} from './capture-check.mjs?v=check1';
+import {calibratedReference} from './reference-scale.mjs?v=sizecheck2';
+import {fitNeckSweep} from './neck-sweep.mjs?v=sizecheck2';
+import {StableCapture,contactCheck} from './capture-check.mjs?v=sizecheck2';
 export function installExperiment({container,getHead,getFocal=()=>1,onReference=()=>{},onBegin=()=>{},getNeckReference=()=>null}){
  const panel=document.createElement('section');panel.style.display='block';
  panel.innerHTML=`<h2>Fresh calibration: near → neck → check</h2>
@@ -9,7 +9,7 @@ export function installExperiment({container,getHead,getFocal=()=>1,onReference=
  <label><input id="useSweepReference" type="checkbox" checked> Apply calibration / compare before and after</label>
  <label><input id="useShoulderDistance" type="checkbox"> Use camera-to-shoulders distance</label>
  <label>Phone lens to shoulder centre (cm)<input id="shoulderDistance" type="number" min="10" max="250" step="1" value="50"></label>
- <p>Shoulder distance sets world scale after capture. Scaling size and distance together preserves the mirror image. PnP uses a fixed wrist/knuckle model for live position and rotation; there is no separate palm-size depth blend. Camera parameters remain approximate.</p>
+ <p>Shoulder distance sets world scale after capture. Scaling size and distance together preserves the mirror image. Depth uses raw wrist/base-knuckle spacing and a fixed model reference, then the captured scale. No angle correction or PnP. Edge-on palms hold the last usable depth. Absolute centimetres remain estimates.</p>
  <p id="touchStatus" role="status" aria-live="polite">No calibration yet. Capture the near pose first.</p>
  <progress id="touchProgress" max="2" value="0" aria-label="Valid steady capture seconds" style="width:100%"></progress>
  <p id="captureResult" role="status">No correction applied.</p>`;
@@ -39,7 +39,7 @@ export function installExperiment({container,getHead,getFocal=()=>1,onReference=
   const h=fresh.find(h=>!label||h.label===label);let reason='';
   if(!h)reason='Waiting for the same hand to be visible.';
   else if(h.confidence<.5)reason='Hand label uncertain.';
-  else if(!h.points?.every(p=>p.every(Number.isFinite)))reason='Waiting for valid PnP points.';
+  else if(!h.points?.every(p=>p.every(Number.isFinite)))reason='Waiting for reliable front-facing hand points.';
   else if(![0,5,9,13,17].every(i=>h.landmarks[i].x>=0&&h.landmarks[i].x<=1&&h.landmarks[i].y>=0&&h.landmarks[i].y<=1))reason='Move the wrist and knuckles fully inside the camera picture.';
   else if(!h.face)reason='Keep the face visible for the reference.';
   else if(stage==='neck'&&!h.face.neckContact)reason='Waiting for a visible neck reference below the jaw.';

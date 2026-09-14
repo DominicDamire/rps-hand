@@ -1,11 +1,7 @@
-# Capture Check 1
+# Sweep Raw Size Check 2
 
-Separate experimental lane. Live hand position/orientation uses OpenCV EPnP + iterative refinement of a fixed wrist/base-knuckle model. No standalone size-to-depth fallback. Camera intrinsics are approximate; this is not measured metric camera calibration.
+Live depth = fixed median model wrist/base-knuckle edge length × focal scale / raw median image edge spacing. Fingers are excluded. No PnP or angular size compensation runs in this page. MediaPipe palm normal only rejects tilted/uncertain observations (absolute facing below 0.45); hold the previous usable depth until a reliable observation returns. This does not resolve arbitrary rotation or tracking errors.
 
-1. Capture an open near pose: 2 steady seconds, at least 10 fresh frames.
-2. Move at your own pace to the front of the neck and capture 2 steady seconds. Both hands share the fitted scale; head/neck share a fitted scale and translation.
-3. Optional touching-index check reports the median 3D model landmark tip gap without moving hands. It is a validation, not an automatic contact calibration or sensor measurement.
+The near and neck steady captures, before/after switch, optional camera-to-shoulders scale and independent fingertip check are retained. Calibration scales the hands and head together and offsets the head. Optional contact/collision controls remain separate from the estimator and can alter rendered placement when enabled.
 
-Capture reports applied coefficients and a rendered neck-reference gap. Before/after toggle restores or disables the same fit. Optional shoulder distance sets shared world scale; it preserves screen projection. Starting a fresh near capture clears the old fit. References last for this page session only.
-
-Original Sweep 2.4.18 and PnP pages are unchanged. This lane removes the timed motion recording; it uses two deliberate endpoint captures. No claim of live physical accuracy from synthetic or sample-image tests.
+PnP Simple Check is unchanged. The original Sweep 2.4.18 is unchanged.
