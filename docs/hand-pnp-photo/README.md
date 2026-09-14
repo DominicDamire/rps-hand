@@ -1,3 +1,11 @@
+## Rotation correction (rotation3)
+
+The previous planar solver could reject a turned palm or pick an ambiguous branch and hold the last valid pose. The solver now seeds and disambiguates PnP with the raw 3D wrist/MCP frame. At degenerate views it uses the observed orientation with a perspective translation fit, rather than holding an old front-facing orientation. The status identifies this fallback. Reference-only 2D comparison still works without world landmarks.
+
+Regression: 876 synthetic frames, both handed models, three aspect ratios, a complete turn and mismatched palm geometry. New poses follow all rotations; the prior solver fails the same suite. The real-image sample remains 0.2 px RMS / 0.5 px maximum. This does not establish live accuracy for every camera or metric scale.
+
+The separate [PnP gun lab](../hand-pnp-gun/) shares this tracking and calibration.
+
 # PnP aligned hand
 
 The existing page is still `hand-pnp-photo/`; its URL is retained. Sweep `hand-sweep-neck/` and `hand-sweep-check/` import the same hand fit and driver.

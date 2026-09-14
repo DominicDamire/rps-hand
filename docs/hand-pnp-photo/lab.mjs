@@ -1,6 +1,7 @@
 import {fitPhotoHand} from './photo-hand.mjs?v=aligned2';
 import {loadCV} from './opencv-core.mjs';
-import {solvePalmPose} from './palm-pnp.mjs?v=aligned2';
+import {solvePalmPose} from './palm-pnp.mjs?v=rotation3';
+let gunLab=null;
 let poseCV=null;const poseStates={};
 import {fitWholeHand} from './whole-hand-placement.mjs?v=photo1';
 import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=photo1';
@@ -21,7 +22,7 @@ import {fitHeadGrip} from './head-grip.mjs?v=photo1';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=photo1';
 import {installCombinedUI} from './combined-ui.mjs?v=photo1';
 import {CombinedHead} from './head-model.mjs?v=photo1';
-import {directDriver} from './direct.mjs?v=aligned2';
+import {directDriver} from './direct.mjs?v=rotation3';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=photo1';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=photo1';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=photo1';
@@ -254,7 +255,19 @@ $('importPaste').onclick=()=>{try{importText($('jsonText').value);}catch(e){noti
 $('png').onclick=()=>{renderDemo();const c=document.createElement('canvas');c.width=1400;c.height=850;const ctx=c.getContext('2d');ctx.fillStyle='#10151d';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#edf6ff';ctx.font='bold 25px system-ui';ctx.fillText('Hand Pose Lab — '+($('poseName').value||'Live comparison'),28,42);ctx.font='16px system-ui';ctx.fillText(editing?'Frozen input and corrected model':'Latest tracked frame and model',28,74);const fit=(img,x,y,w,h)=>{const a=img.width/img.height;let iw=w,ih=w/a;if(ih>h){ih=h;iw=h*a;}if(img===$('scene')&&$('viewMode').value!=='first'){ctx.save();ctx.translate(x+(w+iw)/2,y+(h-ih)/2);ctx.scale(-1,1);ctx.drawImage(img,0,0,iw,ih);ctx.restore();}else ctx.drawImage(img,x+(w-iw)/2,y+(h-ih)/2,iw,ih);};fit($('preview'),24,100,510,710);fit($('scene'),560,100,810,710);c.toBlob(blob=>{if(blob)download(blob,'hand-pose-comparison.png');});};
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set(1-(e.clientX-rect.left)/rect.width*2,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children.filter(m=>m.visible))[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
 await rig.ready;const photoReport=fitPhotoHand(rig);notice('Loading OpenCV PnP…');try{poseCV=await loadCV();}catch(e){notice('PnP unavailable: '+e.message);throw e;}
-tips=buildTips(rig);for(const S of ['R','L'])for(const [f,name]of ['Thumb','Index','Middle','Ring','Pinky'].entries())tips[S+name].copy(rig.photoReference.targets[S][4+4*f]).sub(rig.photoReference.targets[S][3+4*f]);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>{resetHandScale(rig,args[1]);args[0]=placePalmBeforeFingers(relaxedPoints(args[0],args[1],args[2],args[3]),args[1],args[2]);const result=drivers[args[1]](...args),h=allHands.find(h=>h.label===(args[1]==='L'?'Left':'Right')),focal=1/(2*Math.tan(Math.PI/6)*cameraFrame(captureAspect,camera.aspect).height);const delta=null;if(delta)translateHand(rig,args[1],result,delta);return keepHandBeforeWall(args[1],applyHandScale(rig,args[1],result,depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1));};let directResult=null;
+tips=buildTips(rig);
+for(const S of ['R','L'])for(const [f,name]of ['Thumb','Index','Middle','Ring','Pinky'].entries())tips[S+name].copy(rig.photoReference.targets[S][4+4*f]).sub(rig.photoReference.targets[S][3+4*f]);
+const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};
+function driveDirect(points,s,q,dt,options){
+ resetHandScale(rig,s);
+ points=placePalmBeforeFingers(relaxedPoints(points,s,q,dt),s,q);
+ let result=drivers[s](points,s,q,dt,options);
+ if(gunLab)result=gunLab.drive(s,q,result,dt);
+ const scale=depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1;
+ gunLab?.scaleVisual(s,scale);
+ return keepHandBeforeWall(s,applyHandScale(rig,s,result,scale));
+}
+let directResult=null;
 function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,confirmDegrees:0,noiseDegrees:0,smoothingMs:0,movementThresholdMm:0,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,contactPixels:attach,contactReleasePixels:Math.max(attach,+$('contactRelease').value),handSize:+$('handSize').value,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm,fitImage:!camera.isOrthographicCamera,rays:lm.map(p=>new THREE.Vector3().fromArray(cameraPosition(cameraUV(p,captureAspect,camera.aspect),1,camera.aspect)).normalize()),width:$('preview').width,height:$('preview').height};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
@@ -263,10 +276,10 @@ configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready
 let timingAt=0,timingTotal=0,timingCount=0;
 const wallTest=new URLSearchParams(location.search).has('fixture')?document.createElement('p'):null;if(wallTest)$('directSettings').prepend(wallTest);
 let sceneFrames=0,sceneWindow=performance.now(),measuredScene=0,lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(stream&&!editing)drawPreview($('video'),latest?.landmarks);if(+getCombinedOptions().handRate===0){latest=null;allHands=[];}
- if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(stream&&$('video').readyState>=2)drawPreview($('video'),latest?.landmarks);const calculationStart=performance.now();if(getCombinedOptions().rawOnly){measuredScene=0;sceneFrames=0;sceneWindow=now;$('scene').style.visibility='hidden';$('calculationTiming').textContent='RAW: model calculations and 3D rendering OFF. Read tracking FPS on camera preview.';return;}$('scene').style.visibility='';if(sampleSource&&combined){combined.seen=combined.poseSeen=now;}combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.wallLimited?'Hand at head back-wall limit':directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Fixed hand proportions · tracked segment directions';}renderOtherHand(renderDt);applyPalmPlacement();depthExperiment?.observe(allHands.filter(h=>poseStates[h.label==='Left'?'L':'R']?.valid),renderedHands,captureAspect);applyHandInteractions(now);if(wallTest)wallTest.textContent='Test wrist coordinates: '+Object.entries(renderedHands).map(([s,h])=>s+' '+h.result.points[0].toArray().map(v=>(v*1000).toFixed(2)).join(', ')).join(' / ');if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&!!latest;
+ if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(stream&&$('video').readyState>=2)drawPreview($('video'),latest?.landmarks);const calculationStart=performance.now();if(getCombinedOptions().rawOnly){measuredScene=0;sceneFrames=0;sceneWindow=now;$('scene').style.visibility='hidden';$('calculationTiming').textContent='RAW: model calculations and 3D rendering OFF. Read tracking FPS on camera preview.';return;}$('scene').style.visibility='';if(sampleSource&&combined){combined.seen=combined.poseSeen=now;}combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.wallLimited?'Hand at head back-wall limit':directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Fixed hand proportions · tracked segment directions';}renderOtherHand(renderDt);gunLab?.tick(now,allHands);if(gunLab?.previewResult){directResult=gunLab.previewResult;renderedHands.R={result:directResult,time:now};}applyPalmPlacement();depthExperiment?.observe(allHands.filter(h=>poseStates[h.label==='Left'?'L':'R']?.valid),renderedHands,captureAspect);applyHandInteractions(now);if(wallTest)wallTest.textContent='Test wrist coordinates: '+Object.entries(renderedHands).map(([s,h])=>s+' '+h.result.points[0].toArray().map(v=>(v*1000).toFixed(2)).join(', ')).join(' / ');if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&(!!latest||!!gunLab?.previewResult);
  wristDot.position.setFromMatrixPosition(rig.joints[side+'Hand'].matrixWorld);for(const n of JOINTS){const dot=jointDots[n];dot.visible=true;dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  for(const [i,f] of FINGERS.entries())tipDots[f].position.copy(directResult?directResult.points[4+i*4]:tipWorld(rig,tips,side,f));
- updateAlignmentReadout();modelLines.visible=$('dots').checked&&!!latest;let lineIndex=0;const linePoints=lineGeometry.attributes.position;
+ updateAlignmentReadout();modelLines.visible=$('dots').checked&&(!!latest||!!gunLab?.previewResult);let lineIndex=0;const linePoints=lineGeometry.attributes.position;
  for(const f of FINGERS){const chain=[rig.joints[side+'Hand'].getWorldPosition(new THREE.Vector3()),...['1','2','3'].map(k=>jointDots[f+k].position),tipDots[f].position];for(let i=0;i<4;i++)for(const v of [chain[i],chain[i+1]])linePoints.setXYZ(lineIndex++,v.x,v.y,v.z);}linePoints.needsUpdate=true;
 
  if(!editing&&now-lastControls>100){lastControls=now;renderControls();}
@@ -527,7 +540,7 @@ function placePalmBeforeFingers(points,s,q){
  let state=poseStates[s];if(state&&state.aspect!==captureAspect)state=null;
  if(!state||state.lm!==h.landmarks){
   const model=['Hand','Index1','Middle1','Ring1','Pinky1'].map(n=>rig.rest[s+n].world.clone().sub(rig.rest[s+'Hand'].world).toArray());
-  const begin=performance.now(),fit=h.confidence>=.5?solvePalmPose(poseCV,model,h.landmarks,captureAspect,focal,state?.fit):null;
+  const begin=performance.now(),fit=h.confidence>=.5?solvePalmPose(poseCV,model,h.landmarks,captureAspect,focal,state?.fit,h.world):null;
   state=poseStates[s]={lm:h.landmarks,aspect:captureAspect,fit:fit??state?.fit,valid:!!fit,ms:performance.now()-begin};
  }
  const fit=state.fit;if(!fit){if($('pnpStatus'))$('pnpStatus').textContent='No valid PnP pose yet. Fixed placeholder at 50 model cm; sweep cannot use it.';return points;}
@@ -535,7 +548,7 @@ function placePalmBeforeFingers(points,s,q){
  const length=rig.rest[s+'Middle1'].world.distanceTo(rig.rest[s+'Hand'].world),w=h.world,observed=Math.max(.01,Math.hypot(w[9].x-w[0].x,w[9].y-w[0].y,w[9].z-w[0].z));
  const result=liftCameraLandmarks(h.landmarks,w,captureAspect,camera.aspect,fit.translation[2],length/observed).map(p=>new THREE.Vector3().fromArray(p));
  result[0].set(fit.translation[0],-fit.translation[1],-fit.translation[2]);
- if($('pnpStatus'))$('pnpStatus').textContent=Object.entries(poseStates).map(([side,v])=>side+': '+(v.valid?'PnP':'holding last valid pose')+' · '+(v.fit?((v.fit.error*$('preview').height).toFixed(1)+' px fit'):'no fit')+' · '+v.ms.toFixed(1)+' ms'+(v.fit?' · raw Z '+(v.fit.translation[2]*100).toFixed(1)+' cm':'' )).join(' / ');
+ if($('pnpStatus'))$('pnpStatus').textContent=Object.entries(poseStates).map(([side,v])=>side+': '+(v.valid?v.fit.method:'holding last valid pose')+' · '+(v.fit?((v.fit.error*$('preview').height).toFixed(1)+' px fit'):'no fit')+' · '+v.ms.toFixed(1)+' ms'+(v.fit?' · raw Z '+(v.fit.translation[2]*100).toFixed(1)+' cm':'' )).join(' / ');
  return result;
 }
 
@@ -603,6 +616,8 @@ $('tipInset').value=0;$('tipInset').nextElementSibling.value=0;$('dots').checked
 
 const alignmentReadout=document.createElement('p');alignmentReadout.id='alignmentReadout';alignmentReadout.setAttribute('role','status');alignmentReadout.textContent='Model lines ON · waiting for tracking';document.querySelector('.toolbar').after(alignmentReadout);
 function updateAlignmentReadout(){
+ if(gunLab?.previewResult){alignmentReadout.textContent='Model joint lines ON · saved grip inspection';return;}
+ if(gunLab?.controller.held){alignmentReadout.textContent='Model joint lines ON · finger movement limited by saved gun grip';return;}
  if(!latest)return;
  const frame=cameraFrame(captureAspect,perspectiveCamera.aspect),focal=1/(2*Math.tan(Math.PI/6)*frame.height),errors=[];
  for(const s of ['R','L']){
@@ -616,3 +631,10 @@ function updateAlignmentReadout(){
 
 document.title='PnP aligned hand';
 const wristDot=new THREE.Mesh(new THREE.SphereGeometry(.003,12,8),new THREE.MeshBasicMaterial({color:0xffc56e,depthTest:false,depthWrite:false,transparent:true}));wristDot.renderOrder=102;markerGroup.add(wristDot);
+
+if(document.body.dataset.gunLab){
+ const {installGunLab}=await import('../hand-pnp-gun/gun.mjs?v=gun3');
+ gunLab=await installGunLab({scene,rig,tips,stop:()=>{stopCamera();side='R';returnToMirror();},hands:()=>allHands,driver:directDriver(rig,tips)});
+ document.title='PnP hand · gun lab';document.querySelector('header b').textContent='PnP hand · gun lab';document.querySelector('header span').textContent='Aligned model / palm rotation / saved gun grip';
+ for(const id of ['start','phone','sample','stop','imageInput'])$(id).addEventListener('click',()=>gunLab.endPreview());
+}

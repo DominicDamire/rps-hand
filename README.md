@@ -1,6 +1,6 @@
 # Hand tracking: current pages
 
-[**PnP**](https://d14life.github.io/rps-hand/hand-pnp-photo/?v=aligned2) · [**Sweep**](https://d14life.github.io/rps-hand/hand-sweep-neck/?v=aligned2) · [Compare the hand against the original lines](https://d14life.github.io/rps-hand/hand-pnp-photo/reference.html)
+[**PnP**](https://d14life.github.io/rps-hand/hand-pnp-photo/?v=rotation3) · [**Sweep**](https://d14life.github.io/rps-hand/hand-sweep-neck/?v=aligned2) · [**PnP gun lab**](https://d14life.github.io/rps-hand/hand-pnp-gun/?v=gun3) · [Compare the hand against the original lines](https://d14life.github.io/rps-hand/hand-pnp-photo/reference.html)
 
 Both pages use the same reference hand, palm-base pivot, and visible model joint lines. The first reference image sets fixed proportions; the second checks the pose. Live projection error is displayed rather than claiming metric accuracy.
 
