@@ -609,7 +609,7 @@ const photoInfo=document.createElement('p');photoInfo.textContent='Reference lin
 
 $('tipInset').value=0;
 
-const photoLink=document.createElement('a');photoLink.href='./reference.html';photoLink.target='_blank';photoLink.textContent='Compare model with your two images';photoInfo.after(photoLink);
+const photoLink=document.createElement('a');photoLink.href='./reference.html';photoLink.target='_blank';photoLink.textContent='Compare model with Image 1';photoInfo.after(photoLink);
 
 // The reference endpoint is the centre of the tip, with no hidden extension.
 $('tipInset').value=0;$('tipInset').nextElementSibling.value=0;$('dots').checked=true;

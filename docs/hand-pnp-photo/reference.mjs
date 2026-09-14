@@ -1,6 +1,6 @@
 import * as T from 'three';
 import {DollRig} from '../doll/DollRig.js';
-import {fitPhotoHand,PHOTO_POINTS,COMPARISON_POINTS} from './photo-hand.mjs?v=flat11';
+import {fitPhotoHand,PHOTO_POINTS} from './photo-hand.mjs?v=flat11';
 import {directDriver} from './direct.mjs?v=aligned2';
 import {loadCV} from './opencv-core.mjs';
 import {solvePalmPose} from './palm-pnp.mjs?v=palm4';
@@ -15,8 +15,8 @@ const edges=[];for(let f=0;f<5;f++){edges.push([0,1+4*f]);for(let k=0;k<3;k++)ed
 const lines=new T.LineSegments(new T.BufferGeometry(),new T.LineBasicMaterial({color:0xffa53d,depthTest:false,depthWrite:false,transparent:true}));lines.renderOrder=99;scene.add(lines);
 const dots=new T.Points(new T.BufferGeometry(),new T.PointsMaterial({color:0xffa53d,size:6,sizeAttenuation:false,depthTest:false,depthWrite:false,transparent:true}));dots.renderOrder=100;scene.add(dots);
 let generation=0;
-async function show(which){
- const token=++generation,source=which?COMPARISON_POINTS:PHOTO_POINTS,img=new Image();img.src=which?'reference-comparison.jpg':'reference-open.jpg';await img.decode();if(token!==generation)return;
+async function show(){
+ const token=++generation,source=PHOTO_POINTS,img=new Image();img.src='reference-open.jpg';await img.decode();if(token!==generation)return;
  const ctx=$('photo').getContext('2d');ctx.drawImage(img,crop.x,crop.y,crop.w,crop.h,0,0,580,740);
  const lm=source.map(([x,y])=>({x:(x-crop.x)/crop.w,y:(y-crop.y)/crop.h}));
  const model=[0,5,9,13,17].map(i=>rig.photoReference.targets.R[i].clone().sub(rig.photoReference.targets.R[0]).toArray());
@@ -32,10 +32,10 @@ async function show(which){
  lines.geometry.dispose();lines.geometry=new T.BufferGeometry().setFromPoints(edges.flatMap(([a,b])=>[actual[a],actual[b]]));dots.geometry.dispose();dots.geometry=new T.BufferGeometry().setFromPoints(actual);
  const errors=actual.map((p,i)=>{const v=p.clone().project(camera);return Math.hypot((v.x+1)*crop.w/2+crop.x-source[i][0],(1-v.y)*crop.h/2+crop.y-source[i][1]);});
  const rigError=Math.max(...actual.map((p,i)=>p.distanceTo(result.points[i])));
- $('status').textContent='Image '+(which+1)+' · actual joint projection: RMS '+Math.sqrt(errors.reduce((a,e)=>a+e*e,0)/21).toFixed(3)+' px; maximum '+Math.max(...errors).toFixed(3)+' px.\nJoint/driver agreement: '+(rigError*1000).toFixed(6)+' model mm. Palm pivot moved '+report.R.wristAnchorShiftMm.toFixed(1)+' model mm from the wrist ball.\n'+(which?'Same fixed hand dimensions; this second pose is a validation image, not a second resized model.':'Dimensions follow the first image. Pixel matching does not measure physical millimetres.');
+ $('status').textContent='Image 1 · actual joint projection: RMS '+Math.sqrt(errors.reduce((a,e)=>a+e*e,0)/21).toFixed(3)+' px; maximum '+Math.max(...errors).toFixed(3)+' px.\nJoint/driver agreement: '+(rigError*1000).toFixed(6)+' model mm. Palm pivot moved '+report.R.wristAnchorShiftMm.toFixed(1)+' model mm from the wrist ball.\n'+'Dimensions follow Image 1 only. Pixel matching does not measure physical millimetres.';
  renderer.render(scene,camera);
 }
-$('open').onclick=()=>show(0).catch(fail);$('comparisonPose').onclick=()=>show(1).catch(fail);
+$('open').onclick=()=>show().catch(fail);
 $('opacity').oninput=()=>{for(const m of rig.parts)m.material.opacity=+$('opacity').value;renderer.render(scene,camera);};
 function fail(e){$('status').textContent='Alignment check failed: '+e.message;console.error(e);}
-show(0).catch(fail);
+show().catch(fail);
