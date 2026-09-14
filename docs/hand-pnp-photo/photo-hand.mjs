@@ -6,7 +6,7 @@ import {buildTips} from './contact.mjs?v=photo1';
 export const PHOTO_POINTS=[[401,838],[340.8,819.6],[292.8,771.8],[260,725.8],[225.2,694.4],[316.8,690],[296.4,628.2],[286.4,585.2],[279.5,547.5],[354.2,678.4],[338.5,609.5],[329.5,561.5],[323.5,519.5],[391.5,683],[388.4,617.2],[384.4,572.2],[379,533.2],[430.4,699.2],[438.6,648.2],[442.6,612.8],[443,578]];
 export const COMPARISON_POINTS=[[381.2,803],[315.38,799.25],[269.17,773.83],[235.89,749.78],[201,731.53],[292.6,692.8],[266.83,645.83],[248.4,612.2],[235.38,585.38],[323.6,680.8],[304.17,625.17],[289.83,587.83],[278.62,555.62],[356.6,679.8],[344.4,626.2],[333.4,591.2],[323.38,561.38],[390.6,685.2],[393.5,644],[396.33,614.5],[395.25,585.33]];
 const fingers=['Thumb','Index','Middle','Ring','Pinky'];
-export function fitPhotoHand(rig,{preservePalmRelief=false}={}){
+export function fitPhotoHand(rig,{preservePalmRelief=false,referencePoints=PHOTO_POINTS}={}){
  const oldTips=buildTips(rig),old={};for(const [n,r]of Object.entries(rig.rest))old[n]=r.world.clone();
  rig.root.updateMatrixWorld(true);
  const snapshots=new Map();for(const m of rig.parts){if(!/^[RL](Hand|Thumb|Index|Middle|Ring|Pinky)/.test(m.name))continue;const a=m.geometry.attributes.position;snapshots.set(m,Array.from({length:a.count},(_,i)=>new T.Vector3().fromBufferAttribute(a,i).applyMatrix4(m.matrixWorld)));}
@@ -28,7 +28,7 @@ export function fitPhotoHand(rig,{preservePalmRelief=false}={}){
   anchor.addScaledVector(normal,(section[0]+section[1])/2-anchor.dot(normal));
   // Both hands share the same mirrored anchor and dimensions.
   if(s==='R')rightAnchor=anchor.clone();else anchor.copy(rightAnchor).setX(-rightAnchor.x);
-  const length=middle.clone().sub(anchor).dot(along),uv=PHOTO_POINTS.map(([x,y])=>new T.Vector2(x-PHOTO_POINTS[0][0],PHOTO_POINTS[0][1]-y));
+  const length=middle.clone().sub(anchor).dot(along),uv=referencePoints.map(([x,y])=>new T.Vector2(x-referencePoints[0][0],referencePoints[0][1]-y));
   const ey=uv[9].clone().normalize(),ex=new T.Vector2(-ey.y,ey.x),pixels=uv[9].length(),points=[];
   for(let i=0;i<21;i++){
    // The measured flat reference is the internal centre plane.

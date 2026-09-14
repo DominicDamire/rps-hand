@@ -41,3 +41,11 @@ The 2.4.14–16 whole-hand XYZ fit could absorb finger articulation or length mi
 ## 2.4.18 palm-only placement
 
 Only wrist and four MCP points now contribute to XYZ placement. Distal finger curl no longer changes the rigid XY fit either. Four valid palm points are required. Sweep joint hand/bust calibration and rotation-corrected palm depth are retained. The old saved 0.092535 scale is not applied. Curl invariance is tested in all three axes.
+
+## Settings12: assistance tabs and one-time hand shape capture
+
+Sweep settings now have six tabs: Hand model, Distance, Assistance, Contact, Continuity, and Head and position. Existing controls and their handlers are moved together, including both tracking-loss timers. Finger corrections, hinge-plane locking, coupling, shake reduction, and all four numeric finger filters are exposed without changing their defaults.
+
+Hand model capture averages at least 12 distinct, steady frontal open-hand frames over 1.5 seconds. It applies mirrored proportions once to both models, retaining the palm reference scale, existing flat shell, and live joint constraints. It rejects tilted, curled, incomplete, uncertain, and excessively small observations. Captured proportions last for the session; they can be toggled off or reset. Shape changes clear the distance capture and geometry-dependent caches. Distance calibration remains the existing sweep-to-neck procedure. Neither a frontal image nor this shape capture establishes absolute millimetres.
+
+Checks cover capture validation, duplicate frame rejection, mirrored equivalence, actual-model dimension changes and exact reset, plus browser tab and fixture tracking checks. The new UI is installed only on Sweep, not the map or PnP pages.
