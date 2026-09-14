@@ -1,4 +1,4 @@
-import {fitPhotoHand} from '../hand-pnp-photo/photo-hand.mjs?v=shell6';
+import {fitPhotoHand} from '../hand-pnp-photo/photo-hand.mjs?v=thumb8';
 import {fitWholeHand} from './whole-hand-placement.mjs?v=touch2.4.18-final';
 import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=touch2.4.18-final';
 import {rearPlaneCorrection} from './neck-sweep.mjs?v=touch2.4.18-final';
@@ -51,7 +51,6 @@ const rig=new DollRig(scene,{url:new URL('../doll.glb?v=hand-lab-1',import.meta.
 const markerGroup=new THREE.Group();scene.add(markerGroup);
 const lineGeometry=new THREE.BufferGeometry();lineGeometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(5*4*2*3),3));const modelLines=new THREE.LineSegments(lineGeometry,new THREE.LineBasicMaterial({color:0x8ee3bf,depthTest:false,transparent:true,opacity:.85}));modelLines.frustumCulled=false;modelLines.renderOrder=99;scene.add(modelLines);
 const gizmo=new THREE.Group();scene.add(gizmo);
-for(const [dir,color] of [[new THREE.Vector3(1,0,0),0xff676e],[new THREE.Vector3(0,1,0),0x61e599],[new THREE.Vector3(0,0,1),0x669eff]])gizmo.add(new THREE.ArrowHelper(dir,new THREE.Vector3(),.043,color,.009,.005));
 function resize(){const c=$('scene');renderer.setSize(c.clientWidth,c.clientHeight,false);camera.aspect=c.clientWidth/c.clientHeight;if(camera.isOrthographicCamera){camera.left=-.5*camera.aspect;camera.right=.5*camera.aspect;camera.top=.5;camera.bottom=-.5;}camera.updateProjectionMatrix();updateCameraFrame();}new ResizeObserver(resize).observe($('scene'));
 function updateCameraFrame(){const f=cameraFrame(captureAspect,camera.aspect),guide=$('cameraFrame');guide.style.width=(100*f.width)+'%';guide.style.height=(100*f.height)+'%';guide.hidden=!$('spatial').checked;}
 function placeFromCamera(dt){if(!$('spatial').checked||editing||!latest)return;const lm=latest.landmarks,uv=cameraUV(lm[0],captureAspect,camera.aspect),q=rig.joints[side+'Hand'].quaternion,samples=[['Index1',5],['Middle1',9],['Ring1',13],['Pinky1',17]].map(([n,i])=>({uv:cameraUV(lm[i],captureAspect,camera.aspect),offset:rig.rest[side+n].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(q).toArray()}));

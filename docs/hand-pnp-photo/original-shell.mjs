@@ -14,7 +14,20 @@ export function restoreOriginalShell(rig,originals,old,oldTips){
    if(match){const f=match[1],k=Number(match[2]),i=1+fingers.indexOf(f)*4+k-1,a=old[s+f+k],b=k<3?old[s+f+(k+1)]:a.clone().add(oldTips[s+f]),axis=b.clone().sub(a),target=ref[i+1].clone().sub(ref[i]),ratio=target.length()/axis.length();axis.normalize();const rot=new T.Matrix4().makeRotationFromQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0,0,1),axis));const stretch=rot.clone().multiply(new T.Matrix4().makeScale(1,1,ratio)).multiply(rot.clone().invert());transform.makeTranslation(...ref[i].toArray()).multiply(new T.Matrix4().makeRotationFromQuaternion(new T.Quaternion().setFromUnitVectors(axis,target.normalize()))).multiply(stretch).multiply(new T.Matrix4().makeTranslation(...a.clone().negate().toArray()));}
    else if(m.name.startsWith(s+'Hand__palm'))transform.copy(palm);
    const full=m.parent.matrixWorld.clone().invert().multiply(transform).multiply(source.world);
-   m.geometry.dispose();m.geometry=source.geometry.clone();m.geometry.applyMatrix4(full);m.geometry.computeBoundingBox();m.geometry.computeBoundingSphere();delete m.userData.directRestMatrix;
+   m.geometry.dispose();m.geometry=source.geometry.clone();m.geometry.applyMatrix4(full);
+   if(m.name.startsWith(s+'Hand__palm')){
+    // Retract the obsolete thumb mount into a rounded palm edge. Keep the
+    // connected indexed surface; the articulated thumb is left untouched.
+    const a=ref[1].clone().sub(origin),b=ref[5].clone().sub(origin),ay=a.dot(y),by=b.dot(y),ax=a.dot(x),bx=b.dot(x),position=m.geometry.attributes.position;
+    const inverse=m.parent.matrixWorld.clone().invert();
+    for(let i=0;i<position.count;i++){
+     const p=new T.Vector3().fromBufferAttribute(position,i).applyMatrix4(m.parent.matrixWorld),v=p.clone().sub(origin),t=T.MathUtils.clamp((v.dot(y)-ay)/(by-ay),0,1);
+     const edge=ax+(bx-ax)*t,coord=v.dot(x),radius=.002;
+     if(coord>edge-radius){const replacement=edge-radius+radius*Math.tanh((coord-edge+radius)/radius);p.addScaledVector(x,replacement-coord);p.applyMatrix4(inverse);position.setXYZ(i,p.x,p.y,p.z);}
+    }
+    position.needsUpdate=true;m.geometry.computeVertexNormals();
+   }
+   m.geometry.computeBoundingBox();m.geometry.computeBoundingSphere();delete m.userData.directRestMatrix;
   }
  }
  const integrity=[...originals].every(([m,source])=>m.geometry.attributes.position.count===source.geometry.attributes.position.count&&m.geometry.index?.count===source.geometry.index?.count&&(!source.geometry.index||source.geometry.index.array.every((v,i)=>v===m.geometry.index.array[i]))&&[...m.geometry.attributes.position.array,...m.geometry.attributes.normal.array].every(Number.isFinite));

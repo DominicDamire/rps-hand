@@ -1,3 +1,7 @@
+## thumb8 visual cleanup
+
+Removed joint-axis arrows from PnP and Sweep pages. Retracted the obsolete palm-side thumb mount into a smooth edge at the aligned thumb base; the moving thumb, joint targets and tracking remain unchanged. Shared geometry updates PnP, gun, Sweep and Sweep check, plus the reference viewer.
+
 ## start7 tracking startup
 
 Workers recover from initialization errors/timeouts and stalled inference using CPU fallback. Face input now uses the configured tracking width instead of a 320px cap. Capture allows results up to one second old while still requiring ten distinct frames and a steady two-second capture. Missing face, model loading and missing hand/PnP inputs have separate messages. Original palm PnP solver unchanged.
