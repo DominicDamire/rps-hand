@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {startTracking} from './tracking-session.mjs';
+const workers=[],timeouts=new Map();let timer=0,raf;
+globalThis.document={hidden:false,createElement:()=>({})};
+globalThis.Worker=class {constructor(url){this.url=url;workers.push(this)}postMessage(){}terminate(){this.terminated=true}};
+globalThis.setTimeout=(fn)=>{timeouts.set(++timer,fn);return timer};globalThis.clearTimeout=id=>timeouts.delete(id);
+globalThis.setInterval=()=>++timer;globalThis.clearInterval=()=>{};
+globalThis.requestAnimationFrame=fn=>{raf=fn;return 1};globalThis.cancelAnimationFrame=()=>{};
+const stop=startTracking({readyState:2,videoWidth:640,videoHeight:480,currentTime:1},()=>{},()=>{});
+assert.equal(workers.length,3);
+const face=workers[1];[...timeouts.values()][1]();assert.equal(face.terminated,true);
+raf(performance.now()+2000);assert.equal(workers.length,4);assert.equal(workers[3].url.searchParams.get('delegate'),'CPU');
+face.onmessage({data:{type:'ready'}});workers[3].onmessage({data:{type:'ready',delegate:'CPU'}});
+stop();assert.ok(workers.every(w=>w.terminated));
+console.log('PASS: all trackers start immediately; timeout retries CPU; stale worker replies ignored; stop terminates workers.');

@@ -1,3 +1,7 @@
+## start7 tracking startup
+
+Workers recover from initialization errors/timeouts and stalled inference using CPU fallback. Face input now uses the configured tracking width instead of a 320px cap. Capture allows results up to one second old while still requiring ten distinct frames and a steady two-second capture. Missing face, model loading and missing hand/PnP inputs have separate messages. Original palm PnP solver unchanged.
+
 ## shell6 correction
 
 Original indexed GLB surfaces and authored smooth normals are retained, with fixed one-time affine segment placement. The previous clipped/mirrored triangle rebuild is no longer the rendered mesh. Reference joint targets and the original EPnP solver are unchanged.

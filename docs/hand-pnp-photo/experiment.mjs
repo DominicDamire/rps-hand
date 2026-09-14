@@ -26,7 +26,7 @@ export function installExperiment({container,getHead,getFocal=()=>1,onReference=
  }
  function tick(){
   const now=performance.now();
-  const fresh=latest.hands.filter(h=>now-h.seen<350);
+  const fresh=latest.hands.filter(h=>now-h.seen<1000);
   if(stage==='check'){
    const c=contactCheck(fresh,latest.rendered,latest.aspect),key=fresh.map(h=>h.time).join('/');
    if(c.error){checks=[];message(c.error);return;}
@@ -37,11 +37,12 @@ export function installExperiment({container,getHead,getFocal=()=>1,onReference=
    message('Contact check '+(mm<=15?'passed':'needs improvement')+': median tracked model-tip gap '+mm.toFixed(1)+' mm. No snapping applied. This does not measure absolute camera distance.');return;
   }
   const h=fresh.find(h=>!label||h.label===label);let reason='';
-  if(!h)reason='Waiting for the same hand to be visible.';
+  if(!h)reason=label?'Waiting for fresh '+label+' hand tracking. Keep the captured hand visible.':'Waiting for fresh hand tracking with a valid PnP pose.';
   else if(h.confidence<.5)reason='Hand label uncertain.';
   else if(!h.points?.every(p=>p.every(Number.isFinite)))reason='Waiting for valid PnP points.';
   else if(![0,5,9,13,17].every(i=>h.landmarks[i].x>=0&&h.landmarks[i].x<=1&&h.landmarks[i].y>=0&&h.landmarks[i].y<=1))reason='Move the wrist and knuckles fully inside the camera picture.';
-  else if(!h.face)reason='Keep the face visible for the reference.';
+  else if(!getHead()?.loaded)reason='Loading the head model. Capture will continue when ready.';
+  else if(!h.face)reason='Waiting for fresh face tracking. Keep your face in the camera picture.';
   else if(stage==='neck'&&!h.face.neckContact)reason='Waiting for a visible neck reference below the jaw.';
   if(h&&!reason&&!label)label=h.label;
   const r=capture.update(now,h,reason);message(r.message);$('touchProgress').value=r.progress;if(!r.done)return;
@@ -59,7 +60,7 @@ export function installExperiment({container,getHead,getFocal=()=>1,onReference=
  return {get active(){return !!active;},get fit(){return active;},get recording(){return stage==='near'||stage==='neck';},get checking(){return stage==='check';},cancel,
  observe(hands,rendered,aspect){
   const head=getHead(),now=performance.now();let face=null;
-  if(head?.face?.points&&now-head.seen<350){const p=head.face.points;if([10,152,234,454].every(i=>p[i]&&Number.isFinite(p[i].x)&&Number.isFinite(p[i].y)))face={top:p[10].y,bottom:p[152].y,left:Math.min(p[234].x,p[454].x),right:Math.max(p[234].x,p[454].x)};}
+  if(head?.face?.points&&now-head.seen<1000){const p=head.face.points;if([10,152,234,454].every(i=>p[i]&&Number.isFinite(p[i].x)&&Number.isFinite(p[i].y)))face={top:p[10].y,bottom:p[152].y,left:Math.min(p[234].x,p[454].x),right:Math.max(p[234].x,p[454].x)};}
   if(verifyPending&&active&&head){
    const h=hands.find(h=>h.label===label),points=rendered[label==='Left'?'L':'R']?.result?.points;
    if(h&&points){const ref=getNeckReference(h,points,aspect);if(ref){
