@@ -6,7 +6,7 @@ const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';
  const stabilizer=new DirectionStabilizer(),contactLatch=new ContactLatch();
- return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,upperCoupling=0,lockUpper=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,rays,width,height,fitImage=true}){
+ return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,upperCoupling=0,lockUpper=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,rays,width,height,fitImage=false}){
   if(lastSide!==side){contact=null;lastSide=side;lastShape='';}
   const p=points.map(v=>v.clone()),chains=[],lengths=[],inversePalm=palmQ.clone().invert();
   // Keep rigid attachments; copy only segment directions from the earlier direct tracker.
