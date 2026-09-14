@@ -574,7 +574,7 @@ function updateAlignmentReadout(){
  if(errors.length)alignmentReadout.textContent='Actual model / tracked lines: '+Math.sqrt(errors.reduce((a,e)=>a+e*e,0)/errors.length).toFixed(1)+' px RMS · '+Math.max(...errors).toFixed(1)+' px maximum';
 }
 
-document.title='Sweep aligned hand';
+document.title='Sweep';
 const wristDot=new THREE.Mesh(new THREE.SphereGeometry(.003,12,8),new THREE.MeshBasicMaterial({color:0xffc56e,depthTest:false,depthWrite:false,transparent:true}));wristDot.renderOrder=102;markerGroup.add(wristDot);
 
 // Restore the existing contact/collision controls with their original handlers.

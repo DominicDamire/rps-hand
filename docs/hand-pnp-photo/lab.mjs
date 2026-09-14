@@ -588,7 +588,7 @@ for(const child of [...$('directSettings').children])child.style.setProperty('di
 $('directSettings').append(simpleCalibration);
 simpleCalibration.style.setProperty('display','block','important');
 for(const id of ['detected','side'])$(id).closest('label').style.setProperty('display','none','important');
-document.querySelector('header b').textContent='PnP aligned hand';
+document.querySelector('header b').textContent='PnP';
 document.querySelector('header span').textContent='Live palm pose / sweep calibration / optional shoulder distance';
 
 // View-only orbit controls; calibration and landmark coordinates remain in camera space.
@@ -627,7 +627,7 @@ function updateAlignmentReadout(){
  if(errors.length)alignmentReadout.textContent='Actual model / tracked lines: '+Math.sqrt(errors.reduce((a,e)=>a+e*e,0)/errors.length).toFixed(1)+' px RMS · '+Math.max(...errors).toFixed(1)+' px maximum';
 }
 
-document.title='PnP aligned hand';
+document.title='PnP';
 const wristDot=new THREE.Mesh(new THREE.SphereGeometry(.003,12,8),new THREE.MeshBasicMaterial({color:0xffc56e,depthTest:false,depthWrite:false,transparent:true}));wristDot.renderOrder=102;markerGroup.add(wristDot);
 
 if(document.body.dataset.gunLab){
