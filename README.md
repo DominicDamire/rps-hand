@@ -1,3 +1,9 @@
+# Hand tracking: current pages
+
+[**PnP**](https://d14life.github.io/rps-hand/hand-pnp-photo/?v=aligned2) · [**Sweep**](https://d14life.github.io/rps-hand/hand-sweep-neck/?v=aligned2) · [Compare the hand against the original lines](https://d14life.github.io/rps-hand/hand-pnp-photo/reference.html)
+
+Both pages use the same reference hand, palm-base pivot, and visible model joint lines. The first reference image sets fixed proportions; the second checks the pose. Live projection error is displayed rather than claiming metric accuracy.
+
 # Movement v90 · fixed hand attachments
 
 [Play v90](https://d14life.github.io/rps-hand/movement/?v=90) · [Blender verification](https://d14life.github.io/rps-hand/movement/blender-check/) · [V90 details](docs/movement/V90.md)

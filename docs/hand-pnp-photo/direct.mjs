@@ -6,17 +6,20 @@ const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';
  const stabilizer=new DirectionStabilizer(),contactLatch=new ContactLatch();
- return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,upperCoupling=0,lockUpper=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,width,height}){
+ return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,upperCoupling=0,lockUpper=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,rays,width,height,fitImage=true}){
   if(lastSide!==side){contact=null;lastSide=side;lastShape='';}
   const p=points.map(v=>v.clone()),chains=[],lengths=[],inversePalm=palmQ.clone().invert();
   // Keep rigid attachments; copy only segment directions from the earlier direct tracker.
   for(let f=0;f<5;f++){
    const name=side+FINGERS[f],base=rig.rest[name+'1'].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(palmQ).add(p[0]);
+   // The thumb metacarpal can oppose around the palm base. Its fixed reach
+   // follows the observed CMC ray rather than freezing the open-hand spread.
+   if(fitImage&&f===0)base.copy(pointOnRay(p[0],rays?.[1]??points[1].clone().normalize(),rig.rest[name+'1'].world.distanceTo(rig.rest[side+'Hand'].world),points[1]));
    const chain=[base],lens=[];
    for(let k=1;k<=3;k++){const rest=k<3?rig.rest[name+(k+1)].world.clone().sub(rig.rest[name+k].world):tips[name].clone();const length=rest.length()+(k===3?tipInset/1000:0),i=1+4*f+k-1;let dir=points[i+1].clone().sub(points[i]);if(dir.lengthSq()<1e-10)dir=rest.clone().applyQuaternion(palmQ);const movementNoise=Math.atan2(Math.max(0,movementThresholdMm)/1000,Math.max(.001,length))*180/Math.PI;dir=stabilizer.update(name+k,dir.normalize().applyQuaternion(inversePalm),dt,Math.max(noiseDegrees,movementNoise),{observation:lm,confirmDegrees,smoothingMs}).applyQuaternion(palmQ);lens.push(length);chain.push(chain[k-1].clone().addScaledVector(dir,length));}
    chains.push(chain);lengths.push(lens);
   }
-  contact=contactLatch.update(lm,lm,width,height,contactPixels>0,contactPixels,contactReleasePixels);
+  contact=contactLatch.update(lm,lm,width,height,!fitImage&&contactPixels>0,contactPixels,contactReleasePixels);
   // Upper joints of the four fingers are hinges: no added sideways or twist.
   // Establish the allowed plane before solving fingertip contact inside it.
   const restAcross=rig.rest[side+'Index1'].world.clone().sub(rig.rest[side+'Pinky1'].world);
@@ -29,9 +32,9 @@ export function directDriver(rig,tips){
    const local=before.clone().applyQuaternion(inversePalm),after=new T.Vector3().fromArray(limitBaseSplay(local.toArray(),rest.toArray(),restAcross.toArray(),70,upperBend)).applyQuaternion(palmQ);
    const correction=new T.Quaternion().setFromUnitVectors(before,after);for(let k=1;k<4;k++)chain[k].sub(chain[0]).applyQuaternion(correction).add(chain[0]);
   }
-  for(let f=1;f<5;f++)restrictBase(f);
+  if(!fitImage)for(let f=1;f<5;f++)restrictBase(f);
   const hinges=new Map();
-  if(lockUpper)for(let f=1;f<5;f++){
+  if(lockUpper&&!fitImage)for(let f=1;f<5;f++){
    const chain=chains[f],baseDirection=chain[1].clone().sub(chain[0]).normalize();
    const name=side+FINGERS[f],restDirection=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize();
    const hinge=fingerPlane(restDirection,restAcross,palmQ,baseDirection);hinges.set(f,hinge);
@@ -41,6 +44,12 @@ export function directDriver(rig,tips){
   // A fingertip contact solve must also respect the MCP sideways limit.
   if(contact)for(let f=1;f<5;f++){restrictBase(f);if(lockUpper){const name=side+FINGERS[f],rest=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize(),base=chains[f][1].clone().sub(chains[f][0]).normalize(),hinge=fingerPlane(rest,restAcross,palmQ,base);hinges.set(f,hinge);constrainFinger(chains[f],lengths[f],hinge,upperCoupling);}}
   if(contact)contactGap=chains[0][3].distanceTo(chains[contact/4-1][3]);
+  // Fit fixed-length segments to the actual image rays. Raw world depth only
+  // chooses between the two geometrically possible bends; it cannot move XY.
+  if(fitImage)for(let f=0;f<5;f++)for(let k=1;k<4;k++){
+   const observed=points[1+4*f+k],ray=rays?.[1+4*f+k]??observed.clone().normalize();
+   chains[f][k]=pointOnRay(chains[f][k-1],ray,lengths[f][k-1],observed);
+  }
   for(let f=0;f<5;f++)for(let k=0;k<4;k++)p[1+4*f+k].copy(chains[f][k]);
   rig.root.position.set(0,0,0);rig.root.updateMatrixWorld(true);const hand=rig.joints[side+'Hand'];hand.position.copy(hand.parent.worldToLocal(p[0].clone()));rig.setWorldQuat(side+'Hand',palmQ);rig.refresh(hand);
   const shape=side+':'+thickness+':'+tipInset,shapeChanged=shape!==lastShape;
@@ -60,4 +69,18 @@ export function directDriver(rig,tips){
   }
   lastShape=shape;rig.root.updateMatrixWorld(true);return {points:p,contact,contactGap};
  };
+}
+
+export function pointOnRay(base,ray,length,hint){
+ const along=base.dot(ray),closest=ray.clone().multiplyScalar(along);
+ const discriminant=length*length-closest.distanceToSquared(base);
+ if(discriminant>=-1e-12){
+  const root=Math.sqrt(Math.max(0,discriminant));
+  const candidates=[along-root,along+root].filter(t=>t>0).map(t=>ray.clone().multiplyScalar(t));
+  candidates.sort((a,b)=>a.distanceToSquared(hint)-b.distanceToSquared(hint));
+  if(candidates.length)return candidates[0];
+ }
+ // Inconsistent observations cannot intersect a fixed-length bone. Preserve
+ // bone length and expose projection residual instead of silently stretching.
+ return closest.sub(base).normalize().multiplyScalar(length).add(base);
 }

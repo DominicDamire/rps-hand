@@ -6,10 +6,11 @@ export function solvePalmPose(cv,model,lm,aspect,focal,previous=null){
  const object=cv.matFromArray(5,1,cv.CV_64FC3,model.flat()),image=cv.matFromArray(5,1,cv.CV_64FC2,PALM_IDS.flatMap(i=>[lm[i].x,lm[i].y]));
  const K=cv.matFromArray(3,3,cv.CV_64F,[focal/aspect,0,.5,0,focal,.5,0,0,1]),D=cv.Mat.zeros(5,1,cv.CV_64F),candidates=[];
  try{
-  for(const seed of [previous,null]){
+  for(const entry of [{seed:previous,flag:cv.SOLVEPNP_EPNP},{seed:null,flag:cv.SOLVEPNP_IPPE}]){
+   const {seed,flag}=entry;
    const r=seed?cv.matFromArray(3,1,cv.CV_64F,seed.rotation):new cv.Mat(),t=seed?cv.matFromArray(3,1,cv.CV_64F,seed.translation):new cv.Mat(),R=new cv.Mat(),projected=new cv.Mat();
    try{
-    if(!seed&&!cv.solvePnP(object,image,K,D,r,t,false,cv.SOLVEPNP_EPNP))continue;
+    if(!seed&&!cv.solvePnP(object,image,K,D,r,t,false,flag))continue;
     if(!cv.solvePnP(object,image,K,D,r,t,true,cv.SOLVEPNP_ITERATIVE))continue;
     cv.Rodrigues(r,R);cv.projectPoints(object,r,t,K,D,projected);
     const translation=Array.from(t.data64F),rotation=Array.from(r.data64F),matrix=Array.from(R.data64F);
