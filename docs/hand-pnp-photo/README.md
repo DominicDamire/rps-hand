@@ -1,3 +1,7 @@
+## flat11 palm faces
+
+The remaining depth bulge is cut off with two capped planes parallel to the palm reference plane. Palm shell thickness is 18 model mm before calibration scale. Both hands are verified to stay within these planes, including an oblique visual check. Joint targets, finger geometry and tracking remain unchanged; 72 motion comparisons pass.
+
 ## cut10 actual socket removal
 
 The previous thumb8 deformation did not delete the socket. This version removes the secondary palm socket geometry entirely, clips the adjoining main palm triangles and caps the cut contours with smooth shared-vertex normals. Finger geometry, joint references and tracking are unchanged. Applied through the shared geometry to PnP, Sweep, gun, Sweep check and Dust II. Verified both hand drivers across 72 poses.

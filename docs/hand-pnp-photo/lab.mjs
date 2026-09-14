@@ -1,4 +1,4 @@
-import {fitPhotoHand} from './photo-hand.mjs?v=cut10';
+import {fitPhotoHand} from './photo-hand.mjs?v=flat11';
 import {loadCV} from './opencv-core.mjs';
 import {solvePalmPose} from './palm-pnp.mjs?v=palm4';
 let gunLab=null;

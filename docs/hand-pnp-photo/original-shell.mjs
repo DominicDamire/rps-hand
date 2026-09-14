@@ -26,6 +26,18 @@ export function restoreOriginalShell(rig,originals,old,oldTips){
     const anchor=origin.clone().addScaledVector(x,a.dot(x)-.008).addScaledVector(y,a.dot(y));
     const plane=new T.Plane().setFromNormalAndCoplanarPoint(normal,anchor).applyMatrix4(m.parent.matrixWorld.clone().invert());
     const cut=cutClosedPalm(m.geometry,plane);m.geometry.dispose();m.geometry=cut;
+    // Flatten both palm faces in depth, not just the thumb-side silhouette.
+    const along=ref[9].clone().sub(origin),faceNormal=z.clone().addScaledVector(y,-along.dot(z)/along.dot(y)).normalize();
+    const inverse=m.parent.matrixWorld.clone().invert(),halfThickness=.009;
+    for(const sign of [-1,1]){
+     const n=faceNormal.clone().multiplyScalar(sign),facePlane=new T.Plane().setFromNormalAndCoplanarPoint(n,origin.clone().addScaledVector(n,halfThickness)).applyMatrix4(inverse);
+     const trimmed=cutClosedPalm(m.geometry,facePlane);m.geometry.dispose();m.geometry=trimmed;
+    }
+    const positions=m.geometry.attributes.position;let maximum=0;
+    for(let i=0;i<positions.count;i++){const p=new T.Vector3().fromBufferAttribute(positions,i).applyMatrix4(m.parent.matrixWorld);maximum=Math.max(maximum,Math.abs(p.sub(origin).dot(faceNormal)));}
+    if(maximum>halfThickness+1e-6)throw Error('Palm surface exceeds flat thickness');
+    m.geometry.userData.flatPalm={maximum,halfThickness};
+
 
    }
    m.geometry.computeBoundingBox();m.geometry.computeBoundingSphere();delete m.userData.directRestMatrix;
