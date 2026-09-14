@@ -578,3 +578,15 @@ simpleCalibration.style.setProperty('display','block','important');
 for(const id of ['detected','side'])$(id).closest('label').style.setProperty('display','none','important');
 document.querySelector('header b').textContent='PnP Simple';
 document.querySelector('header span').textContent='Live palm pose / sweep calibration / optional shoulder distance';
+
+// View-only orbit controls; calibration and landmark coordinates remain in camera space.
+const orbitButton=document.createElement('button');orbitButton.textContent='Explore in 3D';orbitButton.setAttribute('aria-pressed','false');
+const orbitHelp=document.createElement('span');orbitHelp.textContent='Drag: rotate · right-drag / two fingers: pan · wheel / pinch: zoom';orbitHelp.hidden=true;
+$('viewReset').before(orbitButton,orbitHelp);
+function returnToMirror(){controls.enabled=false;controls.enableDamping=false;controls.target.set(0,0,-1);$('viewMode').value='mirror';setViewMode();orbitButton.textContent='Explore in 3D';orbitButton.setAttribute('aria-pressed','false');orbitHelp.hidden=true;}
+orbitButton.onclick=()=>{if(controls.enabled){returnToMirror();return;}
+ controls.enableDamping=false;controls.enablePan=true;controls.enableRotate=true;controls.enableZoom=true;controls.minDistance=.05;controls.maxDistance=10;controls.minPolarAngle=0;controls.maxPolarAngle=Math.PI;
+ controls.target.set(0,0,-(combined?.depth||.5));controls.enabled=true;$('scene').style.transform='none';$('cameraFrame').style.display='none';controls.update();orbitButton.textContent='Return to camera mirror';orbitButton.setAttribute('aria-pressed','true');orbitHelp.hidden=false;
+};
+$('viewReset').onclick=returnToMirror;
+for(const id of ['touchSweep','captureNeck'])$(id).addEventListener('click',returnToMirror);
