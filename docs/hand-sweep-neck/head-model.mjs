@@ -45,7 +45,7 @@ export class CombinedHead {
   return {neck:best.point.toArray(),palm:palm.toArray()};
  }
  update(dt,aspect,camera,metres,depthGain){
-  const o=this.options(),fresh=this.face&&performance.now()-this.seen<(o.faceGrace??1000)&&o.faceRate>0;this.group.visible=!!(o.showHead&&fresh&&this.loaded);if(this.faceDots)this.faceDots.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false;if(this.contactDot)this.contactDot.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false&&(Number.isInteger(this.highlightFaceId)||Number.isInteger(this.highlightBodyId));if(!this.group.visible)return;
+  const o=this.options(),fresh=this.face&&performance.now()-this.seen<Math.max(100,o.faceGrace??1000)&&o.faceRate>0;this.group.visible=!!(o.showHead&&fresh&&this.loaded);if(this.faceDots)this.faceDots.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false;if(this.contactDot)this.contactDot.visible=this.group.visible&&!!o.mappedFaceDots&&o.faceMapping!==false&&(Number.isInteger(this.highlightFaceId)||Number.isInteger(this.highlightBodyId));if(!this.group.visible)return;
   if(!this.depthRef)this.calibrate(metres,aspect,camera.aspect);
   let depth=o.captureFace?calibratedDepth(faceReference(this.face),o.captureFace.raw,o.captureFace.depth,1):o.headDepth===false?this.metres:calibratedDepth(faceReference(this.face),this.depthRef,this.metres,depthGain);if(!depth)return;
   depth=Math.max(.08,depth-o.faceOffset/100+(o.headBack||0)/100);this.depth=depth;
@@ -70,7 +70,7 @@ export class CombinedHead {
   if(this.contactDot.visible){const point=this.mappedLandmarks[this.highlightFaceId]||this.mappedShoulders[this.highlightBodyId];if(point)this.contactDot.position.copy(point);}
  }
  overlay(ctx,w,h){const o=this.options();if(!o.overlayRate)return;
-  if(this.face&&o.faceRate>0&&performance.now()-this.seen<(o.faceGrace??1000)){const p=this.face.points;drawFace(ctx,p,w,h,this.face.matrix,this.highlightFaceId);}
+  if(this.face&&o.faceRate>0&&performance.now()-this.seen<Math.max(100,o.faceGrace??1000)){const p=this.face.points;drawFace(ctx,p,w,h,this.face.matrix,this.highlightFaceId);}
 
   if(this.pose&&o.shoulderRate>0&&performance.now()-this.poseSeen<250){
    drawShoulders(ctx,this.pose,this.face,w,h,this.highlightBodyId);

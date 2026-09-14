@@ -25,8 +25,8 @@ import {supportedContact} from './surface-contact.mjs?v=photo1';
 import {fitHeadGrip} from './head-grip.mjs?v=photo1';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=start7';
 import {installCombinedUI} from './combined-ui.mjs?v=photo1';
-import {CombinedHead} from './head-model.mjs?v=photo1';
-import {directDriver} from './direct.mjs?v=motion5';
+import {CombinedHead} from './head-model.mjs?v=raw19';
+import {directDriver} from './direct.mjs?v=raw19';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=photo1';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=photo1';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=photo1';
@@ -270,7 +270,7 @@ function driveDirect(points,s,q,dt,options){
  applyHandScale(rig,s,result,scale);applyDisplayOffset(s,result);return keepHandBeforeWall(s,result);
 }
 let directResult=null;
-function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,confirmDegrees:+$('confirmJump').value,noiseDegrees:+$('fingerNoise').value,smoothingMs:+$('directionSmoothing').value,movementThresholdMm:+$('movementThreshold').value,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,contactPixels:attach,contactReleasePixels:Math.max(attach,+$('contactRelease').value),handSize:+$('handSize').value,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm,fitImage:false,width:$('preview').width,height:$('preview').height};}
+function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,confirmDegrees:+$('confirmJump').value,noiseDegrees:+$('fingerNoise').value,smoothingMs:+$('directionSmoothing').value,movementThresholdMm:+$('movementThreshold').value,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,baseSplay:$('baseSplay')?.checked??true,contactPixels:attach,contactReleasePixels:Math.max(attach,+$('contactRelease').value),handSize:+$('handSize').value,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm,fitImage:false,width:$('preview').width,height:$('preview').height};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
@@ -608,7 +608,7 @@ orbitButton.onclick=()=>{if(controls.enabled){returnToMirror();return;}
 $('viewReset').onclick=returnToMirror;
 for(const id of ['touchSweep','captureNeck'])$(id).addEventListener('click',returnToMirror);
 
-const photoInfo=document.createElement('p');photoInfo.textContent='Reference lines set up the hand geometry once. Live movement uses the original constrained finger tracking. The wrist pivot is inside the palm base. Green lines show the actual model joints; both hands keep fixed proportions.';$('touchSweep').closest('section').prepend(photoInfo);
+const photoInfo=document.createElement('p');photoInfo.textContent='Reference lines set up the hand geometry once. Live movement uses tracked finger directions; constraints are optional in Hand tracking. The wrist pivot is inside the palm base. Green lines show the actual model joints; both hands keep fixed proportions.';$('touchSweep').closest('section').prepend(photoInfo);
 
 $('tipInset').value=0;
 
@@ -668,4 +668,4 @@ function applyDisplayOffset(s,result){
 }
 
 if(!document.body.dataset.gunLab)firstPerson=installFirstPersonCamera({version:'PnP',scene,renderer,getHead:()=>combined,isCalibrating:()=>depthExperiment?.recording||depthExperiment?.checking,onViewChange:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();}});
-if(!document.body.dataset.gunLab){const {installSweepSettings}=await import('../hand-sweep-neck/settings.mjs?v=eye18');installSweepSettings({cameraPanel:firstPerson.panel,version:'PnP',isDistanceRecording:()=>depthExperiment?.recording});document.getElementById('sweep-hand-model').append(photoInfo,photoLink);}
+if(!document.body.dataset.gunLab){const {installSweepSettings}=await import('../hand-sweep-neck/settings.mjs?v=raw19');installSweepSettings({cameraPanel:firstPerson.panel,version:'PnP',isDistanceRecording:()=>depthExperiment?.recording});document.getElementById('sweep-hand-model').append(photoInfo,photoLink);}
