@@ -1,5 +1,5 @@
-import {palmObservation} from './palm-sweep-depth.mjs?v=scale0925-final';
-import {sweepEndpoints} from './one-hand-sweep.mjs?v=scale0925-final';
+import {palmObservation} from './palm-sweep-depth.mjs?v=scale0925v2';
+import {sweepEndpoints} from './one-hand-sweep.mjs?v=scale0925v2';
 const median=a=>[...a].sort((a,b)=>a-b)[Math.floor(a.length/2)];
 export const PHONE_TILT_DEGREES=10;
 // Assume a phone leaning back, with its camera looking 10 degrees upward.
@@ -42,7 +42,12 @@ export function fitNeckSweep(samples){
  const residual=errors[Math.floor(.8*(errors.length-1))];
  if(residual>.03)return {error:'The finishing contact moved too much. Hold the palm at the same spot below the jaw for the final second.'};
  const neckDepth=handScale*median(anchors.map(o=>o.backDepth));
- return {fit:{kind:'neck-sweep',version:5,depthGain:handScale,handScale,headScale,headOffset,contactResidual:residual,nearDepth:nearDepth*handScale,endDepth:endDepth*handScale,neckDepth,farDepth:neckDepth+.30,phoneTilt:PHONE_TILT_DEGREES,aspect:median(aspects),frames:samples.length}};
+ const shoulderSamples=anchors.map(o=>o.s.face.neckContact.shoulderDepth).filter(v=>v>.04);
+ const shoulderDepth=shoulderSamples.length>=3?headScale*median(shoulderSamples)-headOffset[2]:null;
+ const shoulderPoints=anchors.map(o=>o.s.face.neckContact.shoulderPoint).filter(p=>p?.length===3&&p.every(Number.isFinite));
+ const shoulderPoint=shoulderPoints.length>=3?[0,1,2].map(k=>headScale*median(shoulderPoints.map(p=>p[k]))+headOffset[k]):null;
+ const shoulderDistance=shoulderPoint?Math.hypot(...shoulderPoint):null;
+ return {fit:{kind:'neck-sweep',version:6,shoulderDepth,shoulderPoint,shoulderDistance,depthGain:handScale,handScale,headScale,headOffset,contactResidual:residual,nearDepth:nearDepth*handScale,endDepth:endDepth*handScale,neckDepth,farDepth:neckDepth+.30,phoneTilt:PHONE_TILT_DEGREES,aspect:median(aspects),frames:samples.length}};
 }
 // Return camera-Z movement toward the camera, along the wrist's image ray.
 export function rearPlaneCorrection(points,farDepth,tilt=0){

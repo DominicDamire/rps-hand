@@ -14,6 +14,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--runtime', required=True, type=Path)
 parser.add_argument('--port', type=int, default=8788)
 parser.add_argument('--input-size', type=int, default=224)
+parser.add_argument('--device',choices=['auto','cpu','gpu'],default='auto')
 args = parser.parse_args()
 sys.path.insert(0, str(args.runtime / 'Video-Depth-Anything'))
 from video_depth_anything.video_depth_stream import VideoDepthAnything
@@ -22,6 +23,19 @@ torch.set_num_threads(min(4, os.cpu_count() or 2))
 model = VideoDepthAnything(encoder='vits', features=64, out_channels=[48,96,192,384])
 model.load_state_dict(torch.load(args.runtime / 'checkpoints/metric_video_depth_anything_vits.pth', map_location='cpu', weights_only=True), strict=True)
 model.eval()
+gpu_device=None;gpu_label=None
+try:
+    import torch_directml
+    if torch_directml.device_count():
+        gpu_device=str(torch_directml.device());gpu_label='GPU DirectML '+torch_directml.device_name(0).replace('\x00','')
+except ImportError:
+    pass
+if torch.cuda.is_available():
+    gpu_device='cuda';gpu_label='GPU CUDA '+torch.cuda.get_device_name(0)
+selected='gpu' if args.device!='cpu' and gpu_device else 'cpu'
+compute_device=gpu_device if selected=='gpu' else 'cpu'
+model.to(compute_device)
+input_size=args.input_size
 lock = threading.Lock()
 last_source = None
 last_shape = None
@@ -84,9 +98,9 @@ class Handler(SimpleHTTPRequestHandler):
             if target.is_dir() and not (target/'index.html').is_file():
                 return self.reply({'error':'Not found'},404)
             return super().do_GET()
-        self.reply({'ready':True,'model':'Metric Video Depth Anything Small','device':'CPU','inputSize':args.input_size,'streaming':'official experimental implementation'})
+        self.reply({'ready':True,'model':'Metric Video Depth Anything Small','device':gpu_label if selected=='gpu' else 'CPU','devices':['cpu','gpu'] if gpu_device else ['cpu'],'inputSize':input_size,'streaming':'official experimental implementation'})
     def do_POST(self):
-        global last_source,last_shape
+        global last_source,last_shape,selected,compute_device,input_size
         if self.path!='/infer' or self.headers.get('Origin') not in allowed:
             return self.reply({'error':'Origin or route not allowed'},403)
         if not lock.acquire(blocking=False):
@@ -100,11 +114,21 @@ class Handler(SimpleHTTPRequestHandler):
             frame=cv2.imdecode(np.frombuffer(encoded,np.uint8),cv2.IMREAD_COLOR)
             if frame is None or max(frame.shape[:2])>960:
                 return self.reply({'error':'Invalid frame dimensions'},400)
+            requested=payload.get('device',selected)
+            if requested not in ['cpu','gpu']:
+                return self.reply({'error':'Unknown compute device'},400)
+            if requested=='gpu' and not gpu_device:
+                return self.reply({'error':'GPU runtime unavailable. Start the GPU engine or select CPU.'},409)
+            requested_size=int(payload.get('inputSize',input_size))
+            if requested_size not in [168,224,336]:
+                return self.reply({'error':'Unsupported input size'},400)
+            if requested!=selected or requested_size!=input_size:
+                clear_cache();selected=requested;compute_device=gpu_device if selected=='gpu' else 'cpu';model.to(compute_device);input_size=requested_size
             source=str(payload.get('source',''))[:100]
             if source!=last_source or frame.shape!=last_shape:
                 clear_cache();last_source=source;last_shape=frame.shape
             begin=time.perf_counter()
-            depth=model.infer_video_depth_one(cv2.cvtColor(frame,cv2.COLOR_BGR2RGB),input_size=args.input_size,device='cpu',fp32=True)
+            depth=model.infer_video_depth_one(cv2.cvtColor(frame,cv2.COLOR_BGR2RGB),input_size=input_size,device=compute_device,fp32=True)
             ms=(time.perf_counter()-begin)*1000
             valid=depth[np.isfinite(depth)&(depth>0)]
             if not valid.size:
@@ -114,12 +138,12 @@ class Handler(SimpleHTTPRequestHandler):
             colour=cv2.applyColorMap(255-gray,cv2.COLORMAP_TURBO)
             samples=[s for r in payload.get('regions',[])[:3] if (s:=measure(depth,r))]
             ok,png=cv2.imencode('.jpg',colour,[cv2.IMWRITE_JPEG_QUALITY,85])
-            self.reply({'image':base64.b64encode(png).decode(),'samples':samples,'ms':ms,'near':float(near),'far':float(far),'width':int(depth.shape[1]),'height':int(depth.shape[0]),'frame':model.id,'device':'CPU'})
+            self.reply({'image':base64.b64encode(png).decode(),'samples':samples,'ms':ms,'near':float(near),'far':float(far),'width':int(depth.shape[1]),'height':int(depth.shape[0]),'frame':model.id,'device':gpu_label if selected=='gpu' else 'CPU','inputSize':input_size})
         except Exception as e:
             clear_cache()
             self.reply({'error':type(e).__name__+': '+str(e)[:250]},500)
         finally:
             lock.release()
 
-print(f'Video Depth engine ready on http://127.0.0.1:{args.port}; CPU, input {args.input_size}',flush=True)
+print(f'Video Depth engine ready on http://127.0.0.1:{args.port}; {gpu_label if selected=='gpu' else 'CPU'}, input {input_size}',flush=True)
 ThreadingHTTPServer(('127.0.0.1',args.port),Handler).serve_forever()

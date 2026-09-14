@@ -1,34 +1,34 @@
-import {installDepthMap} from './depth-panel.mjs?v=vda1-phone2';
+import {installDepthMap} from './depth-panel.mjs?v=vda2';
 let depthMap=null;
-import {fitWholeHand} from './whole-hand-placement.mjs?v=vda1-final';
-import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=vda1-final';
-import {rearPlaneCorrection} from './neck-sweep.mjs?v=vda1-final';
-import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=vda1-final';
+import {fitWholeHand} from './whole-hand-placement.mjs?v=vda2';
+import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=vda2';
+import {rearPlaneCorrection} from './neck-sweep.mjs?v=vda2';
+import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=vda2';
 const palmDepth=new PalmSweepDepth();
-import {TrackingJitter} from './tracking-jitter.mjs?v=vda1-final';
+import {TrackingJitter} from './tracking-jitter.mjs?v=vda2';
 const trackingJitter=new TrackingJitter();
-import {OuterCollision} from './outer-collision.mjs?v=vda1-final';
-import {HandContactAssist} from './hand-contact-assist.mjs?v=vda1-final';
-import {installExperiment} from './experiment.mjs?v=vda1-final';
+import {OuterCollision} from './outer-collision.mjs?v=vda2';
+import {HandContactAssist} from './hand-contact-assist.mjs?v=vda2';
+import {installExperiment} from './experiment.mjs?v=vda2';
 let depthExperiment=null;
-import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=alien18.4';
-import {palmSize} from './palm-distance.mjs?v=alien13';
-import {createRoom} from './room.mjs?v=demo9';
-import {supportedContact} from './surface-contact.mjs?v=demo9';
-import {fitHeadGrip} from './head-grip.mjs?v=demo9';
-import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
-import {installCombinedUI} from './combined-ui.mjs?v=vda1-final';
-import {CombinedHead} from './head-model.mjs?v=vda1-final';
-import {directDriver} from './direct.mjs?v=vda1-final';
-import {reduceFalseDepthBends} from './depth-lines.mjs?v=vda1-final';
-import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
-import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
-import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './video-link.mjs?v=vda1-phone2';
+import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=vda2';
+import {palmSize} from './palm-distance.mjs?v=vda2';
+import {createRoom} from './room.mjs?v=vda2';
+import {supportedContact} from './surface-contact.mjs?v=vda2';
+import {fitHeadGrip} from './head-grip.mjs?v=vda2';
+import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=vda2';
+import {installCombinedUI} from './combined-ui.mjs?v=vda2';
+import {CombinedHead} from './head-model.mjs?v=vda2';
+import {directDriver} from './direct.mjs?v=vda2';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=vda2';
+import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=vda2';
+import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=vda2';
+import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=vda2';
+import {receivePhone} from './video-link.mjs?v=vda2';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
-import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile,lockedAxis,constrainJoint,constrainAngles,directionAngles} from './profile.mjs?v=8-final';
+import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile,lockedAxis,constrainJoint,constrainAngles,directionAngles} from './profile.mjs?v=vda2';
 const $=id=>document.getElementById(id),clone=x=>JSON.parse(JSON.stringify(x)),RAD=Math.PI/180,KEY='hand-video-depth-profile';
 let profile=emptyProfile();try{const saved=localStorage.getItem(KEY);if(saved)profile=validateProfile(JSON.parse(saved));}catch{$('notice').textContent='Saved profile could not be read. Import your JSON backup to recover it.';}
 let lastStatsTime=0,lastPreviewTime=-Infinity,combined=null,liveSession=null,getCombinedOptions=()=>trackingDefaults,trackingStats=null;
@@ -168,10 +168,10 @@ function drawPreview(source,landmarks){if(stream&&$('video').readyState>=2)sourc
  for(let i=0;i<21;i++){ctx.beginPath();ctx.arc(...point(i),i%4===0?4:2.5,0,Math.PI*2);ctx.fill();}
 }
 }
-function ensureWorker(){if(workerReady)return workerReady;worker=new Worker(new URL('./tracker.mjs?v=alien18.4&task=hands&delegate=GPU',import.meta.url),{type:'module'});
+function ensureWorker(){if(workerReady)return workerReady;worker=new Worker(new URL('./tracker.mjs?v=vda2',import.meta.url),{type:'module'});
  workerReady=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out')),45000);worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();return;}if(data.type==='error'){if(request){request.reject(Error(data.message));request=null;}else{clearTimeout(timer);reject(Error(data.message));}return;}if(request&&data.type==='result'){request.resolve(data);request=null;}};worker.onerror=e=>{clearTimeout(timer);if(request){request.reject(Error(e.message));request=null;}reject(Error(e.message));};worker.postMessage({type:'init'});});return workerReady;}
 async function detectAuxFrame(frame,time,task){
- const bitmap=await createImageBitmap(frame),w=new Worker(new URL('./tracker.mjs?v=alien18.4&task='+task+'&delegate=GPU',import.meta.url),{type:'module'});
+ const bitmap=await createImageBitmap(frame),w=new Worker(new URL('./tracker.mjs?v=vda2'+task+'&delegate=GPU',import.meta.url),{type:'module'});
  let sent=false;
  try{return await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Face image tracker timed out')),60000);const finish=(f,v)=>{clearTimeout(timer);f(v);};w.onerror=e=>finish(reject,Error(e.message));w.onmessage=({data})=>{if(data.type==='ready'){sent=true;w.postMessage({type:'frame',bitmap,time},[bitmap]);}else if(data.type==='result')finish(resolve,data);else if(data.type==='error')finish(reject,Error(data.message));};w.postMessage({type:'init'});});}finally{if(!sent)bitmap.close();w.terminate();}
 }
@@ -348,7 +348,7 @@ Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
 Scene: ${measuredScene} measured FPS (target ${o.sceneRate})${Object.keys(s.errors||{}).length?' · '+JSON.stringify(s.errors):''}`;}
 window.combinedLab={version:19,get head(){return combined;},get metrics(){return trackingStats;},get handResult(){return directResult;},get scene(){return scene;}};
-notice('Video Depth 1 ready. Record one front-to-neck sweep; tracking runs on the PC.');
+notice('Video Depth 2 ready. Record one front-to-neck sweep; tracking runs on the PC.');
 combined.ready.then(()=>{if(combined.error)notice('Head model failed to load: '+combined.error);});
 
 const fixtureName=new URLSearchParams(location.search).get('fixture');
@@ -505,7 +505,7 @@ for(const id of ['fingerNoise','directionSmoothing','confirmJump','movementThres
 for(const d of $('directSettings').querySelectorAll('details'))if(d.querySelector('summary')?.textContent==='Jiggle')d.style.setProperty('display','none','important');
 const pipelineInfo=document.createElement('p');pipelineInfo.textContent='The sweep jointly calibrates both hands and the head/neck/shoulders. Hand size and depth change together once, preserving camera alignment. The fitted scales stay fixed afterward. Edge-on palms hold the last reliable depth.';$('directSettings').prepend(pipelineInfo);
 
-depthExperiment=installExperiment({container:$('directSettings'),getHead:()=>combined,getFocal:aspect=>1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),onReference:fit=>{depthMap?.reset();palmDepth.reset();if(combined){combined.neckFitScale=fit?.headScale??1;combined.neckFitOffset.fromArray(fit?.headOffset??[0,0,0]);}},getNeckReference:(hand,points,aspect)=>{if(!points)return null;const palm=[0,5,9,13,17].reduce((v,i)=>v.add(points[i]),new THREE.Vector3()).multiplyScalar(.2);const surface=palmSurface(rig,hand.label==='Left'?'L':'R',palm);if(!surface)return null;return combined?.neckReference(surface,1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),points[0]);},onBegin:()=>{depthMap?.reset();controls.enabled=false;$('cameraProjection').value='perspective';$('viewMode').value='mirror';setViewMode();palmDepth.reset();}});
+depthExperiment=installExperiment({container:$('directSettings'),getHead:()=>combined,getFocal:aspect=>1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),onReference:fit=>{depthMap?.reset();palmDepth.reset();if(combined){combined.neckFitScale=fit?.headScale??1;combined.neckFitOffset.fromArray(fit?.headOffset??[0,0,0]);}},getNeckReference:(hand,points,aspect)=>{if(!points)return null;const palm=[0,5,9,13,17].reduce((v,i)=>v.add(points[i]),new THREE.Vector3()).multiplyScalar(.2);const surface=palmSurface(rig,hand.label==='Left'?'L':'R',palm);if(!surface)return null;const ref=combined?.neckReference(surface,1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),points[0]);const shoulders=Object.values(combined?.mappedShoulders??{});if(ref&&shoulders.length===2){ref.shoulderDepth=-(shoulders[0].z+shoulders[1].z)/2;ref.shoulderPoint=shoulders[0].clone().add(shoulders[1]).multiplyScalar(.5).toArray();}return ref;},onBegin:()=>{depthMap?.reset();controls.enabled=false;$('cameraProjection').value='perspective';$('viewMode').value='mirror';setViewMode();palmDepth.reset();}});
 
 $('relaxedPalm').checked=false;$('contactThreshold').value=0;$('contactThreshold').nextElementSibling.value=0;
 

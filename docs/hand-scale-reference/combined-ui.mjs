@@ -1,4 +1,4 @@
-import {installExperiments} from './experiment-ui.mjs?v=15.8';
+import {installExperiments} from './experiment-ui.mjs?v=scale0925v2';
 export function installCombinedUI(){
  const $=id=>document.getElementById(id),container=$('directSettings');
  const details=(title,open=false)=>{const d=document.createElement('details');d.className='settingTab';d.open=open;const s=document.createElement('summary');s.textContent=title;d.append(s);return d;};

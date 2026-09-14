@@ -1,4 +1,4 @@
-import {findTouchPair,solveTouchDepth} from './hand-pair-depth.mjs?v=vda1-final';
+import {findTouchPair,solveTouchDepth} from './hand-pair-depth.mjs?v=vda2';
 // Temporary per-frame correction: never write to the captured sweep mapping.
 export class HandContactAssist {
  constructor(){this.reset();}

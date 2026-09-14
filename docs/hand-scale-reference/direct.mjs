@@ -1,7 +1,7 @@
-import {limitBaseSplay} from './base-splay-limit.mjs?v=touch2.4';
+import {limitBaseSplay} from './base-splay-limit.mjs?v=scale0925v2';
 import * as T from 'three';
-import {DirectionStabilizer,fingerPlane,constrainFinger} from './stability.mjs?v=17';
-import {ContactLatch,fitContact} from './contact-direct.mjs?v=17';
+import {DirectionStabilizer,fingerPlane,constrainFinger} from './stability.mjs?v=scale0925v2';
+import {ContactLatch,fitContact} from './contact-direct.mjs?v=scale0925v2';
 const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';

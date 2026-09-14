@@ -1,5 +1,5 @@
 import * as T from 'three';
-import {Surface} from './connected-rig.mjs?v=demo11d';
+import {Surface} from './connected-rig.mjs?v=vda2';
 import neutral from './neutral-face.mjs';
 
 // Bind neutral decorative landmarks once to the original rigid doll head.

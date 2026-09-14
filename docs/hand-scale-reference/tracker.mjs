@@ -1,4 +1,4 @@
-import {faceIds} from './face-overlay.mjs?v=20';
+import {faceIds} from './face-overlay.mjs?v=scale0925v2';
 const MP='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1',base='https://storage.googleapis.com/mediapipe-models/';
 const params=new URLSearchParams(self.location.search),task=params.get('task')||'hands',preferred=params.get('delegate')||'GPU',fullBody=params.get('fullBody')==='1';
 let tracker;

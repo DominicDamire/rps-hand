@@ -7,7 +7,7 @@ export function installVideoReplay({container,onStart,onFrame,onView,onCalibrate
  const canvas=document.createElement('canvas'),context=canvas.getContext('2d');let frames=[],token=0,url=null,ready=false,workers=[],lastIndex=-1,run=0,checkIndex=null,calibrating=false;
  function stop(){checkIndex=null;calibrating=false;token++;ready=false;video.pause();workers.forEach(w=>w.close());workers=[];frames=[];lastIndex=-1;play.disabled=restart.disabled=seek.disabled=true;if(url){URL.revokeObjectURL(url);url=null;}video.removeAttribute('src');video.load();}
  async function seekTo(t){if(Math.abs(video.currentTime-t)<1e-5&&video.readyState>=2)return;await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{cleanup();reject(Error('Video seek timed out'));},10000),done=()=>{cleanup();resolve();},cleanup=()=>{clearTimeout(timeout);video.removeEventListener('seeked',done);};video.addEventListener('seeked',done,{once:true});video.currentTime=t;});}
- function worker(task){const w=new Worker(new URL('./tracker.mjs?v=touch2.4.2&task='+task+'&delegate=GPU',import.meta.url),{type:'module'});let pending=null;
+ function worker(task){const w=new Worker(new URL('./tracker.mjs?v=scale0925v2'+task+'&delegate=GPU',import.meta.url),{type:'module'});let pending=null;
   const receive=()=>new Promise((resolve,reject)=>{const timer=setTimeout(()=>{pending=null;reject(Error(task+' tracker timed out'));},60000);pending={resolve:x=>{clearTimeout(timer);resolve(x);},reject:e=>{clearTimeout(timer);reject(e);}};});
   w.onmessage=({data})=>{if(!pending)return;const p=pending;pending=null;data.type==='error'?p.reject(Error(data.message)):p.resolve(data);};w.onerror=e=>{pending?.reject(Error(e.message));pending=null;};
   const started=receive();w.postMessage({type:'init'});

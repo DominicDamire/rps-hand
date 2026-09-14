@@ -1,11 +1,11 @@
 import * as T from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {RiggedAvatar} from '../avatar/RiggedAvatar.js?v=80';
-import {BodyPose,upperBodyPose} from '../body/pose.mjs?v=80';
-import {startTracking,defaults} from './tracking-session.mjs?v=demo9';
-import {receivePhone} from './phone-link.mjs?v=demo9';
-import {drawFace,drawUpperBody} from './face-overlay.mjs?v=demo9';
-import {createRoom} from './room.mjs?v=demo9';
+import {BodyPose,upperBodyPose} from '../body/pose.mjs?v=scale0925v2';
+import {startTracking,defaults} from './tracking-session.mjs?v=scale0925v2';
+import {receivePhone} from './phone-link.mjs?v=scale0925v2';
+import {drawFace,drawUpperBody} from './face-overlay.mjs?v=scale0925v2';
+import {createRoom} from './room.mjs?v=scale0925v2';
 const $=id=>document.getElementById(id),notice=s=>$('notice').textContent=s;
 const controlsSpec=[['cameraFps','Camera capture target (FPS)',15,60,15,30,'Requests a rate; camera and browser may deliver less. Reconnect after changing.'],['shoulderRate','Body measurements / second',0,60,1,30,'Potentially reduces FPS. Zero stops the body tracker.'],['faceRate','Head measurements / second',0,60,1,30,'Potentially reduces FPS. Uses head rotation only; no facial expression classifier. Zero disables it.'],['trackingWidth','Tracking image width',192,640,32,320,'Higher capture resolution costs processing time.'],['sceneRate','3D scene frame rate',15,60,5,60,'Rendering only; does not create extra tracking measurements.'],['renderScale','Render resolution',.5,2,.25,1,'Potentially reduces FPS: 2× renders approximately four times the pixels.'],['overlayRate','Camera overlay frame rate',0,60,1,30,'Zero hides the overlay. Higher values redraw lines more frequently.']];
 const row=([id,title,min,max,step,value,help])=>`<label>${title}<input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}"><output>${value}</output><small>${help}</small></label>`;

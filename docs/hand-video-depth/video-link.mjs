@@ -1,4 +1,4 @@
-import {phoneCameraURL} from './phone-url.mjs?v=vda1-phone2';
+import {phoneCameraURL} from './phone-url.mjs?v=vda2';
 // Separate lab pairing namespace; never shares the game's camera code.
 const config={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},{urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}]};
 export function receivePhone(onStream,onStatus,onEnd){

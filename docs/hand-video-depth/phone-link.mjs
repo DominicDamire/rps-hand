@@ -1,8 +1,8 @@
-import {drawFace,drawShoulders,drawUpperBody,encodeAux,decodeAux} from './face-overlay.mjs?v=demo9';
-import {startTracking,defaults} from './tracking-session.mjs?v=demo10';
+import {drawFace,drawShoulders,drawUpperBody,encodeAux,decodeAux} from './face-overlay.mjs?v=vda2';
+import {startTracking,defaults} from './tracking-session.mjs?v=vda2';
 // Cross-device link: the phone runs hand tracking and sends landmark numbers.
 // This avoids peer-to-peer video, which commonly fails across NATs and guest Wi-Fi.
-import {connectLink,packHands,unpackHands} from '../movement/link.mjs?v=91';
+import {connectLink,packHands,unpackHands} from '../movement/link.mjs?v=vda2';
 
 const validCode=code=>/^\d{6}$/.test(code);
 const newCode=()=>String(100000+Math.floor(Math.random()*900000));

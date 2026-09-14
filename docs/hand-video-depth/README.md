@@ -1,9 +1,11 @@
-# Video Depth 1
+# Video Depth 2
 
-Separate Sweep 2.4.18 fork with official Metric Video Depth Anything Small streaming inference on a loopback PC helper. See setup.html and tools/setup-vda.ps1. Weights and runtime are outside the repository. Preview defaults on only after Start; positional contribution defaults off and is never persisted on reload.
+Phone QR receiver plus official Metric Video Depth Anything Small, running on local CPU or DirectML GPU. GPU is selected by default in the page; unavailable GPU runtime is reported, not silently relabelled CPU. setup-vda-gpu.ps1 installs a separate Python 3.12 / torch 2.4.1 DirectML environment. prepare_directml.py skips autocast in FP32 only. Start script prefers that environment.
 
-The optional module samples wrist/MCP palm regions, anchors each hand to a frozen map/base reference, and blends 25% map estimate with 75% calibrated palm distance. It rejects stale, moved, noisy or disagreeing observations. It pauses during the sweep. Sweep rear-plane and explicit contact options run afterward. It is a conservative experiment, not measured depth or a replacement for the sweep.
+Frame resizing bounds both dimensions at 640, including portrait phone video. Real 360x640 and 640x360 inference tested. No artificial 200 ms scheduling pause; one request in flight. GPU tested on AMD RX 6600 with real outputs and CPU/GPU/quality switching. Cold frames are slower and throughput depends on load.
 
-Tests: real CPU inference on two sequential frames, browser preview, fusion regression tests and inherited sweep geometry tests. Sample CPU inference was 148/254 ms at 224 input size; sustained browser preview approximately 2.5 updates/s including scheduling. Live phone accuracy is not established by these checks.
+Depth contribution 0–100%, default 25%, enable checkbox off by default. 100% uses only the anchored depth map after initialization and holds last map depth on stale/unreliable observations; it does not fall back to palm depth. Lower percentages blend with palm depth; unusable maps fall back to palm. The initial map scale is anchored to the current placement, so this is relative map motion rather than absolute sensor distance. Optional sweep and shoulder distance reference apply to both hands/bust; collision and rear-plane constraints still apply afterward.
 
-Official source revision: 4f5ae23172ba60fd7bc11ef671cca678842c7072. See upstream license and model usage terms. No upstream weights or private recordings are published here.
+The engine serves the local preview at 127.0.0.1:8788. QR URLs always point at the public HTTPS phone sender, not localhost. Camera frames are neither saved nor uploaded by this engine. Browser privacy rules can block the public page from calling the local engine; use its direct PC preview in that case.
+
+Tests cover 0/50/100 percent blending, stale full-map hold despite changing palm depth, source/pose rejection, shoulder calibration invariance, phone stream receiving without PC getUserMedia, public QR routing and real portrait/landscape inference. Live tracking accuracy still requires user testing.

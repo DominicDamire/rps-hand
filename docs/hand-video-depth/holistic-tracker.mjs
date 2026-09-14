@@ -1,4 +1,4 @@
-import {acceptPersonHand} from './person-hand.mjs?v=alien16.3';
+import {acceptPersonHand} from './person-hand.mjs?v=vda2';
 const MP='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1';let tracker,draw,maskCanvas,imageMode=false;const gpuCanvas=new OffscreenCanvas(1,1);
 self.onmessage=async({data})=>{try{
  if(data.type==='init'){
