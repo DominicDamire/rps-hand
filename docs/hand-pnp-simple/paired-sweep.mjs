@@ -1,7 +1,7 @@
-import {palmObservation} from './palm-sweep-depth.mjs?v=pnpsimple1';
+import {palmObservation} from './palm-sweep-depth.mjs?v=pnpsimple2';
 import {imagePalmSize} from './size-wall-depth.mjs';
-import {solveTouchDepth} from './hand-pair-depth.mjs?v=pnpsimple1';
-import {sweepEndpoints} from './one-hand-sweep.mjs?v=pnpsimple1';
+import {solveTouchDepth} from './hand-pair-depth.mjs?v=pnpsimple2';
+import {sweepEndpoints} from './one-hand-sweep.mjs?v=pnpsimple2';
 const median=a=>[...a].sort((a,b)=>a-b)[Math.floor(a.length/2)];
 const sub=(a,b)=>a.map((v,i)=>v-b[i]);
 

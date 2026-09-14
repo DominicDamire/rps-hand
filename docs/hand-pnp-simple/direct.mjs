@@ -1,7 +1,7 @@
-import {limitBaseSplay} from './base-splay-limit.mjs?v=pnpsimple1';
+import {limitBaseSplay} from './base-splay-limit.mjs?v=pnpsimple2';
 import * as T from 'three';
-import {DirectionStabilizer,fingerPlane,constrainFinger} from './stability.mjs?v=pnpsimple1';
-import {ContactLatch,fitContact} from './contact-direct.mjs?v=pnpsimple1';
+import {DirectionStabilizer,fingerPlane,constrainFinger} from './stability.mjs?v=pnpsimple2';
+import {ContactLatch,fitContact} from './contact-direct.mjs?v=pnpsimple2';
 const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';

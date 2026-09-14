@@ -1,35 +1,35 @@
 import {loadCV} from './opencv-core.mjs';
-import {solvePalmPose} from './palm-pnp.mjs?v=pnpsimple1';
+import {solvePalmPose} from './palm-pnp.mjs?v=pnpsimple2';
 let poseCV=null;const poseStates={};
-import {fitWholeHand} from './whole-hand-placement.mjs?v=pnpsimple1';
-import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=pnpsimple1';
-import {rearPlaneCorrection} from './neck-sweep.mjs?v=pnpsimple1';
-import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=pnpsimple1';
+import {fitWholeHand} from './whole-hand-placement.mjs?v=pnpsimple2';
+import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=pnpsimple2';
+import {rearPlaneCorrection} from './neck-sweep.mjs?v=pnpsimple2';
+import {palmObservation,PalmSweepDepth} from './palm-sweep-depth.mjs?v=pnpsimple2';
 const palmDepth=new PalmSweepDepth();
-import {TrackingJitter} from './tracking-jitter.mjs?v=pnpsimple1';
+import {TrackingJitter} from './tracking-jitter.mjs?v=pnpsimple2';
 const trackingJitter=new TrackingJitter();
-import {OuterCollision} from './outer-collision.mjs?v=pnpsimple1';
-import {HandContactAssist} from './hand-contact-assist.mjs?v=pnpsimple1';
-import {installExperiment} from './experiment.mjs?v=pnpsimple1';
+import {OuterCollision} from './outer-collision.mjs?v=pnpsimple2';
+import {HandContactAssist} from './hand-contact-assist.mjs?v=pnpsimple2';
+import {installExperiment} from './experiment.mjs?v=pnpsimple2';
 let depthExperiment=null;
-import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=pnpsimple1';
-import {palmSize} from './palm-distance.mjs?v=pnpsimple1';
-import {createRoom} from './room.mjs?v=pnpsimple1';
-import {supportedContact} from './surface-contact.mjs?v=pnpsimple1';
-import {fitHeadGrip} from './head-grip.mjs?v=pnpsimple1';
-import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=pnpsimple1';
-import {installCombinedUI} from './combined-ui.mjs?v=pnpsimple1';
-import {CombinedHead} from './head-model.mjs?v=pnpsimple1';
-import {directDriver} from './direct.mjs?v=pnpsimple1';
-import {reduceFalseDepthBends} from './depth-lines.mjs?v=pnpsimple1';
-import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=pnpsimple1';
-import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=pnpsimple1';
-import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=pnpsimple1';
-import {receivePhone} from './video-link.mjs?v=pnpsimple1';
+import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=pnpsimple2';
+import {palmSize} from './palm-distance.mjs?v=pnpsimple2';
+import {createRoom} from './room.mjs?v=pnpsimple2';
+import {supportedContact} from './surface-contact.mjs?v=pnpsimple2';
+import {fitHeadGrip} from './head-grip.mjs?v=pnpsimple2';
+import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=pnpsimple2';
+import {installCombinedUI} from './combined-ui.mjs?v=pnpsimple2';
+import {CombinedHead} from './head-model.mjs?v=pnpsimple2';
+import {directDriver} from './direct.mjs?v=pnpsimple2';
+import {reduceFalseDepthBends} from './depth-lines.mjs?v=pnpsimple2';
+import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=pnpsimple2';
+import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=pnpsimple2';
+import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=pnpsimple2';
+import {receivePhone} from './video-link.mjs?v=pnpsimple2';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
-import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile,lockedAxis,constrainJoint,constrainAngles,directionAngles} from './profile.mjs?v=pnpsimple1';
+import {FINGERS,JOINTS,blankAngles,emptyProfile,features,matchPose,clampAngles,validateProfile,lockedAxis,constrainJoint,constrainAngles,directionAngles} from './profile.mjs?v=pnpsimple2';
 const $=id=>document.getElementById(id),clone=x=>JSON.parse(JSON.stringify(x)),RAD=Math.PI/180,KEY='hand-pnp-simple-profile';
 let profile=emptyProfile();try{const saved=localStorage.getItem(KEY);if(saved)profile=validateProfile(JSON.parse(saved));}catch{$('notice').textContent='Saved profile could not be read. Import your JSON backup to recover it.';}
 let lastStatsTime=0,lastPreviewTime=-Infinity,combined=null,liveSession=null,getCombinedOptions=()=>trackingDefaults,trackingStats=null;
@@ -126,9 +126,8 @@ function applyHandInteractions(now){
 }
 function cameraPoints(world,lm){const points=rawSizePoints(world,lm);return $('falseDepth')?.checked?reduceFalseDepthBends(points,lm,$('preview').width,$('preview').height,!camera.isOrthographicCamera):points;}
 function rawSizePoints(world,lm){
- if(!modelPalmSpan){const spans=[];for(const S of ['R','L'])for(const [a,b] of [['Hand','Index1'],['Hand','Middle1'],['Hand','Ring1'],['Hand','Pinky1'],['Index1','Pinky1']])spans.push(rig.rest[S+a].world.distanceTo(rig.rest[S+b].world));spans.sort((a,b)=>a-b);modelPalmSpan=(spans[4]+spans[5])/2;}
- const size=imagePalmSize(lm,captureAspect),frame=cameraFrame(captureAspect,camera.aspect),focal=1/(2*Math.tan(Math.PI/6)*frame.height);
- const baseDepth=sizeDepth(size,{size:modelPalmSpan*focal,depth:1},depthStates[side]?.depth||.5),depth=baseDepth;depthStates[side]={depth};
+ // No apparent-size estimator: fixed startup depth, then the last solved PnP depth.
+ const depth=poseStates[side]?.fit?.translation[2]??.5;
  const length=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world),observed=Math.max(.01,Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z));
  // Relative MediaPipe Z still describes finger articulation, never root distance.
  return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,Math.max(.04,depth+(getCombinedOptions().handDistance||0)/100),length/observed).map(p=>new THREE.Vector3().fromArray(p).add(new THREE.Vector3(0,(getCombinedOptions().handHeight||0)/100,0)));
@@ -170,10 +169,10 @@ function drawPreview(source,landmarks){if(stream&&$('video').readyState>=2)sourc
  for(let i=0;i<21;i++){ctx.beginPath();ctx.arc(...point(i),i%4===0?4:2.5,0,Math.PI*2);ctx.fill();}
 }
 }
-function ensureWorker(){if(workerReady)return workerReady;worker=new Worker(new URL('./tracker.mjs?v=pnpsimple1',import.meta.url),{type:'module'});
+function ensureWorker(){if(workerReady)return workerReady;worker=new Worker(new URL('./tracker.mjs?v=pnpsimple2',import.meta.url),{type:'module'});
  workerReady=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out')),45000);worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();return;}if(data.type==='error'){if(request){request.reject(Error(data.message));request=null;}else{clearTimeout(timer);reject(Error(data.message));}return;}if(request&&data.type==='result'){request.resolve(data);request=null;}};worker.onerror=e=>{clearTimeout(timer);if(request){request.reject(Error(e.message));request=null;}reject(Error(e.message));};worker.postMessage({type:'init'});});return workerReady;}
 async function detectAuxFrame(frame,time,task){
- const bitmap=await createImageBitmap(frame),w=new Worker(new URL('./tracker.mjs?v=pnpsimple1'+task+'&delegate=GPU',import.meta.url),{type:'module'});
+ const bitmap=await createImageBitmap(frame),w=new Worker(new URL('./tracker.mjs?v=pnpsimple2'+task+'&delegate=GPU',import.meta.url),{type:'module'});
  let sent=false;
  try{return await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Face image tracker timed out')),60000);const finish=(f,v)=>{clearTimeout(timer);f(v);};w.onerror=e=>finish(reject,Error(e.message));w.onmessage=({data})=>{if(data.type==='ready'){sent=true;w.postMessage({type:'frame',bitmap,time},[bitmap]);}else if(data.type==='result')finish(resolve,data);else if(data.type==='error')finish(reject,Error(data.message));};w.postMessage({type:'init'});});}finally{if(!sent)bitmap.close();w.terminate();}
 }
@@ -530,12 +529,12 @@ function placePalmBeforeFingers(points,s,q){
   const begin=performance.now(),fit=h.confidence>=.5?solvePalmPose(poseCV,model,h.landmarks,captureAspect,focal,state?.fit):null;
   state=poseStates[s]={lm:h.landmarks,aspect:captureAspect,fit:fit??state?.fit,valid:!!fit,ms:performance.now()-begin};
  }
- const fit=state.fit;if(!fit){if($('pnpStatus'))$('pnpStatus').textContent='Waiting for a reliable palm pose; temporary initial placement.';return points;}
+ const fit=state.fit;if(!fit){if($('pnpStatus'))$('pnpStatus').textContent='No valid PnP pose yet. Fixed placeholder at 50 model cm; sweep cannot use it.';return points;}
  const r=fit.matrix,m=new THREE.Matrix4().set(r[0],r[1],r[2],0,-r[3],-r[4],-r[5],0,-r[6],-r[7],-r[8],0,0,0,0,1);q.setFromRotationMatrix(m);
  const length=rig.rest[s+'Middle1'].world.distanceTo(rig.rest[s+'Hand'].world),w=h.world,observed=Math.max(.01,Math.hypot(w[9].x-w[0].x,w[9].y-w[0].y,w[9].z-w[0].z));
  const result=liftCameraLandmarks(h.landmarks,w,captureAspect,camera.aspect,fit.translation[2],length/observed).map(p=>new THREE.Vector3().fromArray(p));
  result[0].set(fit.translation[0],-fit.translation[1],-fit.translation[2]);
- if($('pnpStatus'))$('pnpStatus').textContent=Object.entries(poseStates).map(([side,v])=>side+': '+(v.valid?'PnP':'holding last valid pose')+' · '+(v.fit?((v.fit.error*$('preview').height).toFixed(1)+' px fit'):'no fit')+' · '+v.ms.toFixed(1)+' ms').join(' / ');
+ if($('pnpStatus'))$('pnpStatus').textContent=Object.entries(poseStates).map(([side,v])=>side+': '+(v.valid?'PnP':'holding last valid pose')+' · '+(v.fit?((v.fit.error*$('preview').height).toFixed(1)+' px fit'):'no fit')+' · '+v.ms.toFixed(1)+' ms'+(v.fit?' · raw Z '+(v.fit.translation[2]*100).toFixed(1)+' cm':'' )).join(' / ');
  return result;
 }
 

@@ -1,5 +1,4 @@
-import {palmObservation} from './palm-sweep-depth.mjs?v=pnpsimple1';
-import {sweepEndpoints} from './one-hand-sweep.mjs?v=pnpsimple1';
+import {sweepEndpoints} from './one-hand-sweep.mjs?v=pnpsimple2';
 const median=a=>[...a].sort((a,b)=>a-b)[Math.floor(a.length/2)];
 export const PHONE_TILT_DEGREES=10;
 // Assume a phone leaning back, with its camera looking 10 degrees upward.
@@ -9,8 +8,8 @@ export function roomDepth(p,tilt=PHONE_TILT_DEGREES){
  const angle=tilt*Math.PI/180;return -p[1]*Math.sin(angle)-p[2]*Math.cos(angle);
 }
 function observation(s){
- const o=palmObservation(s.landmarks,s.points,s.aspect,s.focal);
- if(!o?.reliable)return null;
+ // Samples already require a successful PnP fit; no size/foreshortening gate.
+ if(!s.points?.length||!s.points.every(p=>p.length===3&&p.every(Number.isFinite)))return null;
  const depth=-s.points[0][2],base=depth;
  if(!(depth>.04&&depth<4&&base>0))return null;
  const points=s.points.map(p=>p.map((v,i)=>v+s.points[0][i]*(depth-base)/base));
