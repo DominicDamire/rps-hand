@@ -1,3 +1,5 @@
+import {installFirstPersonCamera} from '../hand-sweep-neck/first-person-camera.mjs?v=eye18';
+let firstPerson=null;
 import {installDistanceCalibration} from '../hand-sweep-neck/distance-calibration.mjs?v=assist16';
 const installExperiment=document.body.dataset.mapLab?installLegacyExperiment:installDistanceCalibration;
 let mapLab=null;
@@ -253,7 +255,7 @@ $('import').onchange=async e=>{try{if(e.target.files[0])importText(await e.targe
 $('importPaste').onclick=()=>{try{importText($('jsonText').value);}catch(e){notice('Import rejected: '+e.message);}};
 $('png').onclick=()=>{renderDemo();const c=document.createElement('canvas');c.width=1400;c.height=850;const ctx=c.getContext('2d');ctx.fillStyle='#10151d';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#edf6ff';ctx.font='bold 25px system-ui';ctx.fillText('Hand Pose Lab — '+($('poseName').value||'Live comparison'),28,42);ctx.font='16px system-ui';ctx.fillText(editing?'Frozen input and corrected model':'Latest tracked frame and model',28,74);const fit=(img,x,y,w,h)=>{const a=img.width/img.height;let iw=w,ih=w/a;if(ih>h){ih=h;iw=h*a;}if(img===$('scene')&&$('viewMode').value!=='first'){ctx.save();ctx.translate(x+(w+iw)/2,y+(h-ih)/2);ctx.scale(-1,1);ctx.drawImage(img,0,0,iw,ih);ctx.restore();}else ctx.drawImage(img,x+(w-iw)/2,y+(h-ih)/2,iw,ih);};fit($('preview'),24,100,510,710);fit($('scene'),560,100,810,710);c.toBlob(blob=>{if(blob)download(blob,'hand-pose-comparison.png');});};
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set(1-(e.clientX-rect.left)/rect.width*2,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children.filter(m=>m.visible))[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
-await rig.ready;const {snapshotModel,installSweepSettings}=await import('./settings.mjs?v=assist16');const restoreModel=snapshotModel(rig);const photoReport=fitPhotoHand(rig);
+await rig.ready;const {snapshotModel,installSweepSettings}=await import('./settings.mjs?v=eye18');const restoreModel=snapshotModel(rig);const photoReport=fitPhotoHand(rig);
 tips=buildTips(rig);for(const S of ['R','L'])for(const [f,name]of ['Thumb','Index','Middle','Ring','Pinky'].entries())tips[S+name].copy(rig.photoReference.targets[S][4+4*f]).sub(rig.photoReference.targets[S][3+4*f]);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>{resetHandScale(rig,args[1]);args[0]=placePalmBeforeFingers(relaxedPoints(args[0],args[1],args[2],args[3]),args[1],args[2]);let result=drivers[args[1]](...args);if(mapLab)result=mapLab.drive(args[1],args[2],result,args[3]);applyHandScale(rig,args[1],result,depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);mapLab?.scale(args[1],depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);applyDisplayOffset(args[1],result);return keepHandBeforeWall(args[1],result);};let directResult=null;
 function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,confirmDegrees:+$('confirmJump').value,noiseDegrees:+$('fingerNoise').value,smoothingMs:+$('directionSmoothing').value,movementThresholdMm:+$('movementThreshold').value,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,contactPixels:attach,contactReleasePixels:Math.max(attach,+$('contactRelease').value),handSize:+$('handSize').value,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm,fitImage:false,width:$('preview').width,height:$('preview').height};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
@@ -390,6 +392,7 @@ function demoContactAdjust(points,lm){
 function demoAdjust(points,lm){demoContactAdjust(points,lm);}
 // Separate depth buffer for hands: preserves their coordinates and perspective size.
 function renderDemo(){
+ if(firstPerson?.render())return;
  if(mapLab&&!depthExperiment?.recording){mapLab.render();return;}
  // Hands and bust share the depth buffer: contact must be spatial, not an overlay.
  for(const m of rig.parts)m.layers.set(0);
@@ -610,7 +613,8 @@ if(document.body.dataset.mapLab){
  controls.enabled=false;document.title='Dust II · Sweep hands';document.querySelector('header b').textContent='Dust II · Sweep hands';
 }
 
-if(!document.body.dataset.mapLab)installSweepSettings({rig,hands:()=>allHands,aspect:()=>captureAspect,applyModel:referencePoints=>{
+if(!document.body.dataset.mapLab)firstPerson=installFirstPersonCamera({version:'Sweep',scene,renderer,getHead:()=>combined,isCalibrating:()=>depthExperiment?.recording||depthExperiment?.checking,onViewChange:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();}});
+if(!document.body.dataset.mapLab)installSweepSettings({cameraPanel:firstPerson.panel,rig,hands:()=>allHands,aspect:()=>captureAspect,applyModel:referencePoints=>{
  restoreModel();fitPhotoHand(rig,{referencePoints});for(const key of Object.keys(basisCache))delete basisCache[key];
  tips=buildTips(rig);for(const S of ['R','L'])for(const [f,name]of FINGERS.entries())tips[S+name].copy(rig.photoReference.targets[S][4+4*f]).sub(rig.photoReference.targets[S][3+4*f]);
  for(const S of ['R','L'])drivers[S]=directDriver(rig,tips);

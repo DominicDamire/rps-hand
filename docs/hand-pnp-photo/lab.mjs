@@ -1,3 +1,5 @@
+import {installFirstPersonCamera} from '../hand-sweep-neck/first-person-camera.mjs?v=eye18';
+let firstPerson=null;
 import {installDistanceCalibration} from '../hand-sweep-neck/distance-calibration.mjs?v=assist16';
 const installExperiment=document.body.dataset.gunLab?installLegacyExperiment:installDistanceCalibration;
 import {fitPhotoHand} from './photo-hand.mjs?v=flat11';
@@ -403,6 +405,7 @@ function demoContactAdjust(points,lm){
 function demoAdjust(points,lm){demoContactAdjust(points,lm);}
 // Separate depth buffer for hands: preserves their coordinates and perspective size.
 function renderDemo(){
+ if(firstPerson?.render())return;
  // Hands and bust share the depth buffer: contact must be spatial, not an overlay.
  for(const m of rig.parts)m.layers.set(0);
  camera.layers.set(0);renderer.autoClear=true;renderer.render(scene,camera);
@@ -664,4 +667,5 @@ function applyDisplayOffset(s,result){
  translateHand(rig,s,result,delta.toArray());
 }
 
-if(!document.body.dataset.gunLab){const {installSweepSettings}=await import('../hand-sweep-neck/settings.mjs?v=assist16');installSweepSettings({version:'PnP',isDistanceRecording:()=>depthExperiment?.recording});document.getElementById('sweep-hand-model').append(photoInfo,photoLink);}
+if(!document.body.dataset.gunLab)firstPerson=installFirstPersonCamera({version:'PnP',scene,renderer,getHead:()=>combined,isCalibrating:()=>depthExperiment?.recording||depthExperiment?.checking,onViewChange:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();}});
+if(!document.body.dataset.gunLab){const {installSweepSettings}=await import('../hand-sweep-neck/settings.mjs?v=eye18');installSweepSettings({cameraPanel:firstPerson.panel,version:'PnP',isDistanceRecording:()=>depthExperiment?.recording});document.getElementById('sweep-hand-model').append(photoInfo,photoLink);}

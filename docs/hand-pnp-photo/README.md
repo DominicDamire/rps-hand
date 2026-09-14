@@ -49,3 +49,9 @@ PnP and Sweep use the same six-tab settings layout. Shake reduction starts enabl
 Distance offers two still captures (near, then neck, each requiring two steady seconds and showing a picture) or a five-second preparation followed by an eight-second video sweep. Both methods call the selected version’s existing neck-fit calculation. They calibrate relative size/depth and neck placement, not finger shape or neutral angles. The map and gun pages keep their earlier UI.
 
 Validation: browser workflow harness completed both methods for both estimators, including image capture and reset; settings checks verified saved shake/filter choices and toggles. Existing capture, PnP endpoint, 540 palm-projection cases, and video timing tests pass. These checks are not a measurement of live physical accuracy.
+
+## Eye18: first-person camera
+
+A separate First-person camera tab enables an eye-anchored viewing camera, default FOV 90 degrees, with offsets of 5 mm upward and forward. It follows the rendered eye midpoint and optionally head rotation. Controls cover XYZ offsets, yaw/pitch/roll, 40–120 degree FOV, near clipping, hiding the own bust, and reset. Camera settings persist separately per version. Tracking retains its existing camera projection and depth solver. Distance recording/checking temporarily displays the camera mirror. A missing face holds the last eye position; before first detection, the view is provisional.
+
+Browser checks verify tracked eye following and the controls. A camera geometry harness verifies forward orientation, eye-covering projection, head translation, 90-degree default, temporary own-bust hiding/restoration, and calibration view bypass. Live occlusion accuracy still depends on hand/head tracking and calibration.
