@@ -541,14 +541,14 @@ function placePalmBeforeFingers(points,s,q){
  if(!state||state.lm!==h.landmarks){
   const model=['Hand','Index1','Middle1','Ring1','Pinky1'].map(n=>rig.rest[s+n].world.clone().sub(rig.rest[s+'Hand'].world).toArray());
   const begin=performance.now(),fit=h.confidence>=.5?solvePalmPose(poseCV,model,h.landmarks,captureAspect,focal,state?.fit,h.world):null;
-  state=poseStates[s]={lm:h.landmarks,aspect:captureAspect,fit:fit??state?.fit,valid:!!fit,ms:performance.now()-begin};
+  state=poseStates[s]={lm:h.landmarks,aspect:captureAspect,fit:fit??state?.fit,fresh:!!fit,valid:!!fit&&fit.error<=.015,ms:performance.now()-begin};
  }
  const fit=state.fit;if(!fit){if($('pnpStatus'))$('pnpStatus').textContent='No valid PnP pose yet. Fixed placeholder at 50 model cm; sweep cannot use it.';return points;}
  const r=fit.matrix,m=new THREE.Matrix4().set(r[0],r[1],r[2],0,-r[3],-r[4],-r[5],0,-r[6],-r[7],-r[8],0,0,0,0,1);q.setFromRotationMatrix(m);
  const length=rig.rest[s+'Middle1'].world.distanceTo(rig.rest[s+'Hand'].world),w=h.world,observed=Math.max(.01,Math.hypot(w[9].x-w[0].x,w[9].y-w[0].y,w[9].z-w[0].z));
  const result=liftCameraLandmarks(h.landmarks,w,captureAspect,camera.aspect,fit.translation[2],length/observed).map(p=>new THREE.Vector3().fromArray(p));
  result[0].set(fit.translation[0],-fit.translation[1],-fit.translation[2]);
- if($('pnpStatus'))$('pnpStatus').textContent=Object.entries(poseStates).map(([side,v])=>side+': '+(v.valid?v.fit.method:'holding last valid pose')+' · '+(v.fit?((v.fit.error*$('preview').height).toFixed(1)+' px fit'):'no fit')+' · '+v.ms.toFixed(1)+' ms'+(v.fit?' · raw Z '+(v.fit.translation[2]*100).toFixed(1)+' cm':'' )).join(' / ');
+ if($('pnpStatus'))$('pnpStatus').textContent=Object.entries(poseStates).map(([side,v])=>side+': '+(v.fresh?v.fit.method:'holding last valid pose')+' · '+(v.fit?((v.fit.error*$('preview').height).toFixed(1)+' px fit'):'no fit')+' · '+v.ms.toFixed(1)+' ms'+(v.fit?' · raw Z '+(v.fit.translation[2]*100).toFixed(1)+' cm':'' )).join(' / ');
  return result;
 }
 
