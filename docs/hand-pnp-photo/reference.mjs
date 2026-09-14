@@ -1,14 +1,14 @@
 import * as T from 'three';
 import {DollRig} from '../doll/DollRig.js';
-import {fitPhotoHand,PHOTO_POINTS,COMPARISON_POINTS} from './photo-hand.mjs?v=aligned2';
+import {fitPhotoHand,PHOTO_POINTS,COMPARISON_POINTS} from './photo-hand.mjs?v=palm4';
 import {directDriver} from './direct.mjs?v=aligned2';
 import {loadCV} from './opencv-core.mjs';
-import {solvePalmPose} from './palm-pnp.mjs?v=aligned2';
+import {solvePalmPose} from './palm-pnp.mjs?v=palm4';
 const $=id=>document.getElementById(id),crop={x:180,y:490,w:290,h:370},fingers=['Thumb','Index','Middle','Ring','Pinky'];
 const scene=new T.Scene(),rig=new DollRig(scene,{headLayer:false}),camera=new T.PerspectiveCamera(60,crop.w/crop.h,.001,10);
 const renderer=new T.WebGLRenderer({canvas:$('model'),alpha:true,antialias:true});renderer.setSize(580,740,false);
 scene.add(new T.HemisphereLight(0xffffff,0x526980,3));const lamp=new T.DirectionalLight(0xffffff,3);lamp.position.set(1,2,3);scene.add(lamp);
-const cv=await loadCV();await rig.ready;const report=fitPhotoHand(rig),tips={};
+const cv=await loadCV();await rig.ready;const report=fitPhotoHand(rig,{preservePalmRelief:true}),tips={};
 for(const s of ['R','L'])for(const [f,n]of fingers.entries())tips[s+n]=rig.photoReference.targets[s][4+4*f].clone().sub(rig.photoReference.targets[s][3+4*f]);
 const drive=directDriver(rig,tips);for(const m of rig.parts){m.visible=/^R(Hand|Thumb|Index|Middle|Ring|Pinky)/.test(m.name);m.material=m.material.clone();m.material.transparent=true;m.material.opacity=.65;}
 const edges=[];for(let f=0;f<5;f++){edges.push([0,1+4*f]);for(let k=0;k<3;k++)edges.push([1+4*f+k,2+4*f+k]);}

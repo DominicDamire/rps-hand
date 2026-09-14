@@ -1,6 +1,6 @@
-import {fitPhotoHand} from './photo-hand.mjs?v=aligned2';
+import {fitPhotoHand} from './photo-hand.mjs?v=palm4';
 import {loadCV} from './opencv-core.mjs';
-import {solvePalmPose} from './palm-pnp.mjs?v=rotation3';
+import {solvePalmPose} from './palm-pnp.mjs?v=palm4';
 let gunLab=null;
 let poseCV=null;const poseStates={};
 import {fitWholeHand} from './whole-hand-placement.mjs?v=photo1';
@@ -254,7 +254,7 @@ $('import').onchange=async e=>{try{if(e.target.files[0])importText(await e.targe
 $('importPaste').onclick=()=>{try{importText($('jsonText').value);}catch(e){notice('Import rejected: '+e.message);}};
 $('png').onclick=()=>{renderDemo();const c=document.createElement('canvas');c.width=1400;c.height=850;const ctx=c.getContext('2d');ctx.fillStyle='#10151d';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#edf6ff';ctx.font='bold 25px system-ui';ctx.fillText('Hand Pose Lab — '+($('poseName').value||'Live comparison'),28,42);ctx.font='16px system-ui';ctx.fillText(editing?'Frozen input and corrected model':'Latest tracked frame and model',28,74);const fit=(img,x,y,w,h)=>{const a=img.width/img.height;let iw=w,ih=w/a;if(ih>h){ih=h;iw=h*a;}if(img===$('scene')&&$('viewMode').value!=='first'){ctx.save();ctx.translate(x+(w+iw)/2,y+(h-ih)/2);ctx.scale(-1,1);ctx.drawImage(img,0,0,iw,ih);ctx.restore();}else ctx.drawImage(img,x+(w-iw)/2,y+(h-ih)/2,iw,ih);};fit($('preview'),24,100,510,710);fit($('scene'),560,100,810,710);c.toBlob(blob=>{if(blob)download(blob,'hand-pose-comparison.png');});};
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set(1-(e.clientX-rect.left)/rect.width*2,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children.filter(m=>m.visible))[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
-await rig.ready;const photoReport=fitPhotoHand(rig);notice('Loading OpenCV PnP…');try{poseCV=await loadCV();}catch(e){notice('PnP unavailable: '+e.message);throw e;}
+await rig.ready;const photoReport=fitPhotoHand(rig,{preservePalmRelief:true});notice('Loading OpenCV PnP…');try{poseCV=await loadCV();}catch(e){notice('PnP unavailable: '+e.message);throw e;}
 tips=buildTips(rig);
 for(const S of ['R','L'])for(const [f,name]of ['Thumb','Index','Middle','Ring','Pinky'].entries())tips[S+name].copy(rig.photoReference.targets[S][4+4*f]).sub(rig.photoReference.targets[S][3+4*f]);
 const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};
@@ -540,15 +540,15 @@ function placePalmBeforeFingers(points,s,q){
  let state=poseStates[s];if(state&&state.aspect!==captureAspect)state=null;
  if(!state||state.lm!==h.landmarks){
   const model=['Hand','Index1','Middle1','Ring1','Pinky1'].map(n=>rig.rest[s+n].world.clone().sub(rig.rest[s+'Hand'].world).toArray());
-  const begin=performance.now(),fit=h.confidence>=.5?solvePalmPose(poseCV,model,h.landmarks,captureAspect,focal,state?.fit,h.world):null;
-  state=poseStates[s]={lm:h.landmarks,aspect:captureAspect,fit:fit??state?.fit,fresh:!!fit,valid:!!fit&&fit.error<=.015,ms:performance.now()-begin};
+  const begin=performance.now(),fit=h.confidence>=.5?solvePalmPose(poseCV,model,h.landmarks,captureAspect,focal,state?.fit):null;
+  state=poseStates[s]={lm:h.landmarks,aspect:captureAspect,fit:fit??state?.fit,valid:!!fit,ms:performance.now()-begin};
  }
  const fit=state.fit;if(!fit){if($('pnpStatus'))$('pnpStatus').textContent='No valid PnP pose yet. Fixed placeholder at 50 model cm; sweep cannot use it.';return points;}
  const r=fit.matrix,m=new THREE.Matrix4().set(r[0],r[1],r[2],0,-r[3],-r[4],-r[5],0,-r[6],-r[7],-r[8],0,0,0,0,1);q.setFromRotationMatrix(m);
  const length=rig.rest[s+'Middle1'].world.distanceTo(rig.rest[s+'Hand'].world),w=h.world,observed=Math.max(.01,Math.hypot(w[9].x-w[0].x,w[9].y-w[0].y,w[9].z-w[0].z));
  const result=liftCameraLandmarks(h.landmarks,w,captureAspect,camera.aspect,fit.translation[2],length/observed).map(p=>new THREE.Vector3().fromArray(p));
  result[0].set(fit.translation[0],-fit.translation[1],-fit.translation[2]);
- if($('pnpStatus'))$('pnpStatus').textContent=Object.entries(poseStates).map(([side,v])=>side+': '+(v.fresh?v.fit.method:'holding last valid pose')+' · '+(v.fit?((v.fit.error*$('preview').height).toFixed(1)+' px fit'):'no fit')+' · '+v.ms.toFixed(1)+' ms'+(v.fit?' · raw Z '+(v.fit.translation[2]*100).toFixed(1)+' cm':'' )).join(' / ');
+ if($('pnpStatus'))$('pnpStatus').textContent=Object.entries(poseStates).map(([side,v])=>side+': '+(v.valid?'PnP':'holding last valid pose')+' · '+(v.fit?((v.fit.error*$('preview').height).toFixed(1)+' px fit'):'no fit')+' · '+v.ms.toFixed(1)+' ms'+(v.fit?' · raw Z '+(v.fit.translation[2]*100).toFixed(1)+' cm':'' )).join(' / ');
  return result;
 }
 
@@ -605,7 +605,7 @@ orbitButton.onclick=()=>{if(controls.enabled){returnToMirror();return;}
 $('viewReset').onclick=returnToMirror;
 for(const id of ['touchSweep','captureNeck'])$(id).addEventListener('click',returnToMirror);
 
-const photoInfo=document.createElement('p');photoInfo.textContent='Hand joints follow your reference lines. The wrist pivot is inside the palm base. Green lines show the actual model joints; both hands use the same fixed proportions.';$('touchSweep').closest('section').prepend(photoInfo);
+const photoInfo=document.createElement('p');photoInfo.textContent='Hand joints follow your reference lines. The wrist pivot is inside the palm base. Green lines show the actual model joints; both hands keep fixed proportions.';$('touchSweep').closest('section').prepend(photoInfo);
 
 $('tipInset').value=0;
 

@@ -1,10 +1,11 @@
+import {restorePalmRelief} from './palm-relief.mjs?v=palm4';
 import * as T from 'three';
 import {buildTips} from './contact.mjs?v=photo1';
 // Pixel centres read from the user's first landmark screenshot, not a metric 3D scan.
 export const PHOTO_POINTS=[[401,838],[340.8,819.6],[292.8,771.8],[260,725.8],[225.2,694.4],[316.8,690],[296.4,628.2],[286.4,585.2],[279.5,547.5],[354.2,678.4],[338.5,609.5],[329.5,561.5],[323.5,519.5],[391.5,683],[388.4,617.2],[384.4,572.2],[379,533.2],[430.4,699.2],[438.6,648.2],[442.6,612.8],[443,578]];
 export const COMPARISON_POINTS=[[381.2,803],[315.38,799.25],[269.17,773.83],[235.89,749.78],[201,731.53],[292.6,692.8],[266.83,645.83],[248.4,612.2],[235.38,585.38],[323.6,680.8],[304.17,625.17],[289.83,587.83],[278.62,555.62],[356.6,679.8],[344.4,626.2],[333.4,591.2],[323.38,561.38],[390.6,685.2],[393.5,644],[396.33,614.5],[395.25,585.33]];
 const fingers=['Thumb','Index','Middle','Ring','Pinky'];
-export function fitPhotoHand(rig){
+export function fitPhotoHand(rig,{preservePalmRelief=false}={}){
  const oldTips=buildTips(rig),old={};for(const [n,r]of Object.entries(rig.rest))old[n]=r.world.clone();
  rig.root.updateMatrixWorld(true);
  const snapshots=new Map();for(const m of rig.parts){if(!/^[RL](Hand|Thumb|Index|Middle|Ring|Pinky)/.test(m.name))continue;const a=m.geometry.attributes.position;snapshots.set(m,Array.from({length:a.count},(_,i)=>new T.Vector3().fromBufferAttribute(a,i).applyMatrix4(m.matrixWorld)));}
@@ -86,7 +87,7 @@ export function fitPhotoHand(rig){
   m.position.set(0,0,0);m.quaternion.identity();m.scale.set(1,1,1);m.updateMatrix();m.geometry.computeVertexNormals();m.geometry.computeBoundingBox();m.geometry.computeBoundingSphere();delete m.userData.directRestMatrix;
  }
 
- rig.root.updateMatrixWorld(true);rig.photoReference={report,targets:allTargets};return report;
+ rig.root.updateMatrixWorld(true);rig.photoReference={report,targets:allTargets};if(preservePalmRelief)restorePalmRelief(rig,old,oldTips,surfaceSection);return report;
 }
 
 // Intersect the complete triangulated shell along its thickness axis.

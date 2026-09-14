@@ -1,13 +1,13 @@
 import * as T from 'three';
 import {DollRig} from '../doll/DollRig.js';
-import {fitPhotoHand} from '../hand-pnp-photo/photo-hand.mjs?v=aligned2';
+import {fitPhotoHand} from '../hand-pnp-photo/photo-hand.mjs?v=palm4';
 import {directDriver} from '../hand-pnp-photo/direct.mjs?v=rotation3';
 import {AlignedGun} from './gun.mjs?v=gun3';
 import {GripRig} from '../gun-lab/grip-rig.mjs?v=4';
 import {loadProvidedProfile} from '../gun-lab/presets.mjs?v=2';
 import {applyHandScale,resetHandScale} from '../hand-pnp-photo/calibrated-hand-scale.mjs';
 export async function checkGun(){
- const scene=new T.Scene(),rig=new DollRig(scene,{headLayer:false});await rig.ready;fitPhotoHand(rig);
+ const scene=new T.Scene(),rig=new DollRig(scene,{headLayer:false});await rig.ready;fitPhotoHand(rig,{preservePalmRelief:true});
  const profile=await loadProvidedProfile(),source=await new GripRig(new T.Scene(),profile).ready,tips={};
  for(const s of ['R','L'])for(const [i,f]of ['Thumb','Index','Middle','Ring','Pinky'].entries())tips[s+f]=rig.photoReference.targets[s][4+4*i].clone().sub(rig.photoReference.targets[s][3+4*i]);
  const lab=new AlignedGun(scene,rig,tips,directDriver(rig,tips),source,profile),checks={maxFixedGripError:0,maxLowerFingerError:0,maxBoneError:0,poses:0};
