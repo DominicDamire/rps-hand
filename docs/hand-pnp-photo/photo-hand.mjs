@@ -1,4 +1,4 @@
-import {restoreOriginalShell} from './original-shell.mjs?v=thumb8';
+import {restoreOriginalShell} from './original-shell.mjs?v=cut10';
 import {restorePalmRelief} from './palm-relief.mjs?v=palm4';
 import * as T from 'three';
 import {buildTips} from './contact.mjs?v=photo1';

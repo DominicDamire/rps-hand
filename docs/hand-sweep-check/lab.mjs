@@ -1,4 +1,4 @@
-import {fitPhotoHand} from '../hand-pnp-photo/photo-hand.mjs?v=thumb8';
+import {fitPhotoHand} from '../hand-pnp-photo/photo-hand.mjs?v=cut10';
 import {sizeDepthSample,EDGES} from './simple-size-depth.mjs?v=sizecheck2';
 const sizeStates={};
 import {fitWholeHand} from './whole-hand-placement.mjs?v=sizecheck2';

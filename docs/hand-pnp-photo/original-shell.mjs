@@ -1,9 +1,12 @@
+import {cutClosedPalm} from './cut-palm.mjs?v=cut10';
 import * as T from 'three';
 const fingers=['Thumb','Index','Middle','Ring','Pinky'];
-// Retain the authored shell, vertex sharing and smooth normals. Only the
-// one-time segment placement changes; no clipping, reflection or remeshing.
+// Retain authored finger surfaces. Remove the old palm thumb socket and
+// cut/cap the adjoining palm edge once, before live tracking.
 export function restoreOriginalShell(rig,originals,old,oldTips){
  for(const s of ['R','L']){
+  const palmParts=[...originals.keys()].filter(m=>m.name.startsWith(s+'Hand__palm')).sort((a,b)=>originals.get(b).geometry.attributes.position.count-originals.get(a).geometry.attributes.position.count);
+  const mainPalm=palmParts[0];
   const ref=rig.photoReference.targets[s],origin=ref[0],y=old[s+'Middle1'].clone().sub(old[s+'Hand']).normalize(),x=old[s+'Index1'].clone().sub(old[s+'Pinky1']);x.addScaledVector(y,-x.dot(y)).normalize();const z=new T.Vector3().crossVectors(x,y).normalize();
   let xx=0,xy=0,yy=0,bxx=0,bxy=0,byx=0,byy=0;
   for(const [i,f]of [[5,'Index'],[9,'Middle'],[13,'Ring'],[17,'Pinky']]){const a=old[s+f+'1'].clone().sub(origin),b=ref[i].clone().sub(origin),u=a.dot(x),v=a.dot(y);xx+=u*u;xy+=u*v;yy+=v*v;bxx+=u*b.dot(x);bxy+=v*b.dot(x);byx+=u*b.dot(y);byy+=v*b.dot(y);}
@@ -15,22 +18,20 @@ export function restoreOriginalShell(rig,originals,old,oldTips){
    else if(m.name.startsWith(s+'Hand__palm'))transform.copy(palm);
    const full=m.parent.matrixWorld.clone().invert().multiply(transform).multiply(source.world);
    m.geometry.dispose();m.geometry=source.geometry.clone();m.geometry.applyMatrix4(full);
-   if(m.name.startsWith(s+'Hand__palm')){
-    // Retract the obsolete thumb mount into a rounded palm edge. Keep the
-    // connected indexed surface; the articulated thumb is left untouched.
-    const a=ref[1].clone().sub(origin),b=ref[5].clone().sub(origin),ay=a.dot(y),by=b.dot(y),ax=a.dot(x),bx=b.dot(x),position=m.geometry.attributes.position;
-    const inverse=m.parent.matrixWorld.clone().invert();
-    for(let i=0;i<position.count;i++){
-     const p=new T.Vector3().fromBufferAttribute(position,i).applyMatrix4(m.parent.matrixWorld),v=p.clone().sub(origin),t=T.MathUtils.clamp((v.dot(y)-ay)/(by-ay),0,1);
-     const edge=ax+(bx-ax)*t,coord=v.dot(x),radius=.002;
-     if(coord>edge-radius){const replacement=edge-radius+radius*Math.tanh((coord-edge+radius)/radius);p.addScaledVector(x,replacement-coord);p.applyMatrix4(inverse);position.setXYZ(i,p.x,p.y,p.z);}
-    }
-    position.needsUpdate=true;m.geometry.computeVertexNormals();
+   if(m.name.startsWith(s+'Hand__palm')&&m!==mainPalm){
+    m.geometry.dispose();m.geometry=new T.BufferGeometry();m.geometry.setAttribute('position',new T.Float32BufferAttribute([],3));m.geometry.setAttribute('normal',new T.Float32BufferAttribute([],3));m.geometry.setIndex([]);m.geometry.userData.cut={removed:true,socketRemoved:true};
+   }else if(m===mainPalm){
+    const a=ref[1].clone().sub(origin),b=ref[5].clone().sub(origin),slope=(b.dot(x)+.005-(a.dot(x)-.008))/(b.dot(y)-a.dot(y));
+    const normal=x.clone().addScaledVector(y,-slope).normalize();
+    const anchor=origin.clone().addScaledVector(x,a.dot(x)-.008).addScaledVector(y,a.dot(y));
+    const plane=new T.Plane().setFromNormalAndCoplanarPoint(normal,anchor).applyMatrix4(m.parent.matrixWorld.clone().invert());
+    const cut=cutClosedPalm(m.geometry,plane);m.geometry.dispose();m.geometry=cut;
+
    }
    m.geometry.computeBoundingBox();m.geometry.computeBoundingSphere();delete m.userData.directRestMatrix;
   }
  }
- const integrity=[...originals].every(([m,source])=>m.geometry.attributes.position.count===source.geometry.attributes.position.count&&m.geometry.index?.count===source.geometry.index?.count&&(!source.geometry.index||source.geometry.index.array.every((v,i)=>v===m.geometry.index.array[i]))&&[...m.geometry.attributes.position.array,...m.geometry.attributes.normal.array].every(Number.isFinite));
+ const integrity=[...originals].every(([m,source])=>(m.geometry.userData.cut?.removed||(m.geometry.attributes.position.count===source.geometry.attributes.position.count&&m.geometry.index?.count===source.geometry.index?.count&&(!source.geometry.index||source.geometry.index.array.every((v,i)=>v===m.geometry.index.array[i]))))&&[...m.geometry.attributes.position.array,...m.geometry.attributes.normal.array].every(Number.isFinite));
  if(!integrity)throw Error('Original shell topology or normals changed');
  rig.root.updateMatrixWorld(true);rig.photoReference.originalShell=integrity;
 }

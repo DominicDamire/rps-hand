@@ -1,3 +1,7 @@
+## cut10 actual socket removal
+
+The previous thumb8 deformation did not delete the socket. This version removes the secondary palm socket geometry entirely, clips the adjoining main palm triangles and caps the cut contours with smooth shared-vertex normals. Finger geometry, joint references and tracking are unchanged. Applied through the shared geometry to PnP, Sweep, gun, Sweep check and Dust II. Verified both hand drivers across 72 poses.
+
 ## thumb8 visual cleanup
 
 Removed joint-axis arrows from PnP and Sweep pages. Retracted the obsolete palm-side thumb mount into a smooth edge at the aligned thumb base; the moving thumb, joint targets and tracking remain unchanged. Shared geometry updates PnP, gun, Sweep and Sweep check, plus the reference viewer.

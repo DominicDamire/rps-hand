@@ -1,6 +1,6 @@
 import * as T from 'three';
 import {DollRig} from '../doll/DollRig.js';
-import {fitPhotoHand,PHOTO_POINTS,COMPARISON_POINTS} from './photo-hand.mjs?v=thumb8';
+import {fitPhotoHand,PHOTO_POINTS,COMPARISON_POINTS} from './photo-hand.mjs?v=cut10';
 import {directDriver} from './direct.mjs?v=aligned2';
 import {loadCV} from './opencv-core.mjs';
 import {solvePalmPose} from './palm-pnp.mjs?v=palm4';

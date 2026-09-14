@@ -1,5 +1,5 @@
 let mapLab=null;
-import {fitPhotoHand} from '../hand-pnp-photo/photo-hand.mjs?v=thumb8';
+import {fitPhotoHand} from '../hand-pnp-photo/photo-hand.mjs?v=cut10';
 import {fitWholeHand} from './whole-hand-placement.mjs?v=touch2.4.18-final';
 import {resetHandScale,applyHandScale,translateHand,palmSurface} from './calibrated-hand-scale.mjs?v=touch2.4.18-final';
 import {rearPlaneCorrection} from './neck-sweep.mjs?v=touch2.4.18-final';
