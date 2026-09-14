@@ -668,4 +668,4 @@ function applyDisplayOffset(s,result){
 }
 
 if(!document.body.dataset.gunLab)firstPerson=installFirstPersonCamera({version:'PnP',scene,renderer,getHead:()=>combined,isCalibrating:()=>depthExperiment?.recording||depthExperiment?.checking,onViewChange:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();}});
-if(!document.body.dataset.gunLab){const {installSweepSettings}=await import('../hand-sweep-neck/settings.mjs?v=raw19');installSweepSettings({cameraPanel:firstPerson.panel,version:'PnP',isDistanceRecording:()=>depthExperiment?.recording});document.getElementById('sweep-hand-model').append(photoInfo,photoLink);}
+if(!document.body.dataset.gunLab){const {installSweepSettings}=await import('../hand-sweep-neck/settings.mjs?v=defaults20');installSweepSettings({cameraPanel:firstPerson.panel,version:'PnP',isDistanceRecording:()=>depthExperiment?.recording});document.getElementById('sweep-hand-model').append(photoInfo,photoLink);}
