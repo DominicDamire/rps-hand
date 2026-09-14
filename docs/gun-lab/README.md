@@ -1,5 +1,7 @@
 # Gun Grip Lab — phone camera range v4
 
+Original JSON attachments and screenshots are archived in [references/gun-lab](../../references/gun-lab/README.md).
+
 Use `/gun-lab/play.html?v=4` for one-hand pickup, movement and shooting. `/gun-lab/?v=4` remains the placement/joint editor and has a button to use the edited grip in the camera range.
 
 Version 4 fixes the gun asset's incorrectly blended metal materials: Gun and ACC are opaque with depth writes, while sight Glass keeps transparency. Ghost inspection can be toggled without losing these defaults. Thumb tracking now combines palm-relative thumb direction and outer-joint bends, removing the diagonal wrist-to-thumb angle that could saturate at 100% with a raised thumb. Optional Set thumb raised / Set thumb wrapped controls calibrate the live signal for the current session without changing the supplied model poses. Stale tracking and near-identical calibration poses are rejected.
