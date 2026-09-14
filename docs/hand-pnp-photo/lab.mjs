@@ -1,4 +1,4 @@
-import {fitPhotoHand} from './photo-hand.mjs?v=palm4';
+import {fitPhotoHand} from './photo-hand.mjs?v=shell6';
 import {loadCV} from './opencv-core.mjs';
 import {solvePalmPose} from './palm-pnp.mjs?v=palm4';
 let gunLab=null;
@@ -131,7 +131,7 @@ function rawSizePoints(world,lm){
  const depth=poseStates[side]?.fit?.translation[2]??.5;
  const length=rig.rest[side+'Middle1'].world.distanceTo(rig.rest[side+'Hand'].world),observed=Math.max(.01,Math.hypot(world[9].x-world[0].x,world[9].y-world[0].y,world[9].z-world[0].z));
  // Relative MediaPipe Z still describes finger articulation, never root distance.
- return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,Math.max(.04,depth+(getCombinedOptions().handDistance||0)/100),length/observed).map(p=>new THREE.Vector3().fromArray(p).add(new THREE.Vector3(0,(getCombinedOptions().handHeight||0)/100,0)));
+ return liftCameraLandmarks(lm,world,captureAspect,camera.aspect,Math.max(.04,depth),length/observed).map(p=>new THREE.Vector3().fromArray(p));
 }
 function solveRaw(world,lm){const pts=cameraPoints(world,lm);
  palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));
@@ -264,10 +264,10 @@ function driveDirect(points,s,q,dt,options){
  if(gunLab)result=gunLab.drive(s,q,result,dt);
  const scale=depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1;
  gunLab?.scaleVisual(s,scale);
- return keepHandBeforeWall(s,applyHandScale(rig,s,result,scale));
+ applyHandScale(rig,s,result,scale);applyDisplayOffset(s,result);return keepHandBeforeWall(s,result);
 }
 let directResult=null;
-function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,confirmDegrees:0,noiseDegrees:0,smoothingMs:0,movementThresholdMm:0,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,contactPixels:attach,contactReleasePixels:Math.max(attach,+$('contactRelease').value),handSize:+$('handSize').value,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm,fitImage:false,width:$('preview').width,height:$('preview').height};}
+function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {staticInput:!!sampleSource,confirmDegrees:+$('confirmJump').value,noiseDegrees:+$('fingerNoise').value,smoothingMs:+$('directionSmoothing').value,movementThresholdMm:+$('movementThreshold').value,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,contactPixels:attach,contactReleasePixels:Math.max(attach,+$('contactRelease').value),handSize:+$('handSize').value,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm,fitImage:false,width:$('preview').width,height:$('preview').height};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
@@ -337,7 +337,7 @@ $('phoneDistance').oninput=()=>{$('phoneDistance').nextElementSibling.value=$('p
 $('depthGain').oninput=()=>{$('depthGain').nextElementSibling.value=$('depthGain').value;};
 $('calibrateDistance').onclick=()=>{if(!latest||camera.isOrthographicCamera){$('depthCalibrationStatus').textContent='Use perspective and show a hand next to your face first.';return;}const metres=+$('phoneDistance').value/100;let count=0;for(const s of ['R','L'])if(depthStates[s]?.depth){distanceGains[s]=metres/depthStates[s].depth;count++;}$('eyeZ').value=-metres;$('eyeZ').nextElementSibling.value=-metres;setViewMode();$('depthCalibrationStatus').textContent='Calibrated '+count+' hand(s) at '+$('phoneDistance').value+' cm. Recalibrate if you move the phone.';};
 
-const readCombinedOptions=installCombinedUI();getCombinedOptions=()=>({...readCombinedOptions(),holistic:false,handPriority:false,depthSmooth:0,headSmooth:0});
+const readCombinedOptions=installCombinedUI();getCombinedOptions=()=>({...readCombinedOptions(),holistic:false,handPriority:false});
 restoreStart({fingerThickness:.9,tipInset:5,fingerNoise:0,directionSmoothing:0,movementThreshold:0,confirmJump:0});
 if($('sizeDepth'))$('sizeDepth').checked=false;
 for(const id of ['sizeDepth','restGap','nearDistance','demoJitter','fingerNoise','directionSmoothing','movementThreshold','confirmJump','upperCoupling','falseDepth','phoneDistance','depthGain']){const el=$(id);if(el)el.closest('label').style.display='none';}
@@ -647,4 +647,18 @@ function refreshOtherLines(){
  if(!secondLines.visible)return;
  const result=renderedHands[side==='R'?'L':'R']?.result;if(!result)return;
  let n=0;for(let f=0;f<5;f++){const ids=[0,1+f*4,2+f*4,3+f*4,4+f*4];for(let k=0;k<4;k++)for(const i of [ids[k],ids[k+1]]){const v=result.points[i];secondLineGeometry.attributes.position.setXYZ(n++,v.x,v.y,v.z);}}secondLineGeometry.attributes.position.needsUpdate=true;
+}
+
+// Move existing controls out of the hidden legacy settings containers.
+for(const [title,ids] of [
+ ['Head movement',['showHead','lockBody','turnGain','moveGain','neckShare','headSmooth','headSide','headHeight','headBack']],
+ ['Hand movement and joint constraints',['handDistance','handHeight','fingerNoise','directionSmoothing','confirmJump','movementThreshold','lockUpper','upperCoupling','falseDepth','trackingGrace']]
+]){const section=document.createElement('section'),heading=document.createElement('h2');heading.textContent=title;section.append(heading);for(const id of ids){const input=$(id),label=input?.closest('label');if(!label)continue;label.style.setProperty('display','block','important');section.append(label);if(input.type==='range'&&input.nextElementSibling)input.nextElementSibling.value=input.value;}section.style.setProperty('display','block','important');$('directSettings').append(section);}
+
+function applyDisplayOffset(s,result){
+ if(depthExperiment?.recording)return;
+ const o=getCombinedOptions(),distance=(o.handDistance||0)/100,height=(o.handHeight||0)/100;
+ if(!distance&&!height)return;
+ const wrist=result.points[0],depth=Math.max(.04,-wrist.z),next=Math.max(.04,depth+distance),delta=wrist.clone().multiplyScalar(next/depth-1);delta.y+=height;
+ translateHand(rig,s,result,delta.toArray());
 }

@@ -1,3 +1,13 @@
+## shell6 correction
+
+Original indexed GLB surfaces and authored smooth normals are retained, with fixed one-time affine segment placement. The previous clipped/mirrored triangle rebuild is no longer the rendered mesh. Reference joint targets and the original EPnP solver are unchanged.
+
+Head movement, hand offsets, finger smoothing/jump thresholds and PIP/DIP controls are visible again and wired to their existing handlers. Filters start at zero; adjustable smoothing can delay motion. PnP still follows measured palm pose, so raw tracking jitter is not eliminated by restoring the mesh. Sweep no longer applies the extra whole-hand image-fit translation after articulation. Collision toggles remain optional.
+
+Validation: 72 constrained poses match the original driver, fixed bone lengths and unchanging mesh; original vertex/index counts and finite normals checked at startup. 876 generated palm rotations have no pose failures. Preserving the original shell means the earlier exact paired-surface-centre assertion is no longer satisfied: maximum centre offset is 0.897 model mm, with all 42 sampled joints intersecting their surfaces. This is not a real-world millimetre calibration. No claim of exact live pixel matching is made.
+
+Earlier implementation notes below describe superseded mesh construction where inconsistent with this correction.
+
 ## Live motion restored (motion5)
 
 The reference fit runs once at model load. Live PnP, PnP gun and both current Sweep pages use the original constrained direction driver (`fitImage:false`). The ray-based screen matching is only an explicit static reference-comparison option. PIP/DIP plane locks and base-splay limits are active again; existing temporal settings are preserved. No further mesh changes were made in this restoration. The PnP solver blob remains exactly 186a377f0fb348836b65176dcee72546c9830ed1.

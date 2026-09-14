@@ -1,3 +1,4 @@
+import {restoreOriginalShell} from './original-shell.mjs?v=shell6';
 import {restorePalmRelief} from './palm-relief.mjs?v=palm4';
 import * as T from 'three';
 import {buildTips} from './contact.mjs?v=photo1';
@@ -9,6 +10,7 @@ export function fitPhotoHand(rig,{preservePalmRelief=false}={}){
  const oldTips=buildTips(rig),old={};for(const [n,r]of Object.entries(rig.rest))old[n]=r.world.clone();
  rig.root.updateMatrixWorld(true);
  const snapshots=new Map();for(const m of rig.parts){if(!/^[RL](Hand|Thumb|Index|Middle|Ring|Pinky)/.test(m.name))continue;const a=m.geometry.attributes.position;snapshots.set(m,Array.from({length:a.count},(_,i)=>new T.Vector3().fromBufferAttribute(a,i).applyMatrix4(m.matrixWorld)));}
+ const originals=new Map([...snapshots.keys()].map(m=>[m,{geometry:m.geometry,world:m.matrixWorld.clone()}]));
  const targets={},report={},allTargets={};let rightAnchor=null,rightTargets=null;
  for(const s of ['R','L']){
   const wrist=old[s+'Hand'],middle=old[s+'Middle1'],along=middle.clone().sub(wrist).normalize();
@@ -87,7 +89,7 @@ export function fitPhotoHand(rig,{preservePalmRelief=false}={}){
   m.position.set(0,0,0);m.quaternion.identity();m.scale.set(1,1,1);m.updateMatrix();m.geometry.computeVertexNormals();m.geometry.computeBoundingBox();m.geometry.computeBoundingSphere();delete m.userData.directRestMatrix;
  }
 
- rig.root.updateMatrixWorld(true);rig.photoReference={report,targets:allTargets};if(preservePalmRelief)restorePalmRelief(rig,old,oldTips,surfaceSection);return report;
+ rig.root.updateMatrixWorld(true);rig.photoReference={report,targets:allTargets};if(preservePalmRelief)restorePalmRelief(rig,old,oldTips,surfaceSection);restoreOriginalShell(rig,originals,old,oldTips);return report;
 }
 
 // Intersect the complete triangulated shell along its thickness axis.
