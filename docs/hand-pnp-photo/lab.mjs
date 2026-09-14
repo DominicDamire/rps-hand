@@ -1,3 +1,5 @@
+import {installDistanceCalibration} from '../hand-sweep-neck/distance-calibration.mjs?v=assist16';
+const installExperiment=document.body.dataset.gunLab?installLegacyExperiment:installDistanceCalibration;
 import {fitPhotoHand} from './photo-hand.mjs?v=flat11';
 import {loadCV} from './opencv-core.mjs';
 import {solvePalmPose} from './palm-pnp.mjs?v=palm4';
@@ -12,7 +14,7 @@ import {TrackingJitter} from './tracking-jitter.mjs?v=photo1';
 const trackingJitter=new TrackingJitter();
 import {OuterCollision} from './outer-collision.mjs?v=photo1';
 import {HandContactAssist} from './hand-contact-assist.mjs?v=photo1';
-import {installExperiment} from './experiment.mjs?v=start7';
+import {installExperiment as installLegacyExperiment} from './experiment.mjs?v=start7';
 let depthExperiment=null;
 import {imagePalmSize,sizeDepth,wallShift} from './size-wall-depth.mjs?v=photo1';
 import {palmSize} from './palm-distance.mjs?v=photo1';
@@ -518,7 +520,7 @@ for(const id of ['fingerNoise','directionSmoothing','confirmJump','movementThres
 for(const d of $('directSettings').querySelectorAll('details'))if(d.querySelector('summary')?.textContent==='Jiggle')d.style.setProperty('display','none','important');
 const pipelineInfo=document.createElement('p');pipelineInfo.textContent='The near and neck captures fit both hands and the head/neck/shoulders. Live root placement uses PnP; capture corrections stay fixed.';$('directSettings').prepend(pipelineInfo);
 
-depthExperiment=installExperiment({container:$('directSettings'),getHead:()=>combined,getFocal:aspect=>1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),onReference:fit=>{palmDepth.reset();if(combined){combined.neckFitScale=fit?.headScale??1;combined.neckFitOffset.fromArray(fit?.headOffset??[0,0,0]);}},getNeckReference:(hand,points,aspect)=>{if(!points)return null;const palm=[0,5,9,13,17].reduce((v,i)=>v.add(points[i]),new THREE.Vector3()).multiplyScalar(.2);const surface=palmSurface(rig,hand.label==='Left'?'L':'R',palm);if(!surface)return null;const ref=combined?.neckReference(surface,1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),points[0]);const shoulders=Object.values(combined?.mappedShoulders??{});if(ref&&shoulders.length===2){const point=shoulders[0].clone().add(shoulders[1]).multiplyScalar(.5).sub(combined.neckFitOffset).divideScalar(combined.neckFitScale);ref.shoulderDepth=-point.z;ref.shoulderPoint=point.toArray();}return ref;},onBegin:()=>{controls.enabled=false;$('cameraProjection').value='perspective';$('viewMode').value='mirror';setViewMode();palmDepth.reset();}});
+depthExperiment=installExperiment({version:'PnP',container:$('directSettings'),getHead:()=>combined,getFocal:aspect=>1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),onReference:fit=>{palmDepth.reset();if(combined){combined.neckFitScale=fit?.headScale??1;combined.neckFitOffset.fromArray(fit?.headOffset??[0,0,0]);}},getNeckReference:(hand,points,aspect)=>{if(!points)return null;const palm=[0,5,9,13,17].reduce((v,i)=>v.add(points[i]),new THREE.Vector3()).multiplyScalar(.2);const surface=palmSurface(rig,hand.label==='Left'?'L':'R',palm);if(!surface)return null;const ref=combined?.neckReference(surface,1/(2*Math.tan(Math.PI/6)*cameraFrame(aspect,camera.aspect).height),points[0]);const shoulders=Object.values(combined?.mappedShoulders??{});if(ref&&shoulders.length===2){const point=shoulders[0].clone().add(shoulders[1]).multiplyScalar(.5).sub(combined.neckFitOffset).divideScalar(combined.neckFitScale);ref.shoulderDepth=-point.z;ref.shoulderPoint=point.toArray();}return ref;},onBegin:()=>{controls.enabled=false;$('cameraProjection').value='perspective';$('viewMode').value='mirror';setViewMode();palmDepth.reset();}});
 
 $('relaxedPalm').checked=false;$('contactThreshold').value=0;$('contactThreshold').nextElementSibling.value=0;
 
@@ -661,3 +663,5 @@ function applyDisplayOffset(s,result){
  const wrist=result.points[0],depth=Math.max(.04,-wrist.z),next=Math.max(.04,depth+distance),delta=wrist.clone().multiplyScalar(next/depth-1);delta.y+=height;
  translateHand(rig,s,result,delta.toArray());
 }
+
+if(!document.body.dataset.gunLab){const {installSweepSettings}=await import('../hand-sweep-neck/settings.mjs?v=assist16');installSweepSettings({version:'PnP',isDistanceRecording:()=>depthExperiment?.recording});document.getElementById('sweep-hand-model').append(photoInfo,photoLink);}

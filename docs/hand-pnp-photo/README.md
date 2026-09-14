@@ -41,3 +41,11 @@ The regression was in the model references: flattening all 21 reference depths m
 PnP and its gun lab use this correction. Sweep keeps its existing model/estimator. The gun remains attached using the saved poses; visible lines still read actual model joints. Reference comparison uses the same corrected PnP hand.
 
 Validation: original solver blob identity; 876 synthetic actual-model frames covering both sides, three aspect ratios, two distances and full turns; zero failures, max angular error under 0.000003 degrees. All 42 reference points have paired surfaces, maximum midpoint error below 0.000001 model mm. Reference image 1: 0.040 px RMS / 0.117 px maximum. A real sample image remains subpixel. These numerical checks do not establish live phone accuracy or physical scale. Gun integration checks cover 60 held poses, grip invariance, lengths, calibration, pickup/release/loss.
+
+## Assist16: assistance controls and distance capture choice
+
+PnP and Sweep use the same six-tab settings layout. Shake reduction starts enabled on first use and can be disabled; assistance/contact/continuity choices are saved separately per version. Numeric finger filters have explicit enable switches that retain their current strength while toggled off/on in the session. Existing finger drivers, hand shape, and the PnP solver are unchanged.
+
+Distance offers two still captures (near, then neck, each requiring two steady seconds and showing a picture) or a five-second preparation followed by an eight-second video sweep. Both methods call the selected version’s existing neck-fit calculation. They calibrate relative size/depth and neck placement, not finger shape or neutral angles. The map and gun pages keep their earlier UI.
+
+Validation: browser workflow harness completed both methods for both estimators, including image capture and reset; settings checks verified saved shake/filter choices and toggles. Existing capture, PnP endpoint, 540 palm-projection cases, and video timing tests pass. These checks are not a measurement of live physical accuracy.

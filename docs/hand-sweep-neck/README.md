@@ -49,3 +49,11 @@ Sweep settings now have six tabs: Hand model, Distance, Assistance, Contact, Con
 Hand model capture averages at least 12 distinct, steady frontal open-hand frames over 1.5 seconds. It applies mirrored proportions once to both models, retaining the palm reference scale, existing flat shell, and live joint constraints. It rejects tilted, curled, incomplete, uncertain, and excessively small observations. Captured proportions last for the session; they can be toggled off or reset. Shape changes clear the distance capture and geometry-dependent caches. Distance calibration remains the existing sweep-to-neck procedure. Neither a frontal image nor this shape capture establishes absolute millimetres.
 
 Checks cover capture validation, duplicate frame rejection, mirrored equivalence, actual-model dimension changes and exact reset, plus browser tab and fixture tracking checks. The new UI is installed only on Sweep, not the map or PnP pages.
+
+## Assist16: assistance controls and distance capture choice
+
+PnP and Sweep use the same six-tab settings layout. Shake reduction starts enabled on first use and can be disabled; assistance/contact/continuity choices are saved separately per version. Numeric finger filters have explicit enable switches that retain their current strength while toggled off/on in the session. Existing finger drivers, hand shape, and the PnP solver are unchanged.
+
+Distance offers two still captures (near, then neck, each requiring two steady seconds and showing a picture) or a five-second preparation followed by an eight-second video sweep. Both methods call the selected version’s existing neck-fit calculation. They calibrate relative size/depth and neck placement, not finger shape or neutral angles. The map and gun pages keep their earlier UI.
+
+Validation: browser workflow harness completed both methods for both estimators, including image capture and reset; settings checks verified saved shake/filter choices and toggles. Existing capture, PnP endpoint, 540 palm-projection cases, and video timing tests pass. These checks are not a measurement of live physical accuracy.
