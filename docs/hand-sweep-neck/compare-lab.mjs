@@ -1,5 +1,5 @@
 let comparisonInspection=null;
-import {variant} from '../hand-compare/driver.mjs';
+import {variant} from '../hand-compare/driver.mjs?v=camera3';
 import {installFirstPersonCamera} from '../hand-sweep-neck/first-person-camera.mjs?v=eye18';
 let firstPerson=null;
 import {installDistanceCalibration} from '../hand-sweep-neck/distance-calibration.mjs?v=assist16';
@@ -25,7 +25,7 @@ import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
 import {installCombinedUI} from '../hand-compare/combined-hand-sweep-neck.mjs';
 import {CombinedHead} from './head-model.mjs?v=raw19';
-import {directDriver} from '../hand-compare/driver.mjs';
+import {directDriver} from '../hand-compare/driver.mjs?v=camera3';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.18-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
@@ -257,7 +257,7 @@ $('import').onchange=async e=>{try{if(e.target.files[0])importText(await e.targe
 $('importPaste').onclick=()=>{try{importText($('jsonText').value);}catch(e){notice('Import rejected: '+e.message);}};
 $('png').onclick=()=>{renderDemo();const c=document.createElement('canvas');c.width=1400;c.height=850;const ctx=c.getContext('2d');ctx.fillStyle='#10151d';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#edf6ff';ctx.font='bold 25px system-ui';ctx.fillText('Hand Pose Lab — '+($('poseName').value||'Live comparison'),28,42);ctx.font='16px system-ui';ctx.fillText(editing?'Frozen input and corrected model':'Latest tracked frame and model',28,74);const fit=(img,x,y,w,h)=>{const a=img.width/img.height;let iw=w,ih=w/a;if(ih>h){ih=h;iw=h*a;}if(img===$('scene')&&$('viewMode').value!=='first'){ctx.save();ctx.translate(x+(w+iw)/2,y+(h-ih)/2);ctx.scale(-1,1);ctx.drawImage(img,0,0,iw,ih);ctx.restore();}else ctx.drawImage(img,x+(w-iw)/2,y+(h-ih)/2,iw,ih);};fit($('preview'),24,100,510,710);fit($('scene'),560,100,810,710);c.toBlob(blob=>{if(blob)download(blob,'hand-pose-comparison.png');});};
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set(1-(e.clientX-rect.left)/rect.width*2,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children.filter(m=>m.visible))[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
-await rig.ready;const {snapshotModel,installSweepSettings}=await import('../hand-compare/settings.mjs?v=off2');const restoreModel=snapshotModel(rig);const photoReport=variant==='archive'?null:fitPhotoHand(rig);
+await rig.ready;const {snapshotModel,installSweepSettings}=await import('../hand-compare/settings.mjs?v=camera3');const restoreModel=snapshotModel(rig);const photoReport=variant==='archive'?null:fitPhotoHand(rig);
 tips=buildTips(rig);if(rig.photoReference)for(const S of ['R','L'])for(const [f,name]of ['Thumb','Index','Middle','Ring','Pinky'].entries())tips[S+name].copy(rig.photoReference.targets[S][4+4*f]).sub(rig.photoReference.targets[S][3+4*f]);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>{resetHandScale(rig,args[1]);args[0]=placePalmBeforeFingers(relaxedPoints(args[0],args[1],args[2],args[3]),args[1],args[2]);let result=drivers[args[1]](...args);if(mapLab)result=mapLab.drive(args[1],args[2],result,args[3]);applyHandScale(rig,args[1],result,depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);mapLab?.scale(args[1],depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);applyDisplayOffset(args[1],result);return keepHandBeforeWall(args[1],result);};let directResult=null;
 function directOptions(lm){const attach=$('tipContact').checked?+$('contactAttach').value:0;return {fingerFlipDegrees:+($('fingerFlipDegrees')?.value??0),palmFlipDegrees:+($('palmFlipDegrees')?.value??0),staticInput:!!sampleSource,confirmDegrees:+$('confirmJump').value,noiseDegrees:+$('fingerNoise').value,smoothingMs:+$('directionSmoothing').value,movementThresholdMm:+$('movementThreshold').value,upperCoupling:+$('upperCoupling').value,lockUpper:$('lockUpper').checked,baseSplay:$('baseSplay')?.checked??true,contactPixels:attach,contactReleasePixels:Math.max(attach,+$('contactRelease').value),handSize:+$('handSize').value,thickness:+$('fingerThickness').value,tipInset:+$('tipInset').value,lm,fitImage:false,width:$('preview').width,height:$('preview').height};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
@@ -625,4 +625,4 @@ if(!document.body.dataset.mapLab)installSweepSettings({cameraPanel:firstPerson.p
 
 const {installComparison}=await import('../hand-compare/ui.mjs?v=off2');installComparison({variant,estimator:'Sweep'});
 
-const {installInspection}=await import('../hand-compare/inspection.mjs');comparisonInspection=installInspection({controls,getCamera:()=>camera,reset:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();},points:()=>Object.values(renderedHands).flatMap(h=>h?.result?.points||[])});
+const {installInspection}=await import('../hand-compare/inspection.mjs?v=camera3');comparisonInspection=installInspection({controls,getCamera:()=>camera,reset:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();},points:()=>Object.values(renderedHands).flatMap(h=>h?.result?.points||[])});

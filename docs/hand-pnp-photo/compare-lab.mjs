@@ -1,5 +1,5 @@
 let comparisonInspection=null;
-import {variant} from '../hand-compare/driver.mjs';
+import {variant} from '../hand-compare/driver.mjs?v=camera3';
 import {installFirstPersonCamera} from '../hand-sweep-neck/first-person-camera.mjs?v=eye18';
 let firstPerson=null;
 import {installDistanceCalibration} from '../hand-sweep-neck/distance-calibration.mjs?v=assist16';
@@ -28,7 +28,7 @@ import {fitHeadGrip} from './head-grip.mjs?v=photo1';
 import {startTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=start7';
 import {installCombinedUI} from '../hand-compare/combined-hand-pnp-photo.mjs';
 import {CombinedHead} from './head-model.mjs?v=raw19';
-import {directDriver} from '../hand-compare/driver.mjs';
+import {directDriver} from '../hand-compare/driver.mjs?v=camera3';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=photo1';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=photo1';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=photo1';
@@ -670,8 +670,8 @@ function applyDisplayOffset(s,result){
 }
 
 if(!document.body.dataset.gunLab)firstPerson=installFirstPersonCamera({version:'PnP',scene,renderer,getHead:()=>combined,isCalibrating:()=>depthExperiment?.recording||depthExperiment?.checking,onViewChange:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();}});
-if(!document.body.dataset.gunLab){const {installSweepSettings}=await import('../hand-compare/settings.mjs?v=off2');installSweepSettings({cameraPanel:firstPerson.panel,version:'PnP',isDistanceRecording:()=>depthExperiment?.recording});document.getElementById('sweep-hand-model').append(photoInfo,photoLink);}
+if(!document.body.dataset.gunLab){const {installSweepSettings}=await import('../hand-compare/settings.mjs?v=camera3');installSweepSettings({cameraPanel:firstPerson.panel,version:'PnP',isDistanceRecording:()=>depthExperiment?.recording});document.getElementById('sweep-hand-model').append(photoInfo,photoLink);}
 
 const {installComparison}=await import('../hand-compare/ui.mjs?v=off2');installComparison({variant,estimator:'PnP'});
 
-const {installInspection}=await import('../hand-compare/inspection.mjs');comparisonInspection=installInspection({controls,getCamera:()=>camera,reset:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();},points:()=>Object.values(renderedHands).flatMap(h=>h?.result?.points||[])});
+const {installInspection}=await import('../hand-compare/inspection.mjs?v=camera3');comparisonInspection=installInspection({controls,getCamera:()=>camera,reset:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();},points:()=>Object.values(renderedHands).flatMap(h=>h?.result?.points||[])});

@@ -6,7 +6,7 @@ const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';
  const stabilizer=new DirectionStabilizer(),contactLatch=new ContactLatch();
- return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,upperCoupling=0,lockUpper=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,width,height}){
+ return function(points,side,palmQ,dt,{staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,upperCoupling=0,lockUpper=true,baseSplay=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,width,height}){
   if(lastSide!==side){contact=null;lastSide=side;lastShape='';}
   const p=points.map(v=>v.clone()),chains=[],lengths=[],inversePalm=palmQ.clone().invert();
   // Keep rigid attachments; copy only segment directions from the earlier direct tracker.
@@ -29,7 +29,7 @@ export function directDriver(rig,tips){
    const local=before.clone().applyQuaternion(inversePalm),after=new T.Vector3().fromArray(limitBaseSplay(local.toArray(),rest.toArray(),restAcross.toArray(),70,upperBend)).applyQuaternion(palmQ);
    const correction=new T.Quaternion().setFromUnitVectors(before,after);for(let k=1;k<4;k++)chain[k].sub(chain[0]).applyQuaternion(correction).add(chain[0]);
   }
-  for(let f=1;f<5;f++)restrictBase(f);
+  if(baseSplay)for(let f=1;f<5;f++)restrictBase(f);
   const hinges=new Map();
   if(lockUpper)for(let f=1;f<5;f++){
    const chain=chains[f],baseDirection=chain[1].clone().sub(chain[0]).normalize();
@@ -39,7 +39,7 @@ export function directDriver(rig,tips){
   }
   let contactGap=contact?fitContact(chains[0],chains[contact/4-1],lengths[0],lengths[contact/4-1],hinges.get(contact/4-1)):null;
   // A fingertip contact solve must also respect the MCP sideways limit.
-  if(contact)for(let f=1;f<5;f++){restrictBase(f);if(lockUpper){const name=side+FINGERS[f],rest=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize(),base=chains[f][1].clone().sub(chains[f][0]).normalize(),hinge=fingerPlane(rest,restAcross,palmQ,base);hinges.set(f,hinge);constrainFinger(chains[f],lengths[f],hinge,upperCoupling);}}
+  if(contact)for(let f=1;f<5;f++){if(baseSplay)restrictBase(f);if(lockUpper){const name=side+FINGERS[f],rest=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize(),base=chains[f][1].clone().sub(chains[f][0]).normalize(),hinge=fingerPlane(rest,restAcross,palmQ,base);hinges.set(f,hinge);constrainFinger(chains[f],lengths[f],hinge,upperCoupling);}}
   if(contact)contactGap=chains[0][3].distanceTo(chains[contact/4-1][3]);
   for(let f=0;f<5;f++)for(let k=0;k<4;k++)p[1+4*f+k].copy(chains[f][k]);
   rig.root.position.set(0,0,0);rig.root.updateMatrixWorld(true);const hand=rig.joints[side+'Hand'];hand.position.copy(hand.parent.worldToLocal(p[0].clone()));rig.setWorldQuat(side+'Hand',palmQ);rig.refresh(hand);
