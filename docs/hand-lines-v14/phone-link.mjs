@@ -14,7 +14,7 @@ export function receivePhone(onStream,onStatus,onEnd){
  peer.on('open',()=>{if(closed)return;new QRCode(box.querySelector('.qr'),{text:url.href,width:220,height:220,correctLevel:QRCode.CorrectLevel.M});status('Ready to scan');});
  peer.on('call',incoming=>{if(closed||call){incoming.close();return;}call=incoming;status('Phone found. Connecting video…');incoming.answer();
   incoming.on('stream',s=>{if(closed){s.getTracks().forEach(t=>t.stop());return;}box.close();onStream(s);});
-  incoming.on('close',()=>{if(!closed){close();onEnd('Phone disconnected. Click Phone camera · QR to reconnect.');}});
+  incoming.on('close',()=>{if(!closed){close();onEnd('Phone disconnected. Click Connect iPhone camera to reconnect.');}});
   incoming.on('error',e=>{if(!closed){close();onEnd('Phone connection failed: '+e.message);}});
   incoming.peerConnection?.addEventListener('iceconnectionstatechange',()=>{if(incoming.peerConnection.iceConnectionState==='failed')status('Video connection failed. Put both devices on the same Wi-Fi and reconnect.');});
  });
