@@ -623,6 +623,6 @@ if(!document.body.dataset.mapLab)installSweepSettings({cameraPanel:firstPerson.p
  $('touchReset').click();outerCollision.shape=null;contactAssist.reset();palmDepth.reset();trackingJitter.reset();for(const key of Object.keys(depthStates))delete depthStates[key];
 },isDistanceRecording:()=>depthExperiment?.recording});
 
-const {installComparison}=await import('../hand-compare/ui.mjs?v=off2');installComparison({variant,estimator:'Sweep'});
+const {installComparison}=await import('../hand-compare/ui.mjs?v=baseline4');installComparison({variant,estimator:'Sweep'});
 
 const {installInspection}=await import('../hand-compare/inspection.mjs?v=camera3');comparisonInspection=installInspection({controls,getCamera:()=>camera,reset:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();},points:()=>Object.values(renderedHands).flatMap(h=>h?.result?.points||[])});

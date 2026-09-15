@@ -15,3 +15,5 @@ Comparison entrypoints are copies of the current lab entrypoints, with variant-s
 The two fitting modes bypass incompatible finger constraints; disable fitting to use those controls. The angle method preserves screen segment direction and fixed bone lengths, searches depth with the tracker as a preference, and does not fit finger-base positions. Side-view plausibility is not guaranteed.
 
 Current defaults (user update): all switches in settings tabs OFF except shoulder rotation lock. Experimental fitting switches also OFF; enable explicitly for methods 4/5. Earlier test presets above document history, not current startup.
+
+Baseline restored: each method again starts with its tested defining behavior (archive/reference constraints, rays/angles fitting enabled). Two hands, head display and shoulder rotation lock start on for every variant. The all-off defaults above are superseded.

@@ -672,6 +672,6 @@ function applyDisplayOffset(s,result){
 if(!document.body.dataset.gunLab)firstPerson=installFirstPersonCamera({version:'PnP',scene,renderer,getHead:()=>combined,isCalibrating:()=>depthExperiment?.recording||depthExperiment?.checking,onViewChange:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();}});
 if(!document.body.dataset.gunLab){const {installSweepSettings}=await import('../hand-compare/settings.mjs?v=camera3');installSweepSettings({cameraPanel:firstPerson.panel,version:'PnP',isDistanceRecording:()=>depthExperiment?.recording});document.getElementById('sweep-hand-model').append(photoInfo,photoLink);}
 
-const {installComparison}=await import('../hand-compare/ui.mjs?v=off2');installComparison({variant,estimator:'PnP'});
+const {installComparison}=await import('../hand-compare/ui.mjs?v=baseline4');installComparison({variant,estimator:'PnP'});
 
 const {installInspection}=await import('../hand-compare/inspection.mjs?v=camera3');comparisonInspection=installInspection({controls,getCamera:()=>camera,reset:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();},points:()=>Object.values(renderedHands).flatMap(h=>h?.result?.points||[])});
