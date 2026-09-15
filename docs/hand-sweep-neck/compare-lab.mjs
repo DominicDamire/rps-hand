@@ -1,3 +1,4 @@
+let comparisonInspection=null;
 import {variant} from '../hand-compare/driver.mjs';
 import {installFirstPersonCamera} from '../hand-sweep-neck/first-person-camera.mjs?v=eye18';
 let firstPerson=null;
@@ -393,7 +394,7 @@ function demoContactAdjust(points,lm){
 function demoAdjust(points,lm){demoContactAdjust(points,lm);}
 // Separate depth buffer for hands: preserves their coordinates and perspective size.
 function renderDemo(){
- if(firstPerson?.render())return;
+ if(!comparisonInspection?.active&&firstPerson?.render())return;
  if(mapLab&&!depthExperiment?.recording){mapLab.render();return;}
  // Hands and bust share the depth buffer: contact must be spatial, not an overlay.
  for(const m of rig.parts)m.layers.set(0);
@@ -623,3 +624,5 @@ if(!document.body.dataset.mapLab)installSweepSettings({cameraPanel:firstPerson.p
 },isDistanceRecording:()=>depthExperiment?.recording});
 
 const {installComparison}=await import('../hand-compare/ui.mjs');installComparison({variant,estimator:'Sweep'});
+
+const {installInspection}=await import('../hand-compare/inspection.mjs');comparisonInspection=installInspection({controls,getCamera:()=>camera,reset:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();},points:()=>Object.values(renderedHands).flatMap(h=>h?.result?.points||[])});
