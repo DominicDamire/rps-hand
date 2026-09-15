@@ -13,3 +13,5 @@ All test presets: finger noise/smoothing/jump thresholds/coupling zero, thicknes
 Comparison entrypoints are copies of the current lab entrypoints, with variant-specific driver/model selection and settings UI. Shared production lab entrypoints are unchanged. Comparison preference keys are separate for assistance and combined settings. Keep these entrypoints in sync with future shared infrastructure changes.
 
 The two fitting modes bypass incompatible finger constraints; disable fitting to use those controls. The angle method preserves screen segment direction and fixed bone lengths, searches depth with the tracker as a preference, and does not fit finger-base positions. Side-view plausibility is not guaranteed.
+
+Current defaults (user update): all switches in settings tabs OFF except shoulder rotation lock. Experimental fitting switches also OFF; enable explicitly for methods 4/5. Earlier test presets above document history, not current startup.
