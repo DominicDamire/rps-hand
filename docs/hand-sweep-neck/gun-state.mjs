@@ -12,7 +12,7 @@ export class BodyGunState {
    else {this.armed=true;this.since=null;}
   }else{
    if(!grip){this.since??=time;if(time-this.since>=c.dropMs){this.held=false;this.aim=false;dropped=true;this.since=null;}}else this.since=null;
-   if(this.held)this.aim=c.aimEnabled&&eyeDistance<(this.aim?c.aimExit:c.aimEnter)&&Math.abs(eyeDepth)<(this.aim?c.depthExit:c.depthEnter);
+   if(this.held)this.aim=c.aimEnabled&&eyeDistance<(this.aim?c.aimExit:Math.min(c.aimEnter,c.aimExit))&&Math.abs(eyeDepth)<(this.aim?c.depthExit:Math.min(c.depthEnter,c.depthExit));
   }
   return {picked,dropped,held:this.held,aim:this.aim};
  }
