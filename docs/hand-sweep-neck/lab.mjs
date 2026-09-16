@@ -636,6 +636,13 @@ if(!document.body.dataset.mapLab){
  const partial=document.createElement('label');partial.innerHTML='<input id="partialHands" type="checkbox" checked> Keep tracking partially visible hands';tracking.append(partial);
  const partialHelp=document.createElement('p');partialHelp.textContent='Accept weaker hand detections when fingers are visible but the palm is obscured. This may also accept false detections. If landmarks disappear entirely, hold the last pose only for the tracking-grace time; one visible finger cannot guarantee full-hand detection.';tracking.append(partialHelp);
  const prediction=document.createElement('label');prediction.innerHTML='<input id="predictMissingHand" type="checkbox" checked> Predict brief hand tracking gaps (last finger pose, 150 ms motion)';tracking.append(prediction);performanceOptions=installPerformance(tracking);
+ if(document.body.dataset.handLab){
+  $('lighterHead').checked=false;$('lighterHead').closest('fieldset').querySelector('p').textContent='Fresh frames are enabled. Face and shoulder reduction is off so the 30 FPS caps apply. Toggle options to compare measured performance.';
+  const rates=document.createElement('fieldset');rates.innerHTML='<legend>Tracking FPS caps</legend><p>Targets: hands 60, face 30, shoulders 30. Live measured rates appear on the viewport. Actual rates depend on camera and processing speed.</p>';tracking.prepend(rates);
+  for(const [id,cap]of [['handRate',60],['faceRate',30],['shoulderRate',30]]){const input=$(id);input.max=cap;input.value=cap;input.nextElementSibling.value=cap;input.dispatchEvent(new Event('input'));const label=input.closest('label');label.style.setProperty('display','block','important');rates.append(label);}
+  $('uncappedTracking').checked=false;$('uncappedTracking').dispatchEvent(new Event('input'));
+ }
+
  for(const id of ['tipContact','contactAttach','contactRelease'])hidden.append($(id).closest('label'));
  defaults.innerHTML='<h2>Final hands + alien head</h2><p>Both hands use the final original-photo proportions, fingertip shells, 2D direction fitting, Sweep placement, crossing and jitter controls. Joint limits and thumb contact run after fitting. The head and eye camera retain the existing editor setup.</p><p>Hand tracking: finger spacing and jitter. Finger constraints: joint limits. Contact and collisions: fingertip contact and two-hand/head interaction. Calibration adjusts distance only.</p>';
  $('sweep-hand-model').innerHTML='<h2>Fixed final hand model</h2><p>The original palm-photo proportions and fingertip shells are applied once to both hands. Distance calibration below does not reshape the fingers.</p>';
@@ -659,7 +666,7 @@ function extendShellTips(rig,extra){
  }
 }
 
-if(!document.body.dataset.mapLab){
+if(!document.body.dataset.mapLab&&!document.body.dataset.handLab){
  const {installEditorGun}=await import('./editor-gun.mjs?handaim1');
  editorGun=await installEditorGun({scene,rig,tips,head:combined,hands:()=>allHands,renderedHands});
  editorGun.grip.querySelector('input[type="checkbox"]').addEventListener('change',e=>{if(e.target.checked){const eye=firstPerson.panel.querySelector('[aria-label="First-person view"]');if(eye.checked){eye.checked=false;eye.dispatchEvent(new Event('input'));}}});
