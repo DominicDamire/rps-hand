@@ -15,14 +15,27 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
  const source=await new GripRig(new T.Scene(),profile).ready;
  const gun=new AlignedGun(scene,rig,tips,savedGripDriver(rig,tips,source,{preserveDirections:true}),source,profile),state=new BodyGunState();
  batchGun(gun.visual);
- const cfg={pickRadius:.22,pickMs:100,dropMs:200,pickBend:40,holdBend:25,indexFree:55,aimEnabled:true,straightHip:true,lockThumb:true,aimEnter:.12,aimExit:.17,depthEnter:.09,depthExit:.13,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.02};
+ const cfg={pickRadius:.22,pickMs:100,dropMs:200,pickBend:40,holdBend:25,indexFree:55,aimEnabled:true,alignHip:true,lockThumb:true,aimEnter:.12,aimExit:.17,depthEnter:.09,depthExit:.13,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.02};
  const panel=document.createElement('section');panel.id='editorGun';
  panel.innerHTML='<h2>Chest holster and aiming</h2><p>Right hand: make a fist near the gun to pick it up. Your index can be curled, and you do not need to look down. Keep these three curled to hold. Relax them to return the gun to your chest. Straighten the index to re-arm, then curl it to shoot.</p><p>Aim by bringing the held hand close to your right eye, including camera depth. Move it away to leave aim mode. Aim distances use your exact entered values; zero disables entry. Entry must satisfy both the entry and release distances. In aim mode the grip aligns with your head direction and the camera moves to the right eye.</p>';
  const status=document.createElement('p');status.setAttribute('role','status');panel.append(status);
  function field(key,label,min,max,step,factor=1){const l=document.createElement('label'),i=document.createElement('input');l.textContent=label;i.type='number';const aimField=['aimEnter','aimExit','depthEnter','depthExit'].includes(key);i.min=aimField?0:min;if(!aimField)i.max=max;i.step=aimField?'any':step;i.value=cfg[key]*factor;i.oninput=()=>{if(i.value===''||!Number.isFinite(i.valueAsNumber))return;cfg[key]=(aimField?Math.max(0,i.valueAsNumber):T.MathUtils.clamp(i.valueAsNumber,min,max))/factor;};l.append(i);panel.append(l);}
  for(const a of [['pickRadius','Pickup radius (cm)',5,25,1,100],['pickMs','Hold grip to pick up (ms)',50,800,25],['pickBend','Minimum lower-finger curl to pick up (degrees)',35,100,1],['holdBend','Minimum lower-finger curl to keep holding (degrees)',15,70,1],['chestX','Holster left / right (cm)',-35,35,1,100],['chestY','Holster below eyes (cm)',-60,-15,1,100],['chestZ','Holster forward (cm)',-10,30,1,100],['aimEnter','Aim enter distance (cm)',5,35,1,100],['aimExit','Aim release distance (cm)',8,50,1,100],['depthEnter','Aim depth tolerance (cm)',5,25,1,100],['depthExit','Aim depth release (cm)',10,35,1,100]])field(...a);
  const toggle=document.createElement('label');toggle.innerHTML='<input type="checkbox" checked> Enable right-eye aim mode';toggle.querySelector('input').onchange=e=>cfg.aimEnabled=e.target.checked;panel.append(toggle);
- for(const [key,label]of [['straightHip','Keep wrist and gun straight ahead when hip firing'],['lockThumb','Keep thumb at saved wrapped grip while holding']]){const l=document.createElement('label'),i=document.createElement('input');i.type='checkbox';i.checked=cfg[key];i.onchange=()=>cfg[key]=i.checked;l.append(i,label);panel.append(l);}
+ for(const [key,label]of [['alignHip','Align gun forward along the hand (free wrist movement)'],['lockThumb','Keep thumb at saved wrapped grip while holding']]){const l=document.createElement('label'),i=document.createElement('input');i.type='checkbox';i.checked=cfg[key];i.onchange=()=>cfg[key]=i.checked;l.append(i,label);panel.append(l);}
+ // A fixed hand-local gun frame: barrel follows wrist-to-middle-knuckle,
+ // not the current head rotation. Calibration replaces this frame only once.
+ const handForward=rig.rest.RMiddle1.world.clone().sub(rig.rest.RHand.world).normalize();
+ const handRight=rig.rest.RIndex1.world.clone().sub(rig.rest.RPinky1.world);handRight.addScaledVector(handForward,-handRight.dot(handForward)).normalize();
+ const handBack=handForward.clone().negate(),handUp=new T.Vector3().crossVectors(handBack,handRight).normalize();
+ const defaultHip=new T.Quaternion().setFromRotationMatrix(new T.Matrix4().makeBasis(handRight,handUp,handBack)),hipReference=defaultHip.clone();
+ const hipTrim={pitch:0,yaw:0,roll:0};let lastHandQ=null,lastHandTime=-Infinity;
+ try{const saved=JSON.parse(localStorage.getItem('editor-hip-alignment-v1'));if(Array.isArray(saved?.quaternion)&&saved.quaternion.length===4&&saved.quaternion.every(Number.isFinite)&&Math.hypot(...saved.quaternion)>.001)hipReference.fromArray(saved.quaternion).normalize();for(const k of Object.keys(hipTrim))if(Number.isFinite(saved?.[k]))hipTrim[k]=T.MathUtils.clamp(saved[k],-180,180);}catch{}
+ const hipStatus=document.createElement('p');hipStatus.textContent='Hip fire follows your hand freely. Hold a comfortable wrist pointing forward, then capture neutral if needed. Head direction is sampled only when you press the button.';
+ const saveHip=()=>{try{localStorage.setItem('editor-hip-alignment-v1',JSON.stringify({quaternion:hipReference.toArray(),...hipTrim}));}catch{hipStatus.textContent='Alignment applied for this session; browser storage is unavailable.';}};
+ const trimFields=[];for(const [key,label]of [['pitch','Gun alignment up / down (degrees)'],['yaw','Gun alignment left / right (degrees)'],['roll','Gun alignment roll (degrees)']]){const l=document.createElement('label'),i=document.createElement('input');i.type='number';i.min=-180;i.max=180;i.step=1;i.value=hipTrim[key];i.setAttribute('aria-label',label);i.oninput=()=>{if(!Number.isFinite(i.valueAsNumber))return;hipTrim[key]=T.MathUtils.clamp(i.valueAsNumber,-180,180);saveHip();};l.append(label,i);panel.append(l);trimFields.push([key,i]);}
+ const neutral=document.createElement('button');neutral.textContent='Set this wrist pose as forward';neutral.onclick=()=>{if(!state.held||state.aim||!lastHandQ||performance.now()-lastHandTime>500){hipStatus.textContent='Hold the gun with a tracked hand outside close-eye aim, then capture neutral.';return;}hipReference.copy(lastHandQ).invert().multiply(headQ);for(const [k,i]of trimFields){hipTrim[k]=0;i.value=0;}saveHip();hipStatus.textContent='Neutral saved. Turn your hand to aim; moving your head alone does not steer hip fire.';};panel.append(neutral);
+ const resetHip=document.createElement('button');resetHip.textContent='Reset wrist alignment';resetHip.onclick=()=>{hipReference.copy(defaultHip);for(const[k,i]of trimFields){hipTrim[k]=0;i.value=0;}saveHip();hipStatus.textContent='Default hand-forward alignment restored.';};panel.append(resetHip,hipStatus);
  const triggerPanel=installGunSettings(gun,panel);triggerPanel.querySelectorAll('p')[1].textContent='Pickup requires the chest holster gesture described above. The index trigger and thumb use the saved endpoints.';
  const grip=document.createElement('section');grip.id='editorGrip';grip.innerHTML='<h2>Edit locked gun grip</h2><p>These controls change the saved grip only. Middle, ring and little fingers stay locked while holding. The index moves between saved trigger endpoints. The thumb stays wrapped by default; turn off the thumb lock in Gun to track it. Preview the stops, move individual joints, then save.</p>';
  const previewLabel=document.createElement('label');previewLabel.innerHTML='<input type="checkbox"> Preview grip without tracking';grip.append(previewLabel);const previewInput=previewLabel.querySelector('input');
@@ -78,8 +91,16 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
   gun.visual.visible=hasHead;
   if(state.held&&entry){
    let q=state.aim?new T.Quaternion():rig.joints.RHand.getWorldQuaternion(new T.Quaternion()),wrist=state.aim?V():entry.result.points[0].clone(),input=gun.input??{index:0,thumb:1};
+   if(!state.aim&&fresh){lastHandQ=q.clone();lastHandTime=performance.now();}
    let result=gun.pose('R',q,wrist,input.index,cfg.lockThumb?1:input.thumb,1/60);
-   if(state.aim||cfg.straightHip){
+   if(!state.aim&&cfg.alignHip){
+    const gunLocal=q.clone().invert().multiply(gun.visual.getWorldQuaternion(new T.Quaternion()));
+    const trim=new T.Quaternion().setFromEuler(new T.Euler(hipTrim.pitch*rad,hipTrim.yaw*rad,hipTrim.roll*rad));
+    const desired=q.clone().multiply(hipReference).multiply(trim);
+    q.copy(desired).multiply(gunLocal.invert());
+    result=gun.pose('R',q,wrist,input.index,cfg.lockThumb?1:input.thumb,1/60);
+   }
+   if(state.aim){
     const gunRotation=gun.visual.getWorldQuaternion(new T.Quaternion());q.premultiply(headQ.clone().multiply(gunRotation.invert()));
     result=gun.pose('R',q,wrist,input.index,cfg.lockThumb?1:input.thumb,1/60);
    }
