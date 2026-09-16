@@ -22,7 +22,7 @@ import {palmSize} from './palm-distance.mjs?v=alien13';
 import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
-import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=alien18.4';
+import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=partial1';
 import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.18-final';
 import {CombinedHead} from './head-model.mjs?v=raw19';
 import {directDriver} from '../hand-live-limits/hand-driver.mjs?v=cross2';
@@ -329,7 +329,7 @@ $('phoneDistance').oninput=()=>{$('phoneDistance').nextElementSibling.value=$('p
 $('depthGain').oninput=()=>{$('depthGain').nextElementSibling.value=$('depthGain').value;};
 $('calibrateDistance').onclick=()=>{if(!latest||camera.isOrthographicCamera){$('depthCalibrationStatus').textContent='Use perspective and show a hand next to your face first.';return;}const metres=+$('phoneDistance').value/100;let count=0;for(const s of ['R','L'])if(depthStates[s]?.depth){distanceGains[s]=metres/depthStates[s].depth;count++;}$('eyeZ').value=-metres;$('eyeZ').nextElementSibling.value=-metres;setViewMode();$('depthCalibrationStatus').textContent='Calibrated '+count+' hand(s) at '+$('phoneDistance').value+' cm. Recalibrate if you move the phone.';};
 
-const readCombinedOptions=installCombinedUI();getCombinedOptions=()=>({...readCombinedOptions(),holistic:false,handPriority:false});
+const readCombinedOptions=installCombinedUI();getCombinedOptions=()=>({...readCombinedOptions(),holistic:false,handPriority:false,partialHands:$('partialHands')?.checked??true});
 restoreStart({fingerThickness:.9,tipInset:5,fingerNoise:0,directionSmoothing:0,movementThreshold:0,confirmJump:0});
 if($('sizeDepth'))$('sizeDepth').checked=false;
 for(const id of ['sizeDepth','restGap','nearDistance','demoJitter','fingerNoise','directionSmoothing','movementThreshold','confirmJump','upperCoupling','falseDepth','phoneDistance','depthGain']){const el=$(id);if(el)el.closest('label').style.display='none';}
@@ -624,6 +624,8 @@ if(!document.body.dataset.mapLab){
  for(const panel of [tracking,constraints,defaults])for(const child of [...panel.childNodes])hidden.append(child);
  const finalPanel=installFinalSettings(tracking,()=>{drivers.R=directDriver(rig,tips);drivers.L=directDriver(rig,tips);});
  const fields=[...finalPanel.querySelectorAll('fieldset')];constraints.append(fields[2]);$('sweep-contact-and-collisions').prepend(fields[3]);tracking.append(grace);
+ const partial=document.createElement('label');partial.innerHTML='<input id="partialHands" type="checkbox" checked> Keep tracking partially visible hands';tracking.append(partial);
+ const partialHelp=document.createElement('p');partialHelp.textContent='Accept weaker hand detections when fingers are visible but the palm is obscured. This may also accept false detections. If landmarks disappear entirely, hold the last pose only for the tracking-grace time; one visible finger cannot guarantee full-hand detection.';tracking.append(partialHelp);
  for(const id of ['tipContact','contactAttach','contactRelease'])hidden.append($(id).closest('label'));
  defaults.innerHTML='<h2>Final hands + alien head</h2><p>Both hands use the final original-photo proportions, fingertip shells, 2D direction fitting, Sweep placement, crossing and jitter controls. Joint limits and thumb contact run after fitting. The head and eye camera retain the existing editor setup.</p><p>Hand tracking: finger spacing and jitter. Finger constraints: joint limits. Contact and collisions: fingertip contact and two-hand/head interaction. Calibration adjusts distance only.</p>';
  $('sweep-hand-model').innerHTML='<h2>Fixed final hand model</h2><p>The original palm-photo proportions and fingertip shells are applied once to both hands. Distance calibration below does not reshape the fingers.</p>';

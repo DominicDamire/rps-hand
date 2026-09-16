@@ -7,8 +7,8 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
  const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},errors:{}};
  const slots=['hands','face','pose'].map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
  function startWorker(s){
-  const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;s.fullBody=!!opts.fullBody;s.poseModel=opts.poseModel;
-  const url=new URL('./tracker.mjs?v=alien15.19',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('delegate',s.delegate);url.searchParams.set('fullBody',s.fullBody?'1':'0');url.searchParams.set('poseModel',s.poseModel||'lite');
+  const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;s.fullBody=!!opts.fullBody;s.poseModel=opts.poseModel;s.partialHands=!!opts.partialHands;
+  const url=new URL('./tracker.mjs?v=partial1',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('partialHands',s.partialHands?'1':'0');url.searchParams.set('delegate',s.delegate);url.searchParams.set('fullBody',s.fullBody?'1':'0');url.searchParams.set('poseModel',s.poseModel||'lite');
   const w=s.worker=new Worker(url,{type:'module'});
   s.timer=setTimeout(()=>{if(!s.ready){stats.errors[s.task]='Tracker initialization timed out';w.terminate();s.busy=false;}},60000);
   w.onerror=e=>{clearTimeout(s.timer);stats.errors[s.task]=e.message;s.busy=false;s.ready=false;};
@@ -37,7 +37,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
   const opts={...defaults,...getOptions()},due=[];
   for(const s of slots){
    if(!enabled(s,opts)){if(s.worker){s.worker.terminate();clearTimeout(s.timer);s.worker=null;s.ready=s.busy=false;}stats[s.task]=0;continue;}
-   if(s.worker&&(s.delegate!==opts.trackerDelegate||s.fullBody!==!!opts.fullBody||s.poseModel!==opts.poseModel)){s.worker.terminate();clearTimeout(s.timer);s.worker=null;s.ready=s.busy=false;}
+   if(s.worker&&(s.delegate!==opts.trackerDelegate||s.fullBody!==!!opts.fullBody||s.poseModel!==opts.poseModel||s.partialHands!==!!opts.partialHands)){s.worker.terminate();clearTimeout(s.timer);s.worker=null;s.ready=s.busy=false;}
    if(!s.worker)startWorker(s);
    const rate=+(s.task==='hands'?opts.handRate:s.task==='face'?opts.faceRate:opts.shoulderRate);
    if(s.rate!==rate){s.rate=rate;s.next=now;}
