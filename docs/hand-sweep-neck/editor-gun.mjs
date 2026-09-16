@@ -13,9 +13,9 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
  try{const saved=JSON.parse(localStorage.getItem('editor-gun-grip-v1'));if(saved)profile=validateProfile(saved);}catch{}
  const source=await new GripRig(new T.Scene(),profile).ready;
  const gun=new AlignedGun(scene,rig,tips,savedGripDriver(rig,tips,source),source,profile),state=new BodyGunState();
- const cfg={pickRadius:.14,pickMs:250,dropMs:200,pickBend:55,holdBend:32,indexFree:35,aimEnabled:true,aimEnter:.24,aimExit:.32,depthEnter:.18,depthExit:.26,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.08};
+ const cfg={pickRadius:.22,pickMs:150,dropMs:200,pickBend:40,holdBend:25,indexFree:55,aimEnabled:true,aimEnter:.24,aimExit:.32,depthEnter:.18,depthExit:.26,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.02};
  const panel=document.createElement('section');panel.id='editorGun';
- panel.innerHTML='<h2>Chest holster and aiming</h2><p>Right hand: look down, reach the holster with an open hand, then close middle, ring and little fingers with index extended. Keep these three curled to hold. Relax them to return the gun to your chest. Straighten the index to re-arm, then curl it to shoot.</p><p>Aim by bringing the held hand close to your right eye, including camera depth. Move it away to leave aim mode. In aim mode the grip aligns with your head direction and the camera moves to the right eye.</p>';
+ panel.innerHTML='<h2>Chest holster and aiming</h2><p>Right hand: look slightly down, reach the vertical chest holster with an open hand, then close middle, ring and little fingers with index extended. Keep these three curled to hold. Relax them to return the gun to your chest. Straighten the index to re-arm, then curl it to shoot.</p><p>Aim by bringing the held hand close to your right eye, including camera depth. Move it away to leave aim mode. In aim mode the grip aligns with your head direction and the camera moves to the right eye.</p>';
  const status=document.createElement('p');status.setAttribute('role','status');panel.append(status);
  function field(key,label,min,max,step,factor=1){const l=document.createElement('label'),i=document.createElement('input');l.textContent=label;i.type='number';i.min=min;i.max=max;i.step=step;i.value=cfg[key]*factor;i.onchange=()=>{cfg[key]=T.MathUtils.clamp(Number(i.value)||0,min,max)/factor;cfg.aimExit=Math.max(cfg.aimEnter+.02,cfg.aimExit);cfg.depthExit=Math.max(cfg.depthEnter+.02,cfg.depthExit);};l.append(i);panel.append(l);}
  for(const a of [['pickRadius','Pickup radius (cm)',5,25,1,100],['pickMs','Hold grip to pick up (ms)',150,800,25],['pickBend','Minimum lower-finger curl to pick up (degrees)',35,100,1],['holdBend','Minimum lower-finger curl to keep holding (degrees)',15,70,1],['indexFree','Maximum index bend when picking up (degrees)',10,70,1],['chestX','Holster left / right (cm)',-35,35,1,100],['chestY','Holster below eyes (cm)',-60,-15,1,100],['chestZ','Holster forward (cm)',-10,30,1,100],['aimEnter','Aim enter distance (cm)',10,35,1,100],['aimExit','Aim release distance (cm)',15,50,1,100],['depthEnter','Aim depth tolerance (cm)',5,25,1,100],['depthExit','Aim depth release (cm)',10,35,1,100]])field(...a);
@@ -38,7 +38,7 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
  const dot=new T.Mesh(new T.SphereGeometry(.05,10,8),new T.MeshBasicMaterial({color:0xff2424,depthTest:false}));dot.renderOrder=10;scene.add(dot);dot.visible=false;
  const tracer=new T.Line(new T.BufferGeometry().setFromPoints([V(),V()]),new T.LineBasicMaterial({color:0xffc05a}));scene.add(tracer);tracer.visible=false;
  let lastSample=null,lastFresh=0,shots=0,flash=0,aimPose=null;
- const holster=V(),eye=V(),forward=new T.Vector3(0,0,1),headQ=new T.Quaternion();
+ const holster=V(),eye=V(),forward=new T.Vector3(0,0,1),headQ=new T.Quaternion(),bodyQ=new T.Quaternion();
  function release(){state.reset();gun.controller.reset();gun.owner=null;gun.input=null;aimPose=null;}
  gun.release=release;previewInput.onchange=()=>{release();};
  function body(){scene.updateMatrixWorld(true);const eyes=head.bones.eyes;if(!head.group.visible||eyes?.length!==2)return false;
@@ -46,10 +46,10 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
   const right=new T.Vector3(1,0,0).applyQuaternion(headQ),mid=eyes[0].getWorldPosition(V()).add(eyes[1].getWorldPosition(V())).multiplyScalar(.5);
   const named=eyes.find(b=>/right|[._-]r$/i.test(b.name));eye.copy((named??eyes.reduce((a,b)=>a.getWorldPosition(V()).dot(right)>b.getWorldPosition(V()).dot(right)?a:b)).getWorldPosition(V()));
   // Holster follows torso yaw, not the nod used to look down at it.
-  const yaw=Math.atan2(-forward.x,-forward.z),bodyQ=new T.Quaternion().setFromAxisAngle(new T.Vector3(0,1,0),yaw);
+  const yaw=Math.atan2(-forward.x,-forward.z);bodyQ.setFromAxisAngle(new T.Vector3(0,1,0),yaw);
   holster.copy(mid).add(new T.Vector3(cfg.chestX,cfg.chestY,-cfg.chestZ).applyQuaternion(bodyQ));return true;
  }
- function park(){gun.visual.matrixAutoUpdate=true;gun.visual.position.copy(holster);gun.visual.quaternion.copy(headQ).multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(0,0,1),Math.PI/2));gun.visual.scale.setScalar(profile.gun.scale);gun.visual.updateMatrixWorld(true);}
+ function park(){gun.visual.matrixAutoUpdate=true;gun.visual.position.copy(holster);gun.visual.quaternion.copy(bodyQ).multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(1,0,0),-Math.PI/2));gun.visual.scale.setScalar(profile.gun.scale);gun.visual.updateMatrixWorld(true);}
  function tick(now){
   const hasHead=body(),h=hands().find(h=>h.label==='Right'),entry=renderedHands.R;aimPose=null;
   if(previewInput.checked){
