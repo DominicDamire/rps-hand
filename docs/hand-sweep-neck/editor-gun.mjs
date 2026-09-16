@@ -1,3 +1,4 @@
+import {batchGun} from './gun-batching.mjs?v=1';
 import * as T from 'three';
 import {AlignedGun} from '../hand-pnp-gun/gun.mjs?v=grip1';
 import {GripRig} from '../gun-lab/grip-rig.mjs?v=4';
@@ -13,6 +14,7 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
  try{const saved=JSON.parse((localStorage.getItem('gun-grip-lab-v2')||localStorage.getItem('editor-gun-grip-v1')));if(saved)profile=validateProfile(saved);}catch{}
  const source=await new GripRig(new T.Scene(),profile).ready;
  const gun=new AlignedGun(scene,rig,tips,savedGripDriver(rig,tips,source,{preserveDirections:true}),source,profile),state=new BodyGunState();
+ batchGun(gun.visual);
  const cfg={pickRadius:.22,pickMs:100,dropMs:200,pickBend:40,holdBend:25,indexFree:55,aimEnabled:true,aimEnter:.12,aimExit:.17,depthEnter:.09,depthExit:.13,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.02};
  const panel=document.createElement('section');panel.id='editorGun';
  panel.innerHTML='<h2>Chest holster and aiming</h2><p>Right hand: make a fist near the gun to pick it up. Your index can be curled, and you do not need to look down. Keep these three curled to hold. Relax them to return the gun to your chest. Straighten the index to re-arm, then curl it to shoot.</p><p>Aim by bringing the held hand close to your right eye, including camera depth. Move it away to leave aim mode. Aim distances use your exact entered values; zero disables entry. Entry must satisfy both the entry and release distances. In aim mode the grip aligns with your head direction and the camera moves to the right eye.</p>';
