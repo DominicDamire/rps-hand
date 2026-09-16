@@ -4,7 +4,7 @@ export const defaults = {cameraFps:30,handRate:30,faceRate:30,shoulderRate:30,tr
 export function startTracking(video, onResult, onStats, getOptions=()=>defaults,captureOptions={}) {
  let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0,cameraCallbacks=0,lastPresented=null,handStreak=0,lastAccepted=-Infinity,lastClockProgress=performance.now(),capturePolls=0;
  const frameMeter=measureVideoFrames(video);
- const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},errors:{}};
+ const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},age:{},errors:{}};
  const slots=['hands','face','pose'].map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
  function startWorker(s){
   const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;s.fullBody=!!opts.fullBody;s.poseModel=opts.poseModel;s.partialHands=!!opts.partialHands;
@@ -16,7 +16,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
    if(data.type==='ready'){clearTimeout(s.timer);s.ready=true;stats.delegate[s.task]=data.delegate;return;}
    s.busy=false;
    if(data.type==='error'){stats.errors[s.task]=data.message;return;}
-   if(data.type==='result'){delete stats.errors[s.task];s.count++;stats.ms[s.task]=data.inferenceMs??data.ms;onResult(data,s.canvas);}
+   if(data.type==='result'){delete stats.errors[s.task];s.count++;stats.ms[s.task]=data.inferenceMs??data.ms;stats.age[s.task]=performance.now()-data.time;onResult(data,s.canvas);}
   };w.postMessage({type:'init'});
  }
  const enabled=(s,o)=>+(s.task==='hands'?o.handRate:s.task==='face'?o.faceRate:o.shoulderRate)>0;
@@ -54,7 +54,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
  }
  // Original standalone capture pattern: RAF drives work; video callbacks are not a gate.
  function fallbackTick(now){if(stopped)return;
-  const stalled=now-lastClockProgress>250;
+  const fresh=!!getOptions().freshFrames;if(fresh&&video.requestVideoFrameCallback){rafHandle=requestAnimationFrame(fallbackTick);return;}const stalled=now-lastClockProgress>250;
   if(!stalled||now-lastAccepted>=33)tick(now,undefined,stalled);
   rafHandle=requestAnimationFrame(fallbackTick);
  }
@@ -64,6 +64,8 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
   if(now-windowStart>=950){const seconds=(now-windowStart)/1000;const measured=frameMeter.read();stats.camera=measured.fps;stats.cameraCallbacks=Math.round(cameraCallbacks/seconds);stats.capturePolls=capturePolls;capturePolls=0;stats.cameraCounter=measured.source;cameraFrames=0;cameraCallbacks=0;for(const s of slots){stats[s.task]=Math.round(s.count/seconds);s.count=0;}windowStart=now;onStats({...stats,requested:opts.cameraFps,cameraSettings:video.srcObject?.getVideoTracks()[0]?.getSettings()});}
  },1000);
 
+ function videoTick(now,meta){if(stopped)return;if(getOptions().freshFrames)tick(now,meta);handle=video.requestVideoFrameCallback(videoTick);}
+ if(video.requestVideoFrameCallback)handle=video.requestVideoFrameCallback(videoTick);
  rafHandle=requestAnimationFrame(fallbackTick);
  return ()=>{stopped=true;frameMeter.stop();clearInterval(reportTimer);if(video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(handle);cancelAnimationFrame(rafHandle);for(const s of slots){clearTimeout(s.timer);s.worker?.terminate();}};
 }

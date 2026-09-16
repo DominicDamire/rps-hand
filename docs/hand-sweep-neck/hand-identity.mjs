@@ -1,7 +1,7 @@
 // Preserve identity using palm motion rather than a single handedness label.
 const ids=[0,5,9,13,17];
 const distance=(a,b)=>ids.reduce((s,i)=>s+Math.hypot(a[i].x-b[i].x,a[i].y-b[i].y),0)/ids.length;
-export function stableHands(current,recent,now,grace,predict=true){
+export function stableHands(current,recent,now,grace,predict=true,blend=false){
  const previous=[...recent.values()].filter(h=>now-h.seen<Math.min(grace,350));
  const edges=[];current.forEach((h,i)=>previous.forEach(p=>{const d=distance(h.landmarks,p.landmarks);if(d<.18)edges.push({i,p,d});}));
  edges.sort((a,b)=>a.d-b.d);const assigned=new Set(),labels=new Set();
@@ -13,12 +13,16 @@ export function stableHands(current,recent,now,grace,predict=true){
  }
  for(const h of unique){const old=recent.get(h.label),dt=old?h.seen-old.seen:0;
   h.velocity=dt>=8&&dt<=200?{x:(h.landmarks[0].x-old.landmarks[0].x)/dt,y:(h.landmarks[0].y-old.landmarks[0].y)/dt}:{x:0,y:0};
+  if(blend&&old){
+   if(old.missing){const estimate=predictHand(old,now);h.recovery={at:now,dx:estimate.landmarks[0].x-h.landmarks[0].x,dy:estimate.landmarks[0].y-h.landmarks[0].y};}
+   else if(old.recovery&&now-old.recovery.at<100)h.recovery=old.recovery;
+  }
   recent.set(h.label,h);
  }
  for(const [label,h]of recent){if(now-h.seen>grace){recent.delete(label);continue;}
-  if(!unique.some(p=>p.label===label)&&!unique.some(p=>distance(p.landmarks,h.landmarks)<.18))unique.push(predict?predictHand(h,now):{...h,predicted:true});
+  if(!unique.some(p=>p.label===label)&&!unique.some(p=>distance(p.landmarks,h.landmarks)<.18)){h.missing=true;unique.push(predict?predictHand(h,now):{...h,predicted:true});}
  }
- return unique.slice(0,2);
+ return unique.slice(0,2).map(h=>{if(!blend||h.predicted||!h.recovery)return h;const w=Math.max(0,1-(now-h.recovery.at)/100);return {...h,landmarks:h.landmarks.map(p=>({...p,x:p.x+h.recovery.dx*w,y:p.y+h.recovery.dy*w}))};});
 }
 
 export function predictHand(h,now){

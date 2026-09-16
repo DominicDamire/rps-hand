@@ -1,5 +1,7 @@
+import {installPerformance} from './performance-options.mjs?v=perfcompare2';
+let performanceOptions=null;
 import {openCamera} from '../shared-phone/camera-capture.mjs?v=60fps1';
-import {stableHands} from './hand-identity.mjs?v=predict1';
+import {stableHands} from './hand-identity.mjs?v=perfcompare1';
 import {finalConfig,installFinalSettings} from '../hand-range/settings.mjs?v=range1';
 const finalReference=await(await fetch(new URL('../hand-live-limits/hand-reference.json',import.meta.url))).json();
 import {installFirstPersonCamera} from '../hand-sweep-neck/editor-camera.mjs?v=closeaim1';
@@ -24,7 +26,7 @@ import {palmSize} from './palm-distance.mjs?v=alien13';
 import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
-import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=partial1';
+import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=perfcompare1';
 import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.18-final';
 import {CombinedHead} from './head-model.mjs?v=raw19';
 import {directDriver} from '../hand-live-limits/hand-driver.mjs?v=cross2';
@@ -196,7 +198,7 @@ function acceptTracking(data,frame,token=epoch){if($('reduceShake')?.checked)dat
  if(desired==='first'&&latest&&data.landmarks?.length>1){let best=Infinity;data.landmarks.forEach((points,i)=>{const d=Math.hypot(points[0].x-latest.landmarks[0].x,points[0].y-latest.landmarks[0].y);if(d<best){best=d;idx=i;}});}
 
  allHands=(data.landmarks||[]).map((landmarks,i)=>({landmarks,world:data.worldLandmarks?.[i],label:data.handedness?.[i]?.[0]?.categoryName,confidence:data.handedness?.[i]?.[0]?.score??0,time:data.time,seen:performance.now()})).filter(h=>h.world?.length===21).slice(0,2);
- const stamp=performance.now();allHands=stableHands(allHands,recentHands,stamp,+$('trackingGrace').value,$('predictMissingHand')?.checked??true);
+ const stamp=performance.now();allHands=stableHands(allHands,recentHands,stamp,+$('trackingGrace').value,$('predictMissingHand')?.checked??true,performanceOptions?.blend??false);
  const primary=allHands.find(h=>h.landmarks===data.landmarks?.[idx])||allHands[0];
  const lm=primary?.landmarks,world=primary?.world;drawPreview(frame,lm);
  if(!world||world.length!==21){latest=null;$('captureState').textContent='No selected hand detected. Keep the hand in view.';$('matchState').textContent='No pose matched';updateMode();return;}
@@ -330,7 +332,7 @@ $('phoneDistance').oninput=()=>{$('phoneDistance').nextElementSibling.value=$('p
 $('depthGain').oninput=()=>{$('depthGain').nextElementSibling.value=$('depthGain').value;};
 $('calibrateDistance').onclick=()=>{if(!latest||camera.isOrthographicCamera){$('depthCalibrationStatus').textContent='Use perspective and show a hand next to your face first.';return;}const metres=+$('phoneDistance').value/100;let count=0;for(const s of ['R','L'])if(depthStates[s]?.depth){distanceGains[s]=metres/depthStates[s].depth;count++;}$('eyeZ').value=-metres;$('eyeZ').nextElementSibling.value=-metres;setViewMode();$('depthCalibrationStatus').textContent='Calibrated '+count+' hand(s) at '+$('phoneDistance').value+' cm. Recalibrate if you move the phone.';};
 
-const readCombinedOptions=installCombinedUI();getCombinedOptions=()=>({...readCombinedOptions(),holistic:false,handPriority:false,partialHands:$('partialHands')?.checked??true});
+const readCombinedOptions=installCombinedUI();getCombinedOptions=()=>{const o={...readCombinedOptions(),holistic:false,handPriority:false,partialHands:$('partialHands')?.checked??true};return performanceOptions?performanceOptions.options(o):o;};
 restoreStart({fingerThickness:.9,tipInset:5,fingerNoise:0,directionSmoothing:0,movementThreshold:0,confirmJump:0});
 if($('sizeDepth'))$('sizeDepth').checked=false;
 for(const id of ['sizeDepth','restGap','nearDistance','demoJitter','fingerNoise','directionSmoothing','movementThreshold','confirmJump','upperCoupling','falseDepth','phoneDistance','depthGain']){const el=$(id);if(el)el.closest('label').style.display='none';}
@@ -349,7 +351,7 @@ $('calibrateDistance').onclick=()=>{
  for(const s of ['R','L'])delete cheekOffsets[s];handCalibrate();const ok=combined.calibrate(+$('phoneDistance').value/100,captureAspect,camera.aspect);
  $('depthCalibrationStatus').textContent=ok?'Hands and face share '+$('phoneDistance').value+' cm reference. Head size stays fixed. Check cheek contact and adjust Face depth offset if needed. Recalibrate after moving the phone.':'Head model is still loading; retry when ready.';
 };
-function showTrackingStats(s){trackingStats=s;lastStatsTime=performance.now();$('liveFps').textContent=`CAM ${s.camera||0} FPS
+function showTrackingStats(s){performanceOptions?.sample(s,measuredScene,parseFloat($('calculationTiming').textContent.split(':')[1])||0);trackingStats=s;lastStatsTime=performance.now();$('liveFps').textContent=`CAM ${s.camera||0} FPS
 HAND ${s.hands||0} · FACE ${s.face||0} · BODY ${s.pose||0}`;const o=getCombinedOptions();$('combinedStatus').textContent=`Camera: ${s.camera||0} ${s.cameraCounter||"observed"} FPS · fallback reads ${s.capturePolls||0}/s (requested ${o.cameraFps}) · camera reports ${s.cameraSettings?.frameRate?.toFixed?.(1)||'?'}
 Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms?.hands||0)} ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
@@ -627,7 +629,7 @@ if(!document.body.dataset.mapLab){
  const fields=[...finalPanel.querySelectorAll('fieldset')];constraints.append(fields[2]);$('sweep-contact-and-collisions').prepend(fields[3]);tracking.append(grace);
  const partial=document.createElement('label');partial.innerHTML='<input id="partialHands" type="checkbox" checked> Keep tracking partially visible hands';tracking.append(partial);
  const partialHelp=document.createElement('p');partialHelp.textContent='Accept weaker hand detections when fingers are visible but the palm is obscured. This may also accept false detections. If landmarks disappear entirely, hold the last pose only for the tracking-grace time; one visible finger cannot guarantee full-hand detection.';tracking.append(partialHelp);
- const prediction=document.createElement('label');prediction.innerHTML='<input id="predictMissingHand" type="checkbox" checked> Predict brief hand tracking gaps (last finger pose, 150 ms motion)';tracking.append(prediction);
+ const prediction=document.createElement('label');prediction.innerHTML='<input id="predictMissingHand" type="checkbox" checked> Predict brief hand tracking gaps (last finger pose, 150 ms motion)';tracking.append(prediction);performanceOptions=installPerformance(tracking);
  for(const id of ['tipContact','contactAttach','contactRelease'])hidden.append($(id).closest('label'));
  defaults.innerHTML='<h2>Final hands + alien head</h2><p>Both hands use the final original-photo proportions, fingertip shells, 2D direction fitting, Sweep placement, crossing and jitter controls. Joint limits and thumb contact run after fitting. The head and eye camera retain the existing editor setup.</p><p>Hand tracking: finger spacing and jitter. Finger constraints: joint limits. Contact and collisions: fingertip contact and two-hand/head interaction. Calibration adjusts distance only.</p>';
  $('sweep-hand-model').innerHTML='<h2>Fixed final hand model</h2><p>The original palm-photo proportions and fingertip shells are applied once to both hands. Distance calibration below does not reshape the fingers.</p>';
