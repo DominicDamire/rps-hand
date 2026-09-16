@@ -653,7 +653,8 @@ if(!document.body.dataset.mapLab){
  $('reduceShake').checked=false;$('tipContact').checked=false;
  $('lockBody').checked=true;$('bothHands').checked=true;$('showHead').checked=true;
  $('fingerThickness').value=1;$('tipInset').value=0;
- document.querySelector('header b').textContent='FINAL HANDS + ALIEN HEAD';document.querySelector('header span').textContent='Two hands · Sweep positioning · tracked eye camera';notice('Final hands and alien head ready. Connect your camera or iPhone.');
+ const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands.html?v=heldlab1">Hands and head lab</a> · <a href="held-gun.html?v=heldlab1">Held-gun lab</a> · <a href="./?v=heldlab1">Full editor</a>';$('directSettings').prepend(labLinks);
+ document.querySelector('header b').textContent=document.body.dataset.heldGunLab?'HELD GUN + PHOTO HAND LAB':document.body.dataset.handLab?'HANDS + HEAD TRACKING LAB':'FINAL HANDS + ALIEN HEAD';document.querySelector('header span').textContent='Two hands · Sweep positioning · tracked eye camera';notice(document.body.dataset.heldGunLab?'Held-gun lab ready. Edit the saved grip or connect your camera to drive it with your right hand.':'Final hands and alien head ready. Connect your camera or iPhone.');
 }
 function extendShellTips(rig,extra){
  rig.root.updateMatrixWorld(true);
@@ -667,8 +668,8 @@ function extendShellTips(rig,extra){
 }
 
 if(!document.body.dataset.mapLab&&!document.body.dataset.handLab){
- const {installEditorGun}=await import('./editor-gun.mjs?handaim1');
- editorGun=await installEditorGun({scene,rig,tips,head:combined,hands:()=>allHands,renderedHands});
+ const {installEditorGun}=await import('./editor-gun.mjs?heldlab1');
+ editorGun=await installEditorGun({scene,rig,tips,head:combined,hands:()=>allHands,renderedHands,alwaysHeld:!!document.body.dataset.heldGunLab});
  editorGun.grip.querySelector('input[type="checkbox"]').addEventListener('change',e=>{if(e.target.checked){const eye=firstPerson.panel.querySelector('[aria-label="First-person view"]');if(eye.checked){eye.checked=false;eye.dispatchEvent(new Event('input'));}}});
  const tabs=document.querySelector('[role="tablist"]'),extra=[editorGun.panel,editorGun.grip];
  for(const b of [...tabs.children])b.addEventListener('click',()=>{for(const p of extra)p.style.setProperty('display','none','important');for(const e of tabs.querySelectorAll('[data-gun-tab]'))e.setAttribute('aria-selected','false');});
