@@ -10,7 +10,7 @@ import {BodyGunState} from './gun-state.mjs?v=aimrelease1';
 const V=()=>new T.Vector3(),rad=Math.PI/180;
 export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}){
  const original=await loadProvidedProfile();let profile=structuredClone(original);
- try{const saved=JSON.parse(localStorage.getItem('editor-gun-grip-v1'));if(saved)profile=validateProfile(saved);}catch{}
+ try{const saved=JSON.parse((localStorage.getItem('editor-gun-grip-v1')||localStorage.getItem('gun-grip-lab-v2')));if(saved)profile=validateProfile(saved);}catch{}
  const source=await new GripRig(new T.Scene(),profile).ready;
  const gun=new AlignedGun(scene,rig,tips,savedGripDriver(rig,tips,source),source,profile),state=new BodyGunState();
  const cfg={pickRadius:.22,pickMs:100,dropMs:200,pickBend:40,holdBend:25,indexFree:55,aimEnabled:true,aimEnter:.12,aimExit:.17,depthEnter:.09,depthExit:.13,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.02};
@@ -26,13 +26,16 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
  const endpoint=document.createElement('select');endpoint.setAttribute('aria-label','Grip endpoint');for(const [value,text]of [['angles','Released index / wrapped thumb'],['indexPressed','Pressed index'],['thumbOpen','Raised thumb']])endpoint.add(new Option(text,value));grip.append(endpoint);
  const finger=document.createElement('select');finger.setAttribute('aria-label','Grip finger');for(const name of ['Thumb','Index','Middle','Ring','Pinky'])finger.add(new Option(name,name));grip.append(finger);
  const joint=document.createElement('select');joint.setAttribute('aria-label','Grip joint');for(let i=1;i<=3;i++)joint.add(new Option(i===1?'Base joint':i===2?'Middle joint':'Tip joint',i));grip.append(joint);
- const sliders=[];function rebuild(){source.configure(profile);gun.driver=savedGripDriver(rig,tips,source);}
+ const sliders=[];function rebuild(){gun.profile=profile;source.configure(profile);gun.driver=savedGripDriver(rig,tips,source);}
  function target(){const name=finger.value+joint.value;const bank=profile[endpoint.value]??= {};bank[name]??=[...profile.angles[name]];return bank[name];}
  function updateFields(){const restricted=endpoint.value==='indexPressed'?'Index':endpoint.value==='thumbOpen'?'Thumb':null;if(restricted)finger.value=restricted;finger.disabled=!!restricted;sliders.forEach((s,k)=>{s.value=target()[k];s.nextElementSibling.value=s.value;});}
  for(const [axis,label]of ['Bend / local X','Side / local Y','Twist / local Z'].entries()){const l=document.createElement('label'),s=document.createElement('input'),o=document.createElement('output');l.textContent=label;s.type='range';s.min=-180;s.max=180;s.step=1;s.setAttribute('aria-label',label);s.oninput=()=>{target()[axis]=+s.value;o.value=s.value;rebuild();};l.append(s,o);grip.append(l);sliders.push(s);}
  for(const s of [endpoint,finger,joint])s.onchange=updateFields;updateFields();
- for(const [name,fn]of [['Save grip',()=>{localStorage.setItem('editor-gun-grip-v1',JSON.stringify(profile));gripStatus.textContent='Grip saved on this browser.';}],['Restore supplied grip',()=>{Object.assign(profile,structuredClone(original));rebuild();updateFields();localStorage.removeItem('editor-gun-grip-v1');gripStatus.textContent='Original supplied grip restored.';}]]){const b=document.createElement('button');b.textContent=name;b.onclick=fn;grip.append(b);}
+ for(const [name,fn]of [['Save grip',()=>{rebuild();localStorage.setItem('editor-gun-grip-v1',JSON.stringify(profile));localStorage.setItem('gun-grip-lab-v2',JSON.stringify(profile));gripStatus.textContent='Grip saved for this editor and the gun editor on this browser.';}],['Restore supplied grip',()=>{Object.assign(profile,structuredClone(original));rebuild();updateFields();localStorage.removeItem('editor-gun-grip-v1');localStorage.removeItem('gun-grip-lab-v2');gripStatus.textContent='Original supplied grip restored.';}]]){const b=document.createElement('button');b.textContent=name;b.onclick=fn;grip.append(b);}
  const gripStatus=document.createElement('p');grip.append(gripStatus);
+ function loadSavedGrip(){try{const raw=localStorage.getItem('gun-grip-lab-v2')||localStorage.getItem('editor-gun-grip-v1');if(!raw){gripStatus.textContent='No saved grip in this browser.';return;}profile=validateProfile(JSON.parse(raw));localStorage.setItem('editor-gun-grip-v1',JSON.stringify(profile));rebuild();updateFields();gripStatus.textContent='Saved gun-editor grip loaded for preview and live pickup.';}catch(e){gripStatus.textContent='Could not load grip: '+e.message;}}
+ const loadGrip=document.createElement('button');loadGrip.textContent='Load saved gun-editor grip';loadGrip.onclick=loadSavedGrip;grip.append(loadGrip);
+ addEventListener('storage',e=>{if(e.key==='gun-grip-lab-v2'&&e.newValue)loadSavedGrip();});
  // Sight rail is parallel to the barrel. The red point lies on the shot ray.
  const glass=gun.visual.getObjectByName('Sight_glass_low');glass.geometry.computeBoundingBox();glass.updateWorldMatrix(true,false);const sightLocal=glass.geometry.boundingBox.getCenter(V()).applyMatrix4(glass.matrixWorld).applyMatrix4(gun.visual.matrixWorld.clone().invert());
  glass.material=new T.MeshBasicMaterial({color:0xcceeff,transparent:true,opacity:.06,depthWrite:false,side:T.DoubleSide});
