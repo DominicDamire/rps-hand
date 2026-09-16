@@ -659,7 +659,7 @@ if(!document.body.dataset.mapLab){
  }
 }
 if(!document.body.dataset.mapLab){
- const {installTwoHandMagnets}=await import('./two-hand-magnets.mjs?v=magnet1');
+ const {installTwoHandMagnets}=await import('./two-hand-magnets.mjs?v=arch2');
  twoHandMagnets=installTwoHandMagnets({container:$('sweep-contact-and-collisions'),rig,hands:()=>allHands,rendered:renderedHands,aspect:()=>captureAspect,config:finalConfig,isPaused:()=>!!depthExperiment?.recording||!!editorGun?.state.held||!!editorGun?.grip.querySelector('input[type="checkbox"]').checked});
  // Replace the previous single-pair matching controls with multi-tip magnets.
  for(const id of ['nearbyTips','handsTouch','indexContactOnly'])$(id).checked=false;
