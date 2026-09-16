@@ -1,6 +1,6 @@
 import {finalConfig,installFinalSettings} from '../hand-range/settings.mjs?v=range1';
 const finalReference=await(await fetch(new URL('../hand-live-limits/hand-reference.json',import.meta.url))).json();
-import {installFirstPersonCamera} from '../hand-sweep-neck/editor-camera.mjs?v=gun1';
+import {installFirstPersonCamera} from '../hand-sweep-neck/editor-camera.mjs?v=closeaim1';
 let firstPerson=null,editorGun=null,twoHandMagnets=null;
 import {installDistanceCalibration} from '../hand-sweep-neck/distance-calibration.mjs?v=assist16';
 const installExperiment=document.body.dataset.mapLab?installLegacyExperiment:installDistanceCalibration;
@@ -615,7 +615,7 @@ if(document.body.dataset.mapLab){
  controls.enabled=false;document.title='Dust II · Sweep hands';document.querySelector('header b').textContent='Dust II · Sweep hands';
 }
 
-if(!document.body.dataset.mapLab)firstPerson=installFirstPersonCamera({version:'Sweep',scene,renderer,getHead:()=>combined,getAim:()=>editorGun?.getAim(),isCalibrating:()=>depthExperiment?.recording||depthExperiment?.checking,onViewChange:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();}});
+if(!document.body.dataset.mapLab)firstPerson=installFirstPersonCamera({version:'Sweep',scene,renderer,getHead:()=>combined,getAim:()=>editorGun?.getAim(),getAimHidden:()=>[rig.root,markerGroup,gizmo,modelLines,secondLines],isCalibrating:()=>depthExperiment?.recording||depthExperiment?.checking,onViewChange:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();}});
 if(!document.body.dataset.mapLab){
  installSweepSettings({cameraPanel:firstPerson.panel,rig,hands:()=>allHands,aspect:()=>captureAspect,isDistanceRecording:()=>depthExperiment?.recording});
  const hidden=document.createElement('div');hidden.style.setProperty('display','none','important');$('directSettings').append(hidden);
@@ -648,7 +648,7 @@ function extendShellTips(rig,extra){
 }
 
 if(!document.body.dataset.mapLab){
- const {installEditorGun}=await import('./editor-gun.mjs?v=gun1');
+ const {installEditorGun}=await import('./editor-gun.mjs?v=closeaim1');
  editorGun=await installEditorGun({scene,rig,tips,head:combined,hands:()=>allHands,renderedHands});
  editorGun.grip.querySelector('input[type="checkbox"]').addEventListener('change',e=>{if(e.target.checked){const eye=firstPerson.panel.querySelector('[aria-label="First-person view"]');if(eye.checked){eye.checked=false;eye.dispatchEvent(new Event('input'));}}});
  const tabs=document.querySelector('[role="tablist"]'),extra=[editorGun.panel,editorGun.grip];

@@ -72,7 +72,7 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
     const gunRotation=gun.visual.getWorldQuaternion(new T.Quaternion());q.premultiply(headQ.clone().multiply(gunRotation.invert()));
     result=gun.pose('R',q,wrist,input.index,input.thumb,1/60);
     const sightPoint=gun.visual.localToWorld(sightLocal.clone()),offset=eye.clone().addScaledVector(forward,.16).sub(sightPoint);wrist.add(offset);
-    result=gun.pose('R',q,wrist,input.index,input.thumb,1/60);aimPose={position:eye.clone(),quaternion:headQ.clone()};
+    result=gun.pose('R',q,wrist,input.index,input.thumb,1/60);aimPose={position:eye.clone().addScaledVector(forward,.10),quaternion:headQ.clone(),fov:35};
    }
    entry.result=result;gun.visual.updateMatrixWorld(true);
    const from=gun.visual.localToWorld(source.muzzle.clone()),barrel=new T.Vector3(0,0,-1).transformDirection(gun.visual.matrixWorld);
