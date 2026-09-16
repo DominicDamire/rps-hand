@@ -1,3 +1,4 @@
+import {stableHands} from './hand-identity.mjs?v=identity1';
 import {finalConfig,installFinalSettings} from '../hand-range/settings.mjs?v=range1';
 const finalReference=await(await fetch(new URL('../hand-live-limits/hand-reference.json',import.meta.url))).json();
 import {installFirstPersonCamera} from '../hand-sweep-neck/editor-camera.mjs?v=closeaim1';
@@ -194,9 +195,8 @@ function acceptTracking(data,frame,token=epoch){if($('reduceShake')?.checked)dat
  if(desired==='first'&&latest&&data.landmarks?.length>1){let best=Infinity;data.landmarks.forEach((points,i)=>{const d=Math.hypot(points[0].x-latest.landmarks[0].x,points[0].y-latest.landmarks[0].y);if(d<best){best=d;idx=i;}});}
 
  allHands=(data.landmarks||[]).map((landmarks,i)=>({landmarks,world:data.worldLandmarks?.[i],label:data.handedness?.[i]?.[0]?.categoryName,confidence:data.handedness?.[i]?.[0]?.score??0,time:data.time,seen:performance.now()})).filter(h=>h.world?.length===21).slice(0,2);
- const stamp=performance.now();for(const h of allHands)recentHands.set(h.label,{...h,seen:stamp});
- const grace=+$('trackingGrace').value;for(const [label,h] of recentHands){if(stamp-h.seen>grace)recentHands.delete(label);else if(!allHands.some(v=>v.label===label))allHands.push(h);}allHands=allHands.slice(0,2);
- const primary=allHands.find(h=>h.label===data.handedness?.[idx]?.[0]?.categoryName)||allHands[0];
+ const stamp=performance.now();allHands=stableHands(allHands,recentHands,stamp,+$('trackingGrace').value);
+ const primary=allHands.find(h=>h.landmarks===data.landmarks?.[idx])||allHands[0];
  const lm=primary?.landmarks,world=primary?.world;drawPreview(frame,lm);
  if(!world||world.length!==21){latest=null;$('captureState').textContent='No selected hand detected. Keep the hand in view.';$('matchState').textContent='No pose matched';updateMode();return;}
  if($('bothHands').checked){const label=primary?.label;if(label==='Left'||label==='Right')side=label==='Left'?'L':'R';}latest={landmarks:lm,world};$('captureState').textContent='Direct lines · '+Math.round(data.inferenceMs)+' ms inference';
@@ -266,7 +266,7 @@ for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10
 configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready. Connect camera or Connect iPhone camera. Connected rigid hand. Original tracked directions; no automatic resizing.');
 let timingAt=0,timingTotal=0,timingCount=0;
 const wallTest=new URLSearchParams(location.search).has('fixture')?document.createElement('p'):null;if(wallTest)$('directSettings').prepend(wallTest);
-let sceneFrames=0,sceneWindow=performance.now(),measuredScene=0,lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(stream&&!editing)drawPreview($('video'),latest?.landmarks);if(+getCombinedOptions().handRate===0){latest=null;allHands=[];}
+let sceneFrames=0,sceneWindow=performance.now(),measuredScene=0,lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(+getCombinedOptions().handRate===0){latest=null;allHands=[];}
  if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(stream&&$('video').readyState>=2)drawPreview($('video'),latest?.landmarks);const calculationStart=performance.now();if(getCombinedOptions().rawOnly){measuredScene=0;sceneFrames=0;sceneWindow=now;$('scene').style.visibility='hidden';$('calculationTiming').textContent='RAW: model calculations and 3D rendering OFF. Read tracking FPS on camera preview.';return;}$('scene').style.visibility='';if(sampleSource&&combined){combined.seen=combined.poseSeen=now;}combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.wallLimited?'Hand at head back-wall limit':directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Fixed hand proportions · tracked segment directions';}renderOtherHand(renderDt);applyPalmPlacement();depthExperiment?.observe(allHands,renderedHands,captureAspect);applyHandInteractions(now);twoHandMagnets?.update(now);editorGun?.tick(now);directResult=renderedHands[side]?.result??directResult;refreshOtherLines();if(wallTest)wallTest.textContent='Test wrist coordinates: '+Object.entries(renderedHands).map(([s,h])=>s+' '+h.result.points[0].toArray().map(v=>(v*1000).toFixed(2)).join(', ')).join(' / ');if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&!!latest;
  wristDot.position.setFromMatrixPosition(rig.joints[side+'Hand'].matrixWorld);for(const n of JOINTS){const dot=jointDots[n];dot.visible=true;dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  for(const [i,f] of FINGERS.entries())tipDots[f].position.copy(directResult?directResult.points[4+i*4]:tipWorld(rig,tips,side,f));
@@ -648,7 +648,7 @@ function extendShellTips(rig,extra){
 }
 
 if(!document.body.dataset.mapLab){
- const {installEditorGun}=await import('./editor-gun.mjs?v=easygrab1');
+ const {installEditorGun}=await import('./editor-gun.mjs?v=perf1');
  editorGun=await installEditorGun({scene,rig,tips,head:combined,hands:()=>allHands,renderedHands});
  editorGun.grip.querySelector('input[type="checkbox"]').addEventListener('change',e=>{if(e.target.checked){const eye=firstPerson.panel.querySelector('[aria-label="First-person view"]');if(eye.checked){eye.checked=false;eye.dispatchEvent(new Event('input'));}}});
  const tabs=document.querySelector('[role="tablist"]'),extra=[editorGun.panel,editorGun.grip];
@@ -659,7 +659,7 @@ if(!document.body.dataset.mapLab){
  }
 }
 if(!document.body.dataset.mapLab){
- const {installTwoHandMagnets}=await import('./two-hand-magnets.mjs?v=arch2');
+ const {installTwoHandMagnets}=await import('./two-hand-magnets.mjs?v=perf1');
  twoHandMagnets=installTwoHandMagnets({container:$('sweep-contact-and-collisions'),rig,hands:()=>allHands,rendered:renderedHands,aspect:()=>captureAspect,config:finalConfig,isPaused:()=>!!depthExperiment?.recording||!!editorGun?.state.held||!!editorGun?.grip.querySelector('input[type="checkbox"]').checked});
  // Replace the previous single-pair matching controls with multi-tip magnets.
  for(const id of ['nearbyTips','handsTouch','indexContactOnly'])$(id).checked=false;

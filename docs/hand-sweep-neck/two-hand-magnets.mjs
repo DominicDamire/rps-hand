@@ -45,7 +45,7 @@ export function installTwoHandMagnets({container,rig,hands,rendered,aspect,confi
    }
   }
   let gap=Infinity;
-  for(let pass=0;pass<40;pass++){
+  for(let pass=0;pass<8;pass++){
    for(const pair of pairs){const l=pair.a/4-1,r=pair.b/4-1,target=targets.get(pair.a+':'+pair.b)??chains.L[l][3].clone().add(chains.R[r][3]).multiplyScalar(.5);reach(chains.L[l],lengths.L[l],target);reach(chains.R[r],lengths.R[r],target);}
    enforce('L');enforce('R');gap=Math.max(...pairs.map(p=>chains.L[p.a/4-1][3].distanceTo(chains.R[p.b/4-1][3])));if(gap<.0005)break;
   }

@@ -41,7 +41,7 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
  const holster=V(),eye=V(),forward=new T.Vector3(0,0,1),headQ=new T.Quaternion(),bodyQ=new T.Quaternion();
  function release(){state.reset();gun.controller.reset();gun.owner=null;gun.input=null;aimPose=null;}
  gun.release=release;previewInput.onchange=()=>{release();};
- function body(){scene.updateMatrixWorld(true);const eyes=head.bones.eyes;if(!head.group.visible||eyes?.length!==2)return false;
+ function body(){head.group.updateWorldMatrix(true,true);const eyes=head.bones.eyes;if(!head.group.visible||eyes?.length!==2)return false;
   headQ.copy(head.smoothed).multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(0,1,0),Math.PI));forward.set(0,0,-1).applyQuaternion(headQ);
   const right=new T.Vector3(1,0,0).applyQuaternion(headQ),mid=eyes[0].getWorldPosition(V()).add(eyes[1].getWorldPosition(V())).multiplyScalar(.5);
   const named=eyes.find(b=>/right|[._-]r$/i.test(b.name));eye.copy((named??eyes.reduce((a,b)=>a.getWorldPosition(V()).dot(right)>b.getWorldPosition(V()).dot(right)?a:b)).getWorldPosition(V()));
