@@ -1,5 +1,5 @@
 import * as T from 'three';
-import {TipPairs} from './tip-pairs.mjs?v=magnet1';
+import {TipPairs} from './tip-pairs.mjs?v=predict1';
 import {reach} from '../hand-pnp-photo/contact-direct.mjs?v=photo1';
 import {finalHandLimits} from '../hand-live-limits/final-hand-limits.mjs?v=cross2';
 import {crossingFingers} from '../hand-live-limits/crossing.mjs?v=cross2';

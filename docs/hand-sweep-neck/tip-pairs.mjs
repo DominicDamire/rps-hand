@@ -3,7 +3,7 @@ export class TipPairs {
  constructor(){this.reset();}
  reset(){this.pairs=[];this.pending=new Map();this.sample=null;}
  update(left,right,aspect,now,cfg){
-  if(!cfg.enabled||!left||!right||now-left.seen>250||now-right.seen>250||left.time!==right.time||(left.confidence??1)<.5||(right.confidence??1)<.5){this.reset();return [];}
+  if(!cfg.enabled||!left||!right||left.predicted||right.predicted||now-left.seen>250||now-right.seen>250||left.time!==right.time||(left.confidence??1)<.5||(right.confidence??1)<.5){this.reset();return [];}
   if(this.sample===left.landmarks)return this.pairs;this.sample=left.landmarks;
   const distance=(a,b)=>Math.hypot((left.landmarks[a].x-right.landmarks[b].x)*aspect,left.landmarks[a].y-right.landmarks[b].y)*1280;
   const usedL=new Set(),usedR=new Set(),kept=[];

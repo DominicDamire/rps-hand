@@ -65,7 +65,7 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
    for(const m of rig.parts)if(/^R(Hand|Thumb|Index|Middle|Ring|Pinky)/.test(m.name))m.visible=true;
    gun.visual.visible=true;dot.visible=false;status.textContent='Grip preview - live pickup paused';return;
   }
-  const fresh=h&&now-h.seen<300&&entry&&now-entry.time<300;
+  const fresh=h&&!h.predicted&&now-h.seen<300&&entry&&now-entry.time<300;
   if(fresh&&h.landmarks!==lastSample){lastSample=h.landmarks;lastFresh=now;const o=observation(h.world),wrist=entry.result.points[0],p=o?.points;
    const event=state.step({time:now,valid:!!o&&hasHead,near:wrist.distanceTo(holster)<cfg.pickRadius,lookingDown:forward.y< -cfg.lookDown,open:!!o?.open,grip:!!o&&o.lower.every(v=>v>(state.held?cfg.holdBend:cfg.pickBend)),indexFree:!!p&&(bend(p,5,6,7)??180)<cfg.indexFree,eyeDistance:wrist.distanceTo(eye),eyeDepth:wrist.clone().sub(eye).dot(forward)},cfg);
    if(event.picked){loadSavedGrip();gun.controller.reset();gun.controller.held=true;gun.owner='Right';}

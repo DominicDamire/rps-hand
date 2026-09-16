@@ -1,7 +1,7 @@
 // Preserve identity using palm motion rather than a single handedness label.
 const ids=[0,5,9,13,17];
 const distance=(a,b)=>ids.reduce((s,i)=>s+Math.hypot(a[i].x-b[i].x,a[i].y-b[i].y),0)/ids.length;
-export function stableHands(current,recent,now,grace){
+export function stableHands(current,recent,now,grace,predict=true){
  const previous=[...recent.values()].filter(h=>now-h.seen<Math.min(grace,350));
  const edges=[];current.forEach((h,i)=>previous.forEach(p=>{const d=distance(h.landmarks,p.landmarks);if(d<.18)edges.push({i,p,d});}));
  edges.sort((a,b)=>a.d-b.d);const assigned=new Set(),labels=new Set();
@@ -11,9 +11,21 @@ export function stableHands(current,recent,now,grace){
   if(!assigned.has(i)&&labels.has(h.label))h={...h,label:h.label==='Left'?'Right':'Left'};
   if(unique.some(p=>p.label===h.label))continue;labels.add(h.label);unique.push(h);
  }
- for(const h of unique)recent.set(h.label,h);
+ for(const h of unique){const old=recent.get(h.label),dt=old?h.seen-old.seen:0;
+  h.velocity=dt>=8&&dt<=200?{x:(h.landmarks[0].x-old.landmarks[0].x)/dt,y:(h.landmarks[0].y-old.landmarks[0].y)/dt}:{x:0,y:0};
+  recent.set(h.label,h);
+ }
  for(const [label,h]of recent){if(now-h.seen>grace){recent.delete(label);continue;}
-  if(!unique.some(p=>p.label===label)&&!unique.some(p=>distance(p.landmarks,h.landmarks)<.18))unique.push(h);
+  if(!unique.some(p=>p.label===label)&&!unique.some(p=>distance(p.landmarks,h.landmarks)<.18))unique.push(predict?predictHand(h,now):{...h,predicted:true});
  }
  return unique.slice(0,2);
+}
+
+export function predictHand(h,now){
+ // Translation only: no invented finger articulation or depth. Decelerate to
+ // rest over 150ms and never extend the original observation timestamp.
+ const elapsed=Math.min(150,Math.max(0,now-h.seen)),t=elapsed-elapsed*elapsed/300;
+ let dx=(h.velocity?.x??0)*t,dy=(h.velocity?.y??0)*t;
+ const scale=Math.min(1,.03/Math.max(1e-9,Math.hypot(dx,dy)));dx*=scale;dy*=scale;
+ return {...h,predicted:true,landmarks:h.landmarks.map(p=>({...p,x:p.x+dx,y:p.y+dy}))};
 }
