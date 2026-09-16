@@ -5,7 +5,7 @@ import {directDriver} from '../hand-live-limits/hand-driver.mjs?v=cross2';
 const names=['Thumb','Index','Middle','Ring','Pinky'];
 // Keep the final hand's geometry and lengths. The saved grip supplies the
 // contact endpoints and roll; free-hand fitting/constraints never run here.
-export function savedGripDriver(rig,tips,source){
+export function savedGripDriver(rig,tips,source,{preserveDirections=false}={}){
  const render=directDriver(rig,tips),skinLengths=new Map();
  function skinLength(name){
   if(skinLengths.has(name))return skinLengths.get(name);
@@ -19,7 +19,7 @@ export function savedGripDriver(rig,tips,source){
    const key=side+n,b=1+4*f,base=rig.rest[key+'1'].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(palmQ).add(p[0]);
    const lengths=[rig.rest[key+'2'].world.distanceTo(rig.rest[key+'1'].world),rig.rest[key+'3'].world.distanceTo(rig.rest[key+'2'].world),skinLength(key)],chain=[base.clone()];
    for(let k=0;k<3;k++)chain.push(chain[k].clone().addScaledVector(points[b+k+1].clone().sub(points[b+k]).normalize(),lengths[k]));
-   const weight=f===0?T.MathUtils.clamp(options.authoredThumb??1,0,1):f===1?T.MathUtils.clamp(options.authoredIndex??0,0,1):1;
+   const weight=preserveDirections?0:f===0?T.MathUtils.clamp(options.authoredThumb??1,0,1):f===1?T.MathUtils.clamp(options.authoredIndex??0,0,1):1;
    const target=chain[3].clone().lerp(points[b+3],weight),before=chain[3].distanceTo(target),total=lengths.reduce((s,v)=>s+v,0);
    const planar=weight>0?fitPlanarContact(chain,lengths,target,f===0?70:110,80):null;
    if(planar){for(let k=0;k<4;k++)chain[k].copy(planar[k]);}

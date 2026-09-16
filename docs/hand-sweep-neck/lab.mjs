@@ -648,7 +648,7 @@ function extendShellTips(rig,extra){
 }
 
 if(!document.body.dataset.mapLab){
- const {installEditorGun}=await import('./editor-gun.mjs?v=gripsave2');
+ const {installEditorGun}=await import('./editor-gun.mjs?v=authored2');
  editorGun=await installEditorGun({scene,rig,tips,head:combined,hands:()=>allHands,renderedHands});
  editorGun.grip.querySelector('input[type="checkbox"]').addEventListener('change',e=>{if(e.target.checked){const eye=firstPerson.panel.querySelector('[aria-label="First-person view"]');if(eye.checked){eye.checked=false;eye.dispatchEvent(new Event('input'));}}});
  const tabs=document.querySelector('[role="tablist"]'),extra=[editorGun.panel,editorGun.grip];

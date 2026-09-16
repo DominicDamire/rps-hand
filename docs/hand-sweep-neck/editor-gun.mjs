@@ -4,7 +4,7 @@ import {GripRig} from '../gun-lab/grip-rig.mjs?v=4';
 import {loadProvidedProfile} from '../gun-lab/presets.mjs?v=2';
 import {validateProfile} from '../gun-lab/profile.mjs?v=2';
 import {observation,bend} from '../gun-lab/held-pose.mjs?v=4';
-import {savedGripDriver} from '../hand-range/saved-grip.mjs?v=grip1';
+import {savedGripDriver} from '../hand-range/saved-grip.mjs?v=authored2';
 import {installGunSettings} from '../hand-range/gun-settings.mjs?v=grip1';
 import {BodyGunState} from './gun-state.mjs?v=aimrelease1';
 const V=()=>new T.Vector3(),rad=Math.PI/180;
@@ -12,7 +12,7 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
  const original=await loadProvidedProfile();let profile=structuredClone(original);
  try{const saved=JSON.parse((localStorage.getItem('editor-gun-grip-v1')||localStorage.getItem('gun-grip-lab-v2')));if(saved)profile=validateProfile(saved);}catch{}
  const source=await new GripRig(new T.Scene(),profile).ready;
- const gun=new AlignedGun(scene,rig,tips,savedGripDriver(rig,tips,source),source,profile),state=new BodyGunState();
+ const gun=new AlignedGun(scene,rig,tips,savedGripDriver(rig,tips,source,{preserveDirections:true}),source,profile),state=new BodyGunState();
  const cfg={pickRadius:.22,pickMs:100,dropMs:200,pickBend:40,holdBend:25,indexFree:55,aimEnabled:true,aimEnter:.12,aimExit:.17,depthEnter:.09,depthExit:.13,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.02};
  const panel=document.createElement('section');panel.id='editorGun';
  panel.innerHTML='<h2>Chest holster and aiming</h2><p>Right hand: make a fist near the gun to pick it up. Your index can be curled, and you do not need to look down. Keep these three curled to hold. Relax them to return the gun to your chest. Straighten the index to re-arm, then curl it to shoot.</p><p>Aim by bringing the held hand close to your right eye, including camera depth. Move it away to leave aim mode. Aim distances use your exact entered values; zero disables entry. Entry must satisfy both the entry and release distances. In aim mode the grip aligns with your head direction and the camera moves to the right eye.</p>';
@@ -26,7 +26,7 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
  const endpoint=document.createElement('select');endpoint.setAttribute('aria-label','Grip endpoint');for(const [value,text]of [['angles','Released index / wrapped thumb'],['indexPressed','Pressed index'],['thumbOpen','Raised thumb']])endpoint.add(new Option(text,value));grip.append(endpoint);
  const finger=document.createElement('select');finger.setAttribute('aria-label','Grip finger');for(const name of ['Thumb','Index','Middle','Ring','Pinky'])finger.add(new Option(name,name));grip.append(finger);
  const joint=document.createElement('select');joint.setAttribute('aria-label','Grip joint');for(let i=1;i<=3;i++)joint.add(new Option(i===1?'Base joint':i===2?'Middle joint':'Tip joint',i));grip.append(joint);
- const sliders=[];function rebuild(){gun.profile=profile;source.configure(profile);gun.driver=savedGripDriver(rig,tips,source);}
+ const sliders=[];function rebuild(){gun.profile=profile;source.configure(profile);gun.driver=savedGripDriver(rig,tips,source,{preserveDirections:true});}
  function target(){const name=finger.value+joint.value;const bank=profile[endpoint.value]??= {};bank[name]??=[...profile.angles[name]];return bank[name];}
  function updateFields(){const restricted=endpoint.value==='indexPressed'?'Index':endpoint.value==='thumbOpen'?'Thumb':null;if(restricted)finger.value=restricted;finger.disabled=!!restricted;sliders.forEach((s,k)=>{s.value=target()[k];s.nextElementSibling.value=s.value;});}
  for(const [axis,label]of ['Bend / local X','Side / local Y','Twist / local Z'].entries()){const l=document.createElement('label'),s=document.createElement('input'),o=document.createElement('output');l.textContent=label;s.type='range';s.min=-180;s.max=180;s.step=1;s.setAttribute('aria-label',label);s.oninput=()=>{target()[axis]=+s.value;o.value=s.value;rebuild();};l.append(s,o);grip.append(l);sliders.push(s);}
