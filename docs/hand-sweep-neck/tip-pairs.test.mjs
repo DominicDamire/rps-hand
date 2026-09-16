@@ -1,0 +1,10 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {TipPairs} from './tip-pairs.mjs';
+const cfg={enabled:true,enter:45,release:70,confirm:0};
+function hand(side,time=1){const landmarks=Array.from({length:21},(_,i)=>({x:side?2:-2,y:i}));return {landmarks,seen:time,time,confidence:1};}
+function setup(){return {m:new TipPairs(),l:hand(0),r:hand(1)};}
+test('index-to-index alone',()=>{const {m,l,r}=setup();l.landmarks[8]={x:.4,y:.5};r.landmarks[8]={x:.42,y:.5};assert.deepEqual(m.update(l,r,1,1,cfg),[{a:8,b:8}]);});
+test('all five tips join one-to-one',()=>{const {m,l,r}=setup();for(let f=1;f<=5;f++){l.landmarks[f*4]={x:f*.1,y:.5};r.landmarks[f*4]={x:f*.1+.01,y:.5};}assert.equal(m.update(l,r,1,1,cfg).length,5);});
+test('one target cannot attract several tips',()=>{const {m,l,r}=setup();for(const i of [4,8,12])l.landmarks[i]={x:.5,y:.5};r.landmarks[8]={x:.51,y:.5};assert.equal(m.update(l,r,1,1,cfg).length,1);});
+test('hysteresis holds contact then releases without swapping',()=>{const {m,l,r}=setup();l.landmarks[8]={x:.5,y:.5};r.landmarks[8]={x:.52,y:.5};m.update(l,r,1,1,cfg);l.landmarks=l.landmarks.map(p=>({...p}));r.landmarks[8].x=.54;assert.equal(m.update(l,r,1,2,cfg).length,1);l.landmarks=l.landmarks.map(p=>({...p}));r.landmarks[8].x=.57;assert.equal(m.update(l,r,1,3,cfg).length,0);});
+test('stale, different frames, disabled and low confidence release',()=>{for(const change of [({r})=>r.seen=-500,({r})=>r.time=2,({r})=>r.confidence=.1]){const f=setup();f.l.landmarks[8]=f.r.landmarks[8]={x:.5,y:.5};change(f);assert.equal(f.m.update(f.l,f.r,1,1,cfg).length,0);}const f=setup();assert.equal(f.m.update(f.l,f.r,1,1,{...cfg,enabled:false}).length,0);});
+test('contact confirmation requires fresh observations',()=>{const {m,l,r}=setup();l.landmarks[8]=r.landmarks[8]={x:.5,y:.5};assert.equal(m.update(l,r,1,1,{...cfg,confirm:80}).length,0);assert.equal(m.update(l,r,1,101,{...cfg,confirm:80}).length,0);l.landmarks=l.landmarks.map(p=>({...p}));assert.equal(m.update(l,r,1,102,{...cfg,confirm:80}).length,1);});
