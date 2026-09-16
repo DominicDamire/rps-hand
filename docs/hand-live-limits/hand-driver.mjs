@@ -1,3 +1,4 @@
+import {HandJitterFilter} from './jitter.mjs?v=jitter1';
 import {finalHandLimits} from './final-hand-limits.mjs?v=1';
 import {PalmFlipGuard} from '../hand-pnp-photo/palm-flip.mjs?v=flip22';
 import {limitBaseSplay} from '../hand-pnp-photo/base-splay-limit.mjs?v=photo1';
@@ -8,10 +9,10 @@ const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';
  const flipGuard=new PalmFlipGuard();let acceptedPose=null;const fingerGuards=new Map();
- const finalLimits=finalHandLimits();
+ const finalLimits=finalHandLimits(),jitter=new HandJitterFilter();
  const finalStabilizer=new DirectionStabilizer();const stabilizer=new DirectionStabilizer(),contactLatch=new ContactLatch();
  return function(points,side,palmQ,dt,{fingerFlipDegrees=0,palmFlipDegrees=0,staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,postCaps=false,postCoupling=0,thumbOpposition=0,upperCoupling=0,lockUpper=true,baseSplay=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,rays,width,height,fitImage=false,fitAngles=false,experiment={}}){
-  if(lastSide!==side){contact=null;finalStabilizer.values.clear();finalStabilizer.fast.clear();lastSide=side;lastShape='';flipGuard.reset();acceptedPose=null;fingerGuards.clear();}
+  if(lastSide!==side){jitter.reset();contact=null;finalStabilizer.values.clear();finalStabilizer.fast.clear();lastSide=side;lastShape='';flipGuard.reset();acceptedPose=null;fingerGuards.clear();}
   const palmFlipRejected=flipGuard.update(palmQ.toArray(),lm,performance.now(),palmFlipDegrees,staticInput);
   if(palmFlipRejected&&acceptedPose){const wrist=points[0];points=acceptedPose.offsets.map(p=>p.clone().add(wrist));palmQ.copy(acceptedPose.q);}
   else acceptedPose={q:palmQ.clone(),offsets:points.map(p=>p.clone().sub(points[0]))};
@@ -117,6 +118,8 @@ export function directDriver(rig,tips){
    for(let k=1;k<4;k++){const dir=finalStabilizer.update(side+f+':'+k,dirs[k-1].applyQuaternion(inversePalm),dt,0,{smoothingMs:experiment.postSmoothMs}).applyQuaternion(palmQ);c[k].copy(c[k-1]).addScaledVector(dir,lengths[f][k-1]);}
   }
 
+  jitter.filterFingers(chains,lengths,palmQ,dt,experiment);
+
   // Final sideways constraint: image fitting, contact, and smoothing cannot undo it.
   // Rotate the complete connected finger at MCP; preserve bone lengths and upper bends.
   const baseSplayAudit=[];
@@ -143,6 +146,15 @@ export function directDriver(rig,tips){
    const after=c[1].clone().sub(c[0]).normalize();baseAfter[f-1]=Math.atan2(after.dot(palmNormal),after.dot(forward))*180/Math.PI;
   }
   const finalAudit=finalLimits(chains,lengths,rig,side,palmQ,lm,width,height,experiment);
+  // Palm filtering is a rigid transform of the complete solved hand. Relative
+  // joint angles, bone lengths and final fingertip contact remain unchanged.
+  const filteredPalm=jitter.filterPalm(palmQ,dt,experiment);
+  if(experiment.palmJitter){
+   const delta=filteredPalm.clone().multiply(palmQ.clone().invert());
+   for(const c of chains)for(const v of c)v.sub(p[0]).applyQuaternion(delta).add(p[0]);
+   for(const hinge of hinges.values())hinge.applyQuaternion(delta);
+   palmQ.copy(filteredPalm);
+  }
   if(experiment.postRoll)for(let f=1;f<5;f++){
    const name=side+FINGERS[f],rest=rig.rest[name+'2'].world.clone().sub(rig.rest[name+'1'].world).normalize(),d=chains[f][1].clone().sub(chains[f][0]).normalize();hinges.set(f,fingerPlane(rest,restAcross,palmQ,d));
   }
