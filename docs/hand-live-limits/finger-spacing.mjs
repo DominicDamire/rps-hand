@@ -6,7 +6,7 @@ import * as T from 'three';
 // constraint: the observed tip order is allowed to reverse when fingers cross.
 export function fitFingerSpacing(chains,rig,side,palmQ,lm,width,height,cfg={}){
  if(!cfg.fingerSpacing)return null;
- const focal=1/(2*Math.tan(Math.PI/6)),aspect=width/height;
+ const focal=cfg.imageFocal??1/(2*Math.tan(Math.PI/6)),aspect=width/height;
  const project=p=>new T.Vector2(p.x/Math.max(.001,-p.z)*focal,-p.y/Math.max(.001,-p.z)*focal);
  const image=p=>new T.Vector2((p.x-.5)*aspect,p.y-.5);
  const modelBases=[1,2,3,4].map(f=>project(chains[f][0])),imageBases=[5,9,13,17].map(i=>image(lm[i]));
@@ -61,7 +61,7 @@ export function fitFingerSpacing(chains,rig,side,palmQ,lm,width,height,cfg={}){
  }
  for(let f=1;f<5;f++){
   const c=chains[f],original=c.map(p=>p.clone()),base=c[0],d=original[1].clone().sub(base).normalize();
-  const upper=Math.max(d.angleTo(original[2].clone().sub(original[1]).normalize()),original[2].clone().sub(original[1]).normalize().angleTo(original[3].clone().sub(original[2]).normalize()))*180/Math.PI;
+  const upper=cfg.crossingFingers?.includes(f)?0:Math.max(d.angleTo(original[2].clone().sub(original[1]).normalize()),original[2].clone().sub(original[1]).normalize().angleTo(original[3].clone().sub(original[2]).normalize()))*180/Math.PI;
   // Keep the established fist driver. Spacing assistance fades as joints curl.
   const bend=Math.max(Math.asin(T.MathUtils.clamp(Math.abs(d.dot(normal)),0,1))*180/Math.PI,upper);
   const weight=1-T.MathUtils.smoothstep(bend,35,70);

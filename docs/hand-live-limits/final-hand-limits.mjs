@@ -19,7 +19,8 @@ export function finalHandLimits(){
    for(let f=1;f<5;f++){
     capUpper(f,2,cfg.pipCap??110);capUpper(f,3,cfg.dipCap??80);
     const c=chains[f],b=frames[f],a=baseAngles(f),limit=cfg.mcpLimits?.[f-1]??{extension:30,flexion:90,splay:25};
-    const flex=T.MathUtils.clamp(a.flex,-limit.extension,limit.flexion),dirs=[1,2,3].map(k=>c[k].clone().sub(c[k-1]).normalize()),bend=Math.max(Math.abs(flex),dirs[0].angleTo(dirs[1])/rad,dirs[1].angleTo(dirs[2])/rad),start=cfg.splayStart??45,lock=cfg.splayLock??70,t=T.MathUtils.clamp((bend-start)/Math.max(1,lock-start),0,1),allowed=limit.splay*(1-t*t*(3-2*t)),splay=T.MathUtils.clamp(a.splay,-allowed,allowed);
+    const crossing=cfg.crossingFingers?.includes(f)&&Math.abs(a.flex)<45;
+    const flex=T.MathUtils.clamp(a.flex,-limit.extension,limit.flexion),dirs=[1,2,3].map(k=>c[k].clone().sub(c[k-1]).normalize()),bend=Math.max(Math.abs(flex),crossing?0:dirs[0].angleTo(dirs[1])/rad,crossing?0:dirs[1].angleTo(dirs[2])/rad),start=cfg.splayStart??45,lock=cfg.splayLock??70,t=T.MathUtils.clamp((bend-start)/Math.max(1,lock-start),0,1),allowed=(crossing?(cfg.crossingSplay??40):limit.splay)*(1-t*t*(3-2*t)),splay=T.MathUtils.clamp(a.splay,-allowed,allowed);
     const target=b.forward.clone().multiplyScalar(Math.cos(flex*rad)*Math.cos(splay*rad)).addScaledVector(b.normal,Math.sin(flex*rad)*Math.cos(splay*rad)).addScaledVector(b.across,Math.sin(splay*rad));rotateChildren(c,1,dirs[0],target.normalize());
    }
    capUpper(0,2,cfg.thumbMcpCap??70);capUpper(0,3,cfg.thumbIpCap??80);

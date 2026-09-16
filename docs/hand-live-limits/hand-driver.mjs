@@ -1,6 +1,7 @@
-import {fitFingerSpacing} from './finger-spacing.mjs?v=spacing1';
+import {crossingFingers} from './crossing.mjs?v=cross2';
+import {fitFingerSpacing} from './finger-spacing.mjs?v=cross2';
 import {HandJitterFilter} from './jitter.mjs?v=jitter1';
-import {finalHandLimits} from './final-hand-limits.mjs?v=1';
+import {finalHandLimits} from './final-hand-limits.mjs?v=cross2';
 import {PalmFlipGuard} from '../hand-pnp-photo/palm-flip.mjs?v=flip22';
 import {limitBaseSplay} from '../hand-pnp-photo/base-splay-limit.mjs?v=photo1';
 import * as T from 'three';
@@ -14,6 +15,7 @@ export function directDriver(rig,tips){
  const finalStabilizer=new DirectionStabilizer();const stabilizer=new DirectionStabilizer(),contactLatch=new ContactLatch();
  return function(points,side,palmQ,dt,{fingerFlipDegrees=0,palmFlipDegrees=0,staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,postCaps=false,postCoupling=0,thumbOpposition=0,upperCoupling=0,lockUpper=true,baseSplay=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,rays,width,height,fitImage=false,fitAngles=false,experiment={}}){
   if(lastSide!==side){jitter.reset();contact=null;finalStabilizer.values.clear();finalStabilizer.fast.clear();lastSide=side;lastShape='';flipGuard.reset();acceptedPose=null;fingerGuards.clear();}
+  experiment={...experiment,crossingFingers:experiment.fingerSpacing&&experiment.allowCrossing!==false?crossingFingers(lm,width/height):[]};
   const palmFlipRejected=flipGuard.update(palmQ.toArray(),lm,performance.now(),palmFlipDegrees,staticInput);
   if(palmFlipRejected&&acceptedPose){const wrist=points[0];points=acceptedPose.offsets.map(p=>p.clone().add(wrist));palmQ.copy(acceptedPose.q);}
   else acceptedPose={q:palmQ.clone(),offsets:points.map(p=>p.clone().sub(points[0]))};
@@ -38,7 +40,7 @@ export function directDriver(rig,tips){
    // A fist can have a 40-degree base and a 90-degree middle joint.
    // Folded upper joints also lock base splay, without locking forward flexion.
    const middle=chain[2].clone().sub(chain[1]).normalize(),tip=chain[3].clone().sub(chain[2]).normalize();
-   const upperBend=Math.max(before.angleTo(middle),middle.angleTo(tip))*180/Math.PI;
+   const upperBend=experiment.crossingFingers.includes(f)?0:Math.max(before.angleTo(middle),middle.angleTo(tip))*180/Math.PI;
    const local=before.clone().applyQuaternion(inversePalm),after=new T.Vector3().fromArray((post?limitPostSplay:limitBaseSplay)(local.toArray(),rest.toArray(),restAcross.toArray(),post?(experiment.splayLock??70):70,upperBend,experiment.splayStart)).applyQuaternion(palmQ);
    const correction=new T.Quaternion().setFromUnitVectors(before,after);for(let k=1;k<4;k++)chain[k].sub(chain[0]).applyQuaternion(correction).add(chain[0]);
   }
@@ -61,7 +63,7 @@ export function directDriver(rig,tips){
    chains[f][k]=pointOnRay(chains[f][k-1],ray,lengths[f][k-1],observed);
   }
   if(fitAngles)for(let f=0;f<5;f++)for(let k=1;k<4;k++){
-   const i=1+4*f+k, a=lm[i-1],b=lm[i],aspect=width/height,focal=1/(2*Math.tan(Math.PI/6));
+   const i=1+4*f+k, a=lm[i-1],b=lm[i],aspect=width/height,focal=experiment.imageFocal??1/(2*Math.tan(Math.PI/6));
    const delta=new T.Vector2((b.x-a.x)*aspect/focal,-(b.y-a.y)/focal);
    chains[f][k]=angleEndpoint(chains[f][k-1],delta,lengths[f][k-1],(points[i].z-points[i-1].z)*(f>0&&k===1&&experiment.proximalDepth!==undefined&&(!experiment.proximalGate||visibleBend(lm,1+4*f,width/height)>25)?experiment.proximalDepth/(experiment.depthHint??.5):1));
   }
@@ -147,7 +149,7 @@ export function directDriver(rig,tips){
    }
    const after=c[1].clone().sub(c[0]).normalize();baseAfter[f-1]=Math.atan2(after.dot(palmNormal),after.dot(forward))*180/Math.PI;
   }
-  const finalAudit=finalLimits(chains,lengths,rig,side,palmQ,lm,width,height,experiment);
+  const finalAudit=lm?finalLimits(chains,lengths,rig,side,palmQ,lm,width,height,experiment):{status:'authored grip',after:[],tip:null,gap:null,observedPixels:0};
   // Palm filtering is a rigid transform of the complete solved hand. Relative
   // joint angles, bone lengths and final fingertip contact remain unchanged.
   const filteredPalm=jitter.filterPalm(palmQ,dt,experiment);
