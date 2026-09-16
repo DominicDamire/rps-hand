@@ -6,19 +6,19 @@ import {validateProfile} from '../gun-lab/profile.mjs?v=2';
 import {observation,bend} from '../gun-lab/held-pose.mjs?v=4';
 import {savedGripDriver} from '../hand-range/saved-grip.mjs?v=grip1';
 import {installGunSettings} from '../hand-range/gun-settings.mjs?v=grip1';
-import {BodyGunState} from './gun-state.mjs?v=gun1';
+import {BodyGunState} from './gun-state.mjs?v=easygrab1';
 const V=()=>new T.Vector3(),rad=Math.PI/180;
 export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}){
  const original=await loadProvidedProfile();let profile=structuredClone(original);
  try{const saved=JSON.parse(localStorage.getItem('editor-gun-grip-v1'));if(saved)profile=validateProfile(saved);}catch{}
  const source=await new GripRig(new T.Scene(),profile).ready;
  const gun=new AlignedGun(scene,rig,tips,savedGripDriver(rig,tips,source),source,profile),state=new BodyGunState();
- const cfg={pickRadius:.22,pickMs:150,dropMs:200,pickBend:40,holdBend:25,indexFree:55,aimEnabled:true,aimEnter:.24,aimExit:.32,depthEnter:.18,depthExit:.26,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.02};
+ const cfg={pickRadius:.22,pickMs:100,dropMs:200,pickBend:40,holdBend:25,indexFree:55,aimEnabled:true,aimEnter:.24,aimExit:.32,depthEnter:.18,depthExit:.26,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.02};
  const panel=document.createElement('section');panel.id='editorGun';
- panel.innerHTML='<h2>Chest holster and aiming</h2><p>Right hand: look slightly down, reach the vertical chest holster with an open hand, then close middle, ring and little fingers with index extended. Keep these three curled to hold. Relax them to return the gun to your chest. Straighten the index to re-arm, then curl it to shoot.</p><p>Aim by bringing the held hand close to your right eye, including camera depth. Move it away to leave aim mode. In aim mode the grip aligns with your head direction and the camera moves to the right eye.</p>';
+ panel.innerHTML='<h2>Chest holster and aiming</h2><p>Right hand: make a fist near the gun to pick it up. Your index can be curled, and you do not need to look down. Keep these three curled to hold. Relax them to return the gun to your chest. Straighten the index to re-arm, then curl it to shoot.</p><p>Aim by bringing the held hand close to your right eye, including camera depth. Move it away to leave aim mode. In aim mode the grip aligns with your head direction and the camera moves to the right eye.</p>';
  const status=document.createElement('p');status.setAttribute('role','status');panel.append(status);
  function field(key,label,min,max,step,factor=1){const l=document.createElement('label'),i=document.createElement('input');l.textContent=label;i.type='number';i.min=min;i.max=max;i.step=step;i.value=cfg[key]*factor;i.onchange=()=>{cfg[key]=T.MathUtils.clamp(Number(i.value)||0,min,max)/factor;cfg.aimExit=Math.max(cfg.aimEnter+.02,cfg.aimExit);cfg.depthExit=Math.max(cfg.depthEnter+.02,cfg.depthExit);};l.append(i);panel.append(l);}
- for(const a of [['pickRadius','Pickup radius (cm)',5,25,1,100],['pickMs','Hold grip to pick up (ms)',150,800,25],['pickBend','Minimum lower-finger curl to pick up (degrees)',35,100,1],['holdBend','Minimum lower-finger curl to keep holding (degrees)',15,70,1],['indexFree','Maximum index bend when picking up (degrees)',10,70,1],['chestX','Holster left / right (cm)',-35,35,1,100],['chestY','Holster below eyes (cm)',-60,-15,1,100],['chestZ','Holster forward (cm)',-10,30,1,100],['aimEnter','Aim enter distance (cm)',10,35,1,100],['aimExit','Aim release distance (cm)',15,50,1,100],['depthEnter','Aim depth tolerance (cm)',5,25,1,100],['depthExit','Aim depth release (cm)',10,35,1,100]])field(...a);
+ for(const a of [['pickRadius','Pickup radius (cm)',5,25,1,100],['pickMs','Hold grip to pick up (ms)',50,800,25],['pickBend','Minimum lower-finger curl to pick up (degrees)',35,100,1],['holdBend','Minimum lower-finger curl to keep holding (degrees)',15,70,1],['chestX','Holster left / right (cm)',-35,35,1,100],['chestY','Holster below eyes (cm)',-60,-15,1,100],['chestZ','Holster forward (cm)',-10,30,1,100],['aimEnter','Aim enter distance (cm)',10,35,1,100],['aimExit','Aim release distance (cm)',15,50,1,100],['depthEnter','Aim depth tolerance (cm)',5,25,1,100],['depthExit','Aim depth release (cm)',10,35,1,100]])field(...a);
  const toggle=document.createElement('label');toggle.innerHTML='<input type="checkbox" checked> Enable right-eye aim mode';toggle.querySelector('input').onchange=e=>cfg.aimEnabled=e.target.checked;panel.append(toggle);
  const triggerPanel=installGunSettings(gun,panel);triggerPanel.querySelectorAll('p')[1].textContent='Pickup requires the chest holster gesture described above. The index trigger and thumb use the saved endpoints.';
  const grip=document.createElement('section');grip.id='editorGrip';grip.innerHTML='<h2>Edit locked gun grip</h2><p>These controls change the saved grip only. Middle, ring and little fingers stay locked while holding; index and thumb move between saved endpoints. Preview the stops, move individual joints, then save.</p>';
@@ -82,7 +82,7 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
    api.shotRay={origin:from.toArray(),direction:direction.toArray(),target:aimTarget.toArray()};
   }else {park();dot.visible=false;}
   if(now>flash)tracer.visible=false;
-  status.textContent=hasHead?(state.held?(state.aim?'AIM - right eye':'HELD - raise toward right eye')+' · '+shots+' shots':state.armed?'Ready: close three lower fingers; keep index extended':'HOLSTERED - look down and reach with open right hand'):'Show your face to place the chest holster';
+  status.textContent=hasHead?(state.held?(state.aim?'AIM - right eye':'HELD - raise toward right eye')+' · '+shots+' shots':state.armed?'Ready: make a fist near the gun':'HOLSTERED - make a fist next to the gun'):'Show your face to place the chest holster';
   
  }
  let lastFired=null;
