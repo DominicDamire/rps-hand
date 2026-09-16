@@ -651,10 +651,11 @@ if(!document.body.dataset.mapLab){
  if(exploreButton){$('sweep-first-person-camera').prepend(exploreButton);exploreButton.style.display='block';const originalExplore=exploreButton.onclick;exploreButton.onclick=()=>{const eye=firstPerson.panel.querySelector('[aria-label="First-person view"]');if(eye.checked){eye.checked=false;eye.dispatchEvent(new Event('input'));}originalExplore();};firstPerson.panel.querySelector('[aria-label="First-person view"]').addEventListener('input',()=>{if(exploreButton.textContent==='Return to camera mirror')originalExplore();});}
  $('sweep-head-and-position').prepend($('bothHands').closest('label'));$('bothHands').closest('label').style.setProperty('display','block','important');
  $('reduceShake').checked=false;$('tipContact').checked=false;
- $('lockBody').checked=true;$('bothHands').checked=true;$('showHead').checked=true;
+ $('lockBody').checked=true;$('bothHands').checked=true;$('showHead').checked=!document.body.dataset.heldGunLab;
+ if(document.body.dataset.heldGunLab){$('showHead').disabled=true;$('showHead').closest('label').title='The held-gun movement lab hides the head and shoulders.';}
  $('fingerThickness').value=1;$('tipInset').value=0;
- const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands.html?v=heldlab1">Hands and head lab</a> · <a href="held-gun.html?v=heldlab1">Held-gun lab</a> · <a href="./?v=heldlab1">Full editor</a>';$('directSettings').prepend(labLinks);
- document.querySelector('header b').textContent=document.body.dataset.heldGunLab?'HELD GUN + PHOTO HAND LAB':document.body.dataset.handLab?'HANDS + HEAD TRACKING LAB':'FINAL HANDS + ALIEN HEAD';document.querySelector('header span').textContent='Two hands · Sweep positioning · tracked eye camera';notice(document.body.dataset.heldGunLab?'Held-gun lab ready. Edit the saved grip or connect your camera to drive it with your right hand.':'Final hands and alien head ready. Connect your camera or iPhone.');
+ const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands.html?v=gunlab2">Hands and head lab</a> · <a href="held-gun.html?v=gunlab2">Held-gun lab</a> · <a href="./?v=heldlab1">Full editor</a>';$('directSettings').prepend(labLinks);
+ document.querySelector('header b').textContent=document.body.dataset.heldGunLab?'GUN MOVEMENT LAB':document.body.dataset.handLab?'HANDS + HEAD TRACKING LAB':'FINAL HANDS + ALIEN HEAD';document.querySelector('header span').textContent=document.body.dataset.heldGunLab?'Palm-driven gun · saved grip · no head':'Two hands · Sweep positioning · tracked eye camera';notice(document.body.dataset.heldGunLab?'Held-gun lab ready. Edit the saved grip or connect your camera to drive it with your right hand.':'Final hands and alien head ready. Connect your camera or iPhone.');
 }
 function extendShellTips(rig,extra){
  rig.root.updateMatrixWorld(true);
@@ -668,7 +669,7 @@ function extendShellTips(rig,extra){
 }
 
 if(!document.body.dataset.mapLab&&!document.body.dataset.handLab){
- const {installEditorGun}=await import('./editor-gun.mjs?wristmatch1');
+ const {installEditorGun}=await import('./editor-gun.mjs?gunlab2');
  editorGun=await installEditorGun({scene,rig,tips,head:combined,hands:()=>allHands,renderedHands,alwaysHeld:!!document.body.dataset.heldGunLab});
  editorGun.grip.querySelector('input[type="checkbox"]').addEventListener('change',e=>{if(e.target.checked){const eye=firstPerson.panel.querySelector('[aria-label="First-person view"]');if(eye.checked){eye.checked=false;eye.dispatchEvent(new Event('input'));}}});
  const tabs=document.querySelector('[role="tablist"]'),extra=[editorGun.panel,editorGun.grip];
