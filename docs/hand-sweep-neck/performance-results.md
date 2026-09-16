@@ -25,3 +25,12 @@ Scene remained 56.1–56.6 FPS. Prediction/blending were not exercised by delibe
 
 Use Hand tracking > Tracking performance experiments to toggle each option and run the same comparison against your live camera. Prediction and independent finger-jitter controls remain below that section. All experimental scheduler/resolution controls start off; the prior prediction and jitter defaults are preserved. No historical snapshot files were modified.
 
+
+
+## Low-latency defaults update
+
+Fresh-frame dispatch and reduced auxiliary rates now start enabled. After hand inference returns, a newer camera frame can start immediately, without queuing or repeating a frame. Preview is capped to 640 pixels and 30 draws/second.
+
+Same-session two-hand still-fixture spot comparison (five samples, two seconds apart per condition): controls off hand FPS 30,29,31,30,31 (mean 30.2); controls on 49,50,48,51,48 (mean 49.2). Scene remained 60 FPS. Face/shoulder rates changed from 20/20 to 12/8. This is a local controlled comparison, not the user camera, motion accuracy, or a guarantee of hardware performance. Both conditions include the smaller preview.
+
+Camera capture also verifies returned FPS and retries silently downgraded 60 FPS requests. Unsupported cameras retain their supported fallback; 30 FPS is never relabeled as 60. Five capture tests and a worker scheduling test pass.

@@ -1,4 +1,4 @@
-import {openCamera} from './camera-capture.mjs?v=60fps1';
+import {openCamera} from './camera-capture.mjs?v=verify60';
 const config={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},{urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}]};
 const KEY='rps-hand-phone-pair-v1',CHANNEL='rps-hand-phone-owner-v1';
 export function receivePhone(onStream,onStatus,onEnd){

@@ -1,1 +1,1 @@
-export {receivePhone,sendPhone} from '../shared-phone/video-link.mjs?v=60fps1';
+export {receivePhone,sendPhone} from '../shared-phone/video-link.mjs?v=verify60';

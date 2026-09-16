@@ -1,6 +1,6 @@
-import {installPerformance} from './performance-options.mjs?v=perfcompare2';
+import {installPerformance} from './performance-options.mjs?v=latency2';
 let performanceOptions=null;
-import {openCamera} from '../shared-phone/camera-capture.mjs?v=60fps1';
+import {openCamera} from '../shared-phone/camera-capture.mjs?v=verify60';
 import {stableHands} from './hand-identity.mjs?v=perfcompare1';
 import {finalConfig,installFinalSettings} from '../hand-range/settings.mjs?v=range1';
 const finalReference=await(await fetch(new URL('../hand-live-limits/hand-reference.json',import.meta.url))).json();
@@ -26,7 +26,7 @@ import {palmSize} from './palm-distance.mjs?v=alien13';
 import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
-import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=perfcompare1';
+import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=latency2';
 import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.18-final';
 import {CombinedHead} from './head-model.mjs?v=raw19';
 import {directDriver} from '../hand-live-limits/hand-driver.mjs?v=cross2';
@@ -34,7 +34,7 @@ import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.18-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './video-link.mjs?v=60fps1';
+import {receivePhone} from './video-link.mjs?verify60';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -172,7 +172,7 @@ function persist(){try{localStorage.setItem(KEY,JSON.stringify(profile));return 
 function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),20000);}
 function updateMode(){for(const id of ['save','undo','zero','saveLimits','clearLimits','resume'])$(id).disabled=!editing;$('edit').disabled=editing||!latest;$('side').disabled=editing;$('detected').disabled=editing;$('follow').disabled=editing||$('spatial').checked;if($('spatial').checked)$('follow').checked=true;
  $('mode').textContent=editing?'FROZEN / EDITING':stream||phoneActive?'LIVE CAMERA':latest?'IMAGE PREVIEW':'LIVE PREVIEW';$('editHelp').textContent=editing?'Edit the selected joint. Saved corrections affect the fingers, not the wrist.':'Values are movement relative to your saved alignment. Locked sideways and twist read zero.';renderControls();}
-function drawPreview(source,landmarks){if(stream&&$('video').readyState>=2)source=$('video');const previewRate=stream?60:(getCombinedOptions().overlayRate||30);if(performance.now()-lastPreviewTime<1000/previewRate&&!sampleSource)return;lastPreviewTime=performance.now();const aspect=(source.videoWidth||source.width||source.naturalWidth)/(source.videoHeight||source.height||source.naturalHeight);if(aspect!==captureAspect){captureAspect=aspect;updateCameraFrame();}const c=$('preview'),previewWidth=Math.min(1920,source.videoWidth||source.width||source.naturalWidth),previewHeight=Math.max(1,Math.round(previewWidth/aspect));if(c.width!==previewWidth)c.width=previewWidth;if(c.height!==previewHeight)c.height=previewHeight;const ctx=c.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,c.width,c.height);
+function drawPreview(source,landmarks){if(stream&&$('video').readyState>=2)source=$('video');const previewRate=getCombinedOptions().overlayRate||30;if(performance.now()-lastPreviewTime<1000/previewRate&&!sampleSource)return;lastPreviewTime=performance.now();const aspect=(source.videoWidth||source.width||source.naturalWidth)/(source.videoHeight||source.height||source.naturalHeight);if(aspect!==captureAspect){captureAspect=aspect;updateCameraFrame();}const c=$('preview'),previewWidth=Math.min(640,source.videoWidth||source.width||source.naturalWidth),previewHeight=Math.max(1,Math.round(previewWidth/aspect));if(c.width!==previewWidth)c.width=previewWidth;if(c.height!==previewHeight)c.height=previewHeight;const ctx=c.getContext('2d');ctx.fillStyle='#000';ctx.fillRect(0,0,c.width,c.height);
  combined?.overlay(ctx,c.width,c.height);if(!getCombinedOptions().overlayRate||!landmarks)return;for(const current of ($('bothHands').checked&&allHands.length?allHands.map(h=>h.landmarks):[landmarks])){landmarks=current;ctx.lineWidth=2;ctx.strokeStyle='#86edbb';ctx.fillStyle='#f0ffee';const point=i=>[(1-landmarks[i].x)*c.width,landmarks[i].y*c.height];
  for(let f=0;f<5;f++){let prev=0;for(let j=1;j<=4;j++){const idx=1+f*4+j-1;ctx.beginPath();ctx.moveTo(...point(prev));ctx.lineTo(...point(idx));ctx.stroke();prev=idx;}}
  for(let i=0;i<21;i++){ctx.beginPath();ctx.arc(...point(i),i%4===0?4:2.5,0,Math.PI*2);ctx.fill();}

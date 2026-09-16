@@ -16,12 +16,19 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
    if(data.type==='ready'){clearTimeout(s.timer);s.ready=true;stats.delegate[s.task]=data.delegate;return;}
    s.busy=false;
    if(data.type==='error'){stats.errors[s.task]=data.message;return;}
-   if(data.type==='result'){delete stats.errors[s.task];s.count++;stats.ms[s.task]=data.inferenceMs??data.ms;stats.age[s.task]=performance.now()-data.time;onResult(data,s.canvas);}
+   if(data.type==='result'){delete stats.errors[s.task];s.count++;stats.ms[s.task]=data.inferenceMs??data.ms;stats.age[s.task]=performance.now()-data.time;onResult(data,s.canvas);
+    // Reuse no old frames: start the newest one after a slow hand result,
+    // without waiting an additional camera interval or queuing any work.
+    const o={...defaults,...getOptions()};
+    if(s.task==='hands'&&o.freshFrames&&enabled(s,o)&&!document.hidden&&video.readyState>=2&&video.currentTime!==s.frameTime&&(o.uncappedTracking||performance.now()>=s.next-1)){
+     const now=performance.now();s.next=now+1000/(+o.handRate);dispatch(s,now,o);
+    }
+   }
   };w.postMessage({type:'init'});
  }
  const enabled=(s,o)=>+(s.task==='hands'?o.handRate:s.task==='face'?o.faceRate:o.shoulderRate)>0;
  async function dispatch(s,now,opts){
-  s.busy=true;s.sent=now;const w=s.worker,width=s.task==='hands'?+opts.trackingWidth:Math.min(320,+opts.trackingWidth);
+  s.busy=true;s.sent=now;s.frameTime=video.currentTime;const w=s.worker,width=s.task==='hands'?+opts.trackingWidth:Math.min(320,+opts.trackingWidth);
   try{const c=s.canvas;c.width=width;c.height=Math.max(1,Math.round(width*video.videoHeight/video.videoWidth));if(captureOptions.copyPreview!==false)c.getContext('2d').drawImage(video,0,0,c.width,c.height);
    const time=Math.max(now,s.last+.001);s.last=time;
    let bitmap;try{bitmap=await createImageBitmap(captureOptions.copyPreview===false?video:c,{resizeWidth:c.width,resizeHeight:c.height,resizeQuality:'low'});}catch{}
