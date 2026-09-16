@@ -610,7 +610,7 @@ function applyDisplayOffset(s,result){
 }
 
 if(document.body.dataset.mapLab){
- const {installMapLab}=await import('./map.mjs?v=range1');
+ const {installMapLab}=await import('./map.mjs?v=grip1');
  mapLab=await installMapLab({scene,renderer,rig,tips,driver:directDriver(rig,tips),head:combined,hands:()=>allHands,aspect:()=>captureAspect,stop:stopCamera});
  controls.enabled=false;document.title='Dust II · Final hands + tracked head';document.querySelector('header b').textContent='Dust II · Final hands + tracked head';
 }
@@ -642,9 +642,10 @@ function extendShellTips(rig,extra){
 }
 
 $('reduceShake').checked=false;
+const {installGunSettings}=await import('./gun-settings.mjs?v=grip1');installGunSettings(mapLab.gun,$('directSettings'));
 const rangeTabs=document.createElement('div');rangeTabs.setAttribute('role','tablist');
-for(const [title,id]of [['Camera and movement','rangeCameraPanel'],['Hands','finalHandSettings'],['Head and distance','rangeLegacySettings']]){
- const b=document.createElement('button');b.textContent=title;b.setAttribute('role','tab');b.onclick=()=>{for(const c of rangeTabs.children)c.setAttribute('aria-selected',String(c===b));for(const name of ['rangeCameraPanel','finalHandSettings','rangeLegacySettings'])$(name).style.setProperty('display',name===id?'block':'none','important');if(id==='rangeLegacySettings')$(id).open=true;};rangeTabs.append(b);
+for(const [title,id]of [['Camera and movement','rangeCameraPanel'],['Hands','finalHandSettings'],['Gun','rangeGunSettings'],['Head and distance','rangeLegacySettings']]){
+ const b=document.createElement('button');b.textContent=title;b.setAttribute('role','tab');b.onclick=()=>{for(const c of rangeTabs.children)c.setAttribute('aria-selected',String(c===b));for(const name of ['rangeCameraPanel','finalHandSettings','rangeGunSettings','rangeLegacySettings'])$(name).style.setProperty('display',name===id?'block':'none','important');if(id==='rangeLegacySettings')$(id).open=true;};rangeTabs.append(b);
 }
 
 // Expose only controls used by this integration; retain hidden legacy elements

@@ -26,7 +26,8 @@ export class AlignedGun {
   if(this.input.dropped){this.owner=null;this.park();}
  }
  pose(side,q,wrist,index,thumb,dt=0){
-  this.source.pose(heldAngles(this.profile,index,thumb),index);
+  const pull=Math.max(0,Math.min(1,index*this.profile.trigger.gain));
+  this.source.pose(heldAngles(this.profile,index,thumb),pull);
   const sr=this.source.rig,S=this.profile.side;
   sr.root.updateWorldMatrix(true,true);
   const sourcePalm=sr.joints[S+'Hand'].getWorldQuaternion(new T.Quaternion());
@@ -37,11 +38,11 @@ export class AlignedGun {
   // aligned wrist pivot inside the palm must not shift the gun away from the grip.
   const map=p=>p.sub(origin).applyMatrix4(rotation).add(target),points=[wrist.clone()];
   for(const f of fingers){for(let k=1;k<=3;k++)points.push(map(sr.joints[S+f+k].getWorldPosition(new T.Vector3())));points.push(map(tipWorld(sr,this.sourceTips,S,f)));}
-  const result=this.driver(points,side,q,dt,{fitImage:false,lockUpper:false,noiseDegrees:0,smoothingMs:0,thickness:this.profile.thickness,tipInset:0});
+  const result=this.driver(points,side,q,dt,{fitImage:false,lockUpper:false,noiseDegrees:0,smoothingMs:0,thickness:this.profile.thickness,tipInset:0,authoredIndex:pull,authoredThumb:thumb});
   const transform=new T.Matrix4().makeTranslation(...target.toArray()).multiply(rotation).multiply(new T.Matrix4().makeTranslation(...origin.clone().negate().toArray()));
   this.source.gun.updateWorldMatrix(true,true);
   this.visual.matrixAutoUpdate=false;this.visual.matrix.copy(transform).multiply(this.source.gun.matrixWorld);this.visual.matrixWorldNeedsUpdate=true;this.visual.updateMatrixWorld(true);
-  if(this.trigger)this.trigger.quaternion.copy(this.triggerRest).multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(1,0,0),-.25*Math.max(0,Math.min(1,index))));
+  if(this.trigger)this.trigger.quaternion.copy(this.triggerRest).multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(1,0,0),-.25*pull));
   return result;
  }
  drive(side,q,result,dt){

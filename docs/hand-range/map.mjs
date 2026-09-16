@@ -1,9 +1,10 @@
 import * as T from 'three';
+import {savedGripDriver} from './saved-grip.mjs?v=grip1';
 import {DustMap} from '../movement/map.mjs?v=90';
 import {setupShooter} from '../movement/shooter.mjs?v=map9';
 import {ThumbJoystick,measureThumb} from '../movement/thumb-joystick.mjs?v=90';
 import {bodyDisplacement} from '../movement/head-look.mjs?v=90';
-import {AlignedGun} from '../hand-pnp-gun/gun.mjs?v=gun3';
+import {AlignedGun} from '../hand-pnp-gun/gun.mjs?v=grip1';
 import {GripRig} from '../gun-lab/grip-rig.mjs?v=4';
 import {loadProvidedProfile} from '../gun-lab/presets.mjs?v=2';
 export async function installMapLab({scene,renderer,rig,tips,driver,head,hands,aspect,stop}){
@@ -23,7 +24,7 @@ export async function installMapLab({scene,renderer,rig,tips,driver,head,hands,a
  for(const b of panel.querySelectorAll('[data-walk]')){b.onpointerdown=e=>{b.setPointerCapture(e.pointerId);pressed=b.dataset.walk};b.onpointerup=b.onpointercancel=()=>pressed=null;}
  const keys=new Set();addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyQ','KeyE'].includes(e.code)){keys.add(e.code);e.preventDefault();}});addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>{keys.clear();pressed=null;joystick.reset();});
  const profile=await loadProvidedProfile(),source=new GripRig(new T.Scene(),profile);await source.ready;
- const gun=new AlignedGun(scene,rig,tips,driver,source,profile);gun.hands=hands;$('rangeReturnGun').onclick=()=>gun.release();
+ const gun=new AlignedGun(scene,rig,tips,savedGripDriver(rig,tips,source),source,profile);gun.hands=hands;$('rangeReturnGun').onclick=()=>gun.release();
  const dummy={group:new T.Group(),visible:false,points:[],right:true};
  const range=setupShooter({scene:world,camera,dustMap:map,handModel:dummy,hud:()=>{}});
  map.load().then(async()=>{player.copy(map.spawn);await range.ready;range.gun.obj.visible=false;ready=true;status.textContent='Dust II ready · connect camera and calibrate Sweep.';}).catch(e=>status.textContent='Map load failed: '+e.message);

@@ -12,3 +12,11 @@ Entry: `hand-range/`. Reuses the Dust II map, mirror, targets, movement joystick
 Checks performed for this integration: six complete-driver crossing fixtures (both hands, upper bends 0/45/80 degrees); 828 replay/photo poses with fixed bone lengths and joint/contact checks; actual MediaPipe two-hand/face/shoulder inference on a private fixture; integrated pickup, held-pose rendering, trigger debounce, release and target hit; eye-camera quaternion and mirror head rendering. Existing gun and movement unit suite: 62 passing tests. Private fixture media is not published.
 
 The camera still estimates obscured landmarks. This change allows a detected crossing through the constraints; it cannot recover fingers the tracker fails to distinguish.
+
+## Saved grip transfer
+
+`hand-range/saved-grip.mjs` transfers the original supplied grip to the final photo-proportioned hand. The gun retains the saved transform anchored at the middle knuckle. Bone lengths, palm attachments and shell geometry stay fixed. A bounded fixed-length hinge solve matches the wrapped thumb, pressed index and lower-three fingertip contact endpoints once per hand; cached directions interpolate smoothly during tracking; raised thumb and released index retain their authored directions. Skin-tip extensions are included. Authored segment roll is transferred separately. The held pose bypasses free-hand 2D fitting, sideways restrictions and jitter filters; letting go resumes the final free-hand driver.
+
+The source JSON angles and gun placement are unchanged. Retargeted joint angles necessarily differ where the final model proportions differ: this preserves contact positions rather than claiming the two differently proportioned hands have identical joints. Controls are in the Gun tab and use the existing trigger/thumb controller.
+
+Validation: 132 handedness/rotation/index/thumb states, no bone-length or palm-attachment changes, no lower-finger motion from thumb/index input, contact-stop endpoint residual below 0.001 mm in model coordinates. A 202-sample thumb/index sweep had a maximum 1.71-degree segment change per 1% input step, with no branch jumps. This numerical endpoint test is not a claim that the full mesh surfaces are collision-free. Visually inspected released, pressed and raised-thumb states from several views; 21 existing grip/trigger unit tests passed.
