@@ -11,33 +11,34 @@ import {BodyGunState} from './gun-state.mjs?v=aimrelease1';
 const V=()=>new T.Vector3(),rad=Math.PI/180;
 export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}){
  const original=await loadProvidedProfile();let profile=structuredClone(original);
- try{const saved=JSON.parse((localStorage.getItem('gun-grip-lab-v2')||localStorage.getItem('editor-gun-grip-v1')));if(saved)profile=validateProfile(saved);}catch{}
+ try{const saved=JSON.parse((localStorage.getItem('editor-gun-grip-v1')||localStorage.getItem('gun-grip-lab-v2')));if(saved)profile=validateProfile(saved);}catch{}
  const source=await new GripRig(new T.Scene(),profile).ready;
  const gun=new AlignedGun(scene,rig,tips,savedGripDriver(rig,tips,source,{preserveDirections:true}),source,profile),state=new BodyGunState();
  batchGun(gun.visual);
- const cfg={pickRadius:.22,pickMs:100,dropMs:200,pickBend:40,holdBend:25,indexFree:55,aimEnabled:true,aimEnter:.12,aimExit:.17,depthEnter:.09,depthExit:.13,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.02};
+ const cfg={pickRadius:.22,pickMs:100,dropMs:200,pickBend:40,holdBend:25,indexFree:55,aimEnabled:true,straightHip:true,lockThumb:true,aimEnter:.12,aimExit:.17,depthEnter:.09,depthExit:.13,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.02};
  const panel=document.createElement('section');panel.id='editorGun';
  panel.innerHTML='<h2>Chest holster and aiming</h2><p>Right hand: make a fist near the gun to pick it up. Your index can be curled, and you do not need to look down. Keep these three curled to hold. Relax them to return the gun to your chest. Straighten the index to re-arm, then curl it to shoot.</p><p>Aim by bringing the held hand close to your right eye, including camera depth. Move it away to leave aim mode. Aim distances use your exact entered values; zero disables entry. Entry must satisfy both the entry and release distances. In aim mode the grip aligns with your head direction and the camera moves to the right eye.</p>';
  const status=document.createElement('p');status.setAttribute('role','status');panel.append(status);
  function field(key,label,min,max,step,factor=1){const l=document.createElement('label'),i=document.createElement('input');l.textContent=label;i.type='number';const aimField=['aimEnter','aimExit','depthEnter','depthExit'].includes(key);i.min=aimField?0:min;if(!aimField)i.max=max;i.step=aimField?'any':step;i.value=cfg[key]*factor;i.oninput=()=>{if(i.value===''||!Number.isFinite(i.valueAsNumber))return;cfg[key]=(aimField?Math.max(0,i.valueAsNumber):T.MathUtils.clamp(i.valueAsNumber,min,max))/factor;};l.append(i);panel.append(l);}
  for(const a of [['pickRadius','Pickup radius (cm)',5,25,1,100],['pickMs','Hold grip to pick up (ms)',50,800,25],['pickBend','Minimum lower-finger curl to pick up (degrees)',35,100,1],['holdBend','Minimum lower-finger curl to keep holding (degrees)',15,70,1],['chestX','Holster left / right (cm)',-35,35,1,100],['chestY','Holster below eyes (cm)',-60,-15,1,100],['chestZ','Holster forward (cm)',-10,30,1,100],['aimEnter','Aim enter distance (cm)',5,35,1,100],['aimExit','Aim release distance (cm)',8,50,1,100],['depthEnter','Aim depth tolerance (cm)',5,25,1,100],['depthExit','Aim depth release (cm)',10,35,1,100]])field(...a);
  const toggle=document.createElement('label');toggle.innerHTML='<input type="checkbox" checked> Enable right-eye aim mode';toggle.querySelector('input').onchange=e=>cfg.aimEnabled=e.target.checked;panel.append(toggle);
+ for(const [key,label]of [['straightHip','Keep wrist and gun straight ahead when hip firing'],['lockThumb','Keep thumb at saved wrapped grip while holding']]){const l=document.createElement('label'),i=document.createElement('input');i.type='checkbox';i.checked=cfg[key];i.onchange=()=>cfg[key]=i.checked;l.append(i,label);panel.append(l);}
  const triggerPanel=installGunSettings(gun,panel);triggerPanel.querySelectorAll('p')[1].textContent='Pickup requires the chest holster gesture described above. The index trigger and thumb use the saved endpoints.';
- const grip=document.createElement('section');grip.id='editorGrip';grip.innerHTML='<h2>Edit locked gun grip</h2><p>These controls change the saved grip only. Middle, ring and little fingers stay locked while holding; index and thumb move between saved endpoints. Preview the stops, move individual joints, then save.</p>';
+ const grip=document.createElement('section');grip.id='editorGrip';grip.innerHTML='<h2>Edit locked gun grip</h2><p>These controls change the saved grip only. Middle, ring and little fingers stay locked while holding. The index moves between saved trigger endpoints. The thumb stays wrapped by default; turn off the thumb lock in Gun to track it. Preview the stops, move individual joints, then save.</p>';
  const previewLabel=document.createElement('label');previewLabel.innerHTML='<input type="checkbox"> Preview grip without tracking';grip.append(previewLabel);const previewInput=previewLabel.querySelector('input');
  const endpoint=document.createElement('select');endpoint.setAttribute('aria-label','Grip endpoint');for(const [value,text]of [['angles','Released index / wrapped thumb'],['indexPressed','Pressed index'],['thumbOpen','Raised thumb']])endpoint.add(new Option(text,value));grip.append(endpoint);
  const finger=document.createElement('select');finger.setAttribute('aria-label','Grip finger');for(const name of ['Thumb','Index','Middle','Ring','Pinky'])finger.add(new Option(name,name));grip.append(finger);
  const joint=document.createElement('select');joint.setAttribute('aria-label','Grip joint');for(let i=1;i<=3;i++)joint.add(new Option(i===1?'Base joint':i===2?'Middle joint':'Tip joint',i));grip.append(joint);
  const sliders=[];function rebuild(){gun.profile=profile;source.configure(profile);gun.driver=savedGripDriver(rig,tips,source,{preserveDirections:true});}
- function target(){const name=finger.value+joint.value;const bank=profile[endpoint.value]??= {};bank[name]??=[...profile.angles[name]];return bank[name];}
+ function target(){const name=finger.value+joint.value;const bank=profile[endpoint.value]??= {};if(endpoint.value!=='angles'){const f=endpoint.value==='indexPressed'?'Index':'Thumb';for(let k=1;k<=3;k++)bank[f+k]??=[...profile.angles[f+k]];}bank[name]??=[...profile.angles[name]];return bank[name];}
  function updateFields(){const restricted=endpoint.value==='indexPressed'?'Index':endpoint.value==='thumbOpen'?'Thumb':null;if(restricted)finger.value=restricted;finger.disabled=!!restricted;sliders.forEach((s,k)=>{s.value=target()[k];s.nextElementSibling.value=s.value;});}
- for(const [axis,label]of ['Bend / local X','Side / local Y','Twist / local Z'].entries()){const l=document.createElement('label'),s=document.createElement('input'),o=document.createElement('output');l.textContent=label;s.type='range';s.min=-180;s.max=180;s.step=1;s.setAttribute('aria-label',label);s.oninput=()=>{target()[axis]=+s.value;o.value=s.value;rebuild();};l.append(s,o);grip.append(l);sliders.push(s);}
+ for(const [axis,label]of ['Bend / local X','Side / local Y','Twist / local Z'].entries()){const l=document.createElement('label'),s=document.createElement('input'),o=document.createElement('output');l.textContent=label;s.type='range';s.min=-180;s.max=180;s.step=1;s.setAttribute('aria-label',label);s.oninput=()=>{target()[axis]=+s.value;o.value=s.value;rebuild();gripStatus.textContent='Unsaved grip changes - active in preview and live holding. Press Save grip to keep them.';};l.append(s,o);grip.append(l);sliders.push(s);}
  for(const s of [endpoint,finger,joint])s.onchange=updateFields;updateFields();
- for(const [name,fn]of [['Save grip',()=>{rebuild();localStorage.setItem('editor-gun-grip-v1',JSON.stringify(profile));localStorage.setItem('gun-grip-lab-v2',JSON.stringify(profile));gripStatus.textContent='Grip saved for this editor and the gun editor on this browser.';}],['Restore supplied grip',()=>{Object.assign(profile,structuredClone(original));rebuild();updateFields();localStorage.removeItem('editor-gun-grip-v1');localStorage.removeItem('gun-grip-lab-v2');gripStatus.textContent='Original supplied grip restored.';}]]){const b=document.createElement('button');b.textContent=name;b.onclick=fn;grip.append(b);}
+ for(const [name,fn]of [['Save grip',()=>{try{profile=validateProfile(profile);rebuild();const json=JSON.stringify(profile);localStorage.setItem('editor-gun-grip-v1',json);if(localStorage.getItem('editor-gun-grip-v1')!==json)throw Error('Storage read-back failed');localStorage.setItem('gun-grip-lab-v2',json);gripStatus.textContent='Grip saved and verified. Live holding uses these same finger stops; the index moves between the saved trigger endpoints.';}catch(e){gripStatus.textContent='Grip could not be saved: '+e.message;}}],['Restore supplied grip',()=>{Object.assign(profile,structuredClone(original));rebuild();updateFields();localStorage.removeItem('editor-gun-grip-v1');localStorage.removeItem('gun-grip-lab-v2');gripStatus.textContent='Original supplied grip restored.';}]]){const b=document.createElement('button');b.textContent=name;b.onclick=fn;grip.append(b);}
  const gripStatus=document.createElement('p');grip.append(gripStatus);
  function loadSavedGrip(){try{const raw=localStorage.getItem('gun-grip-lab-v2')||localStorage.getItem('editor-gun-grip-v1');if(!raw){gripStatus.textContent='No saved grip in this browser.';return;}profile=validateProfile(JSON.parse(raw));localStorage.setItem('editor-gun-grip-v1',JSON.stringify(profile));rebuild();updateFields();gripStatus.textContent='Saved gun-editor grip loaded for preview and live pickup.';}catch(e){gripStatus.textContent='Could not load grip: '+e.message;}}
  const loadGrip=document.createElement('button');loadGrip.textContent='Load saved gun-editor grip';loadGrip.onclick=loadSavedGrip;grip.append(loadGrip);
- addEventListener('storage',e=>{if(e.key==='gun-grip-lab-v2'&&e.newValue)loadSavedGrip();});
+ addEventListener('storage',e=>{if(['gun-grip-lab-v2','editor-gun-grip-v1'].includes(e.key)&&e.newValue)gripStatus.textContent='A grip changed in another tab. Use Load saved gun-editor grip to apply it.';});
  // Sight rail is parallel to the barrel. The red point lies on the shot ray.
  const glass=gun.visual.getObjectByName('Sight_glass_low');glass.geometry.computeBoundingBox();glass.updateWorldMatrix(true,false);const sightLocal=glass.geometry.boundingBox.getCenter(V()).applyMatrix4(glass.matrixWorld).applyMatrix4(gun.visual.matrixWorld.clone().invert());
  glass.material=new T.MeshBasicMaterial({color:0xcceeff,transparent:true,opacity:.06,depthWrite:false,side:T.DoubleSide});
@@ -70,19 +71,21 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
   const fresh=h&&!h.predicted&&now-h.seen<300&&entry&&now-entry.time<300;
   if(fresh&&h.landmarks!==lastSample){lastSample=h.landmarks;lastFresh=now;const o=observation(h.world),wrist=entry.result.points[0],p=o?.points;
    const event=state.step({time:now,valid:!!o&&hasHead,near:wrist.distanceTo(holster)<cfg.pickRadius,lookingDown:forward.y< -cfg.lookDown,open:!!o?.open,grip:!!o&&o.lower.every(v=>v>(state.held?cfg.holdBend:cfg.pickBend)),indexFree:!!p&&(bend(p,5,6,7)??180)<cfg.indexFree,eyeDistance:wrist.distanceTo(eye),eyeDepth:wrist.clone().sub(eye).dot(forward)},cfg);
-   if(event.picked){loadSavedGrip();gun.controller.reset();gun.controller.held=true;gun.owner='Right';}
+   if(event.picked){gun.controller.reset();gun.controller.held=true;gun.owner='Right';}
    if(event.dropped)release();
    if(state.held){gun.input=gun.controller.update(h.world,now,profile,'Right');gun.controller.held=true;}else gun.input=null;
   }else if(!fresh||now-lastFresh>350){state.step({time:now,valid:false},cfg);gun.controller.lose();gun.input=null;if(!state.held)release();}
   gun.visual.visible=hasHead;
   if(state.held&&entry){
    let q=state.aim?new T.Quaternion():rig.joints.RHand.getWorldQuaternion(new T.Quaternion()),wrist=state.aim?V():entry.result.points[0].clone(),input=gun.input??{index:0,thumb:1};
-   let result=gun.pose('R',q,wrist,input.index,input.thumb,1/60);
-   if(state.aim){
+   let result=gun.pose('R',q,wrist,input.index,cfg.lockThumb?1:input.thumb,1/60);
+   if(state.aim||cfg.straightHip){
     const gunRotation=gun.visual.getWorldQuaternion(new T.Quaternion());q.premultiply(headQ.clone().multiply(gunRotation.invert()));
-    result=gun.pose('R',q,wrist,input.index,input.thumb,1/60);
+    result=gun.pose('R',q,wrist,input.index,cfg.lockThumb?1:input.thumb,1/60);
+   }
+   if(state.aim){
     const sightPoint=gun.visual.localToWorld(sightLocal.clone()),offset=eye.clone().addScaledVector(forward,.16).sub(sightPoint);wrist.add(offset);
-    result=gun.pose('R',q,wrist,input.index,input.thumb,1/60);
+    result=gun.pose('R',q,wrist,input.index,cfg.lockThumb?1:input.thumb,1/60);
     // Final optic transform depends only on the head, never on tracked hand
     // orientation or articulation. Trigger animation remains a child transform.
     const aimScale=gun.visual.getWorldScale(V()),aimPosition=eye.clone().addScaledVector(forward,.16).sub(sightLocal.clone().multiply(aimScale).applyQuaternion(headQ));

@@ -269,6 +269,11 @@ for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10
 configureSide();renderLibrary();updateMode();resize();notice('Direct Lines ready. Connect camera or Connect iPhone camera. Connected rigid hand. Original tracked directions; no automatic resizing.');
 let timingAt=0,timingTotal=0,timingCount=0;
 const wallTest=new URLSearchParams(location.search).has('fixture')?document.createElement('p'):null;if(wallTest)$('directSettings').prepend(wallTest);
+const liveHud=document.createElement('div');liveHud.id='viewportLiveStats';liveHud.setAttribute('role','status');liveHud.style.cssText='position:absolute;top:34px;left:12px;z-index:5;pointer-events:none;background:#07121dd9;color:#a6f6d4;font:12px monospace;white-space:pre;padding:8px;border-radius:6px';$('scene').parentElement.append(liveHud);
+function updateLiveHud(now){
+ const fresh=trackingStats&&now-lastStatsTime<2500,s=fresh?trackingStats:null,number=v=>Number.isFinite(v)?Math.round(v):'—';
+ liveHud.textContent=(s?(new URLSearchParams(location.search).has('fixture')?'TEST INPUT':'LIVE TRACKING'):'TRACKING OFF / NO RECENT RESULTS')+'\nCamera '+number(s?.camera)+' FPS · Hands '+number(s?.hands)+' FPS · Scene '+number(measuredScene)+' FPS\nFace '+number(s?.face)+' · Shoulders '+number(s?.pose)+' FPS\nHand inference '+number(s?.ms?.hands)+' ms · Frame-to-result '+number(s?.age?.hands)+' ms';
+}
 let sceneFrames=0,sceneWindow=performance.now(),measuredScene=0,lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(+getCombinedOptions().handRate===0){latest=null;allHands=[];}
  if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(stream&&$('video').readyState>=2)drawPreview($('video'),latest?.landmarks);const calculationStart=performance.now();if(getCombinedOptions().rawOnly){measuredScene=0;sceneFrames=0;sceneWindow=now;$('scene').style.visibility='hidden';$('calculationTiming').textContent='RAW: model calculations and 3D rendering OFF. Read tracking FPS on camera preview.';return;}$('scene').style.visibility='';if(sampleSource&&combined){combined.seen=combined.poseSeen=now;}combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.wallLimited?'Hand at head back-wall limit':directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Fixed hand proportions · tracked segment directions';}renderOtherHand(renderDt);applyPalmPlacement();depthExperiment?.observe(allHands,renderedHands,captureAspect);applyHandInteractions(now);twoHandMagnets?.update(now);editorGun?.tick(now);directResult=renderedHands[side]?.result??directResult;refreshOtherLines();if(wallTest)wallTest.textContent='Test wrist coordinates: '+Object.entries(renderedHands).map(([s,h])=>s+' '+h.result.points[0].toArray().map(v=>(v*1000).toFixed(2)).join(', ')).join(' / ');if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&!!latest;
  wristDot.position.setFromMatrixPosition(rig.joints[side+'Hand'].matrixWorld);for(const n of JOINTS){const dot=jointDots[n];dot.visible=true;dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
@@ -278,7 +283,7 @@ let sceneFrames=0,sceneWindow=performance.now(),measuredScene=0,lastPaint=0,last
 
  if(!editing&&now-lastControls>100){lastControls=now;renderControls();}
  if(pinching&&!editing)$('contactState').textContent=(contactHold?'Contact held · ':'Closing contact · ')+'thumb–'+pinchFinger.toLowerCase()+' gap '+(tipDots.Thumb.position.distanceTo(tipDots[pinchFinger].position)*1000).toFixed(1)+' mm';
- const j=rig.joints[side+selected];gizmo.position.setFromMatrixPosition(j.matrixWorld);gizmo.quaternion.copy(j.parent.getWorldQuaternion(new THREE.Quaternion())).multiply(jointBasis(selected));const modelMs=performance.now()-calculationStart;const submitStart=performance.now();renderDemo();timingTotal+=modelMs;timingCount++;if(now-timingAt>500){$('calculationTiming').textContent='PC model CPU: '+(timingTotal/timingCount).toFixed(2)+' ms/frame · render submission CPU: '+(performance.now()-submitStart).toFixed(2)+' ms (not GPU time)';timingAt=now;timingTotal=timingCount=0;}
+ const j=rig.joints[side+selected];gizmo.position.setFromMatrixPosition(j.matrixWorld);gizmo.quaternion.copy(j.parent.getWorldQuaternion(new THREE.Quaternion())).multiply(jointBasis(selected));const modelMs=performance.now()-calculationStart;const submitStart=performance.now();renderDemo();timingTotal+=modelMs;timingCount++;if(now-timingAt>500){updateLiveHud(now);$('calculationTiming').textContent='PC model CPU: '+(timingTotal/timingCount).toFixed(2)+' ms/frame · render submission CPU: '+(performance.now()-submitStart).toFixed(2)+' ms (not GPU time)';timingAt=now;timingTotal=timingCount=0;}
 }requestAnimationFrame(loop);addEventListener('pagehide',()=>{stopCamera();worker?.terminate();});
 
 const stabilityControls=document.createElement('section');
@@ -351,7 +356,7 @@ $('calibrateDistance').onclick=()=>{
  for(const s of ['R','L'])delete cheekOffsets[s];handCalibrate();const ok=combined.calibrate(+$('phoneDistance').value/100,captureAspect,camera.aspect);
  $('depthCalibrationStatus').textContent=ok?'Hands and face share '+$('phoneDistance').value+' cm reference. Head size stays fixed. Check cheek contact and adjust Face depth offset if needed. Recalibrate after moving the phone.':'Head model is still loading; retry when ready.';
 };
-function showTrackingStats(s){performanceOptions?.sample(s,measuredScene,parseFloat($('calculationTiming').textContent.split(':')[1])||0);trackingStats=s;lastStatsTime=performance.now();$('liveFps').textContent=`CAM ${s.camera||0} FPS
+function showTrackingStats(s){performanceOptions?.sample(s,measuredScene,parseFloat($('calculationTiming').textContent.split(':')[1])||0);trackingStats=s;lastStatsTime=performance.now();updateLiveHud(lastStatsTime);$('liveFps').textContent=`CAM ${s.camera||0} FPS
 HAND ${s.hands||0} · FACE ${s.face||0} · BODY ${s.pose||0}`;const o=getCombinedOptions();$('combinedStatus').textContent=`Camera: ${s.camera||0} ${s.cameraCounter||"observed"} FPS · fallback reads ${s.capturePolls||0}/s (requested ${o.cameraFps}) · camera reports ${s.cameraSettings?.frameRate?.toFixed?.(1)||'?'}
 Hands: ${s.hands||0} FPS · ${s.delegate?.hands||'loading'} · ${Math.round(s.ms?.hands||0)} ms
 Face/head: ${s.face||0} FPS · ${s.delegate?.face||'off/loading'} · shoulders: ${s.pose||0} FPS · ${s.delegate?.pose||'off/loading'}
@@ -573,6 +578,7 @@ const alignmentInfo=document.createElement('p');alignmentInfo.textContent='Align
 
 const alignmentReadout=document.createElement('p');alignmentReadout.id='alignmentReadout';alignmentReadout.setAttribute('role','status');alignmentReadout.textContent='Model lines ON · waiting for tracking';document.querySelector('.toolbar').after(alignmentReadout);
 function updateAlignmentReadout(){
+ if(editorGun?.state.held){alignmentReadout.textContent='Saved gun grip active - finger pose is controlled by saved stops, not free-hand image fitting.';return;}
  if(!latest)return;
  const frame=cameraFrame(captureAspect,perspectiveCamera.aspect),focal=1/(2*Math.tan(Math.PI/6)*frame.height),errors=[];
  for(const s of ['R','L']){
@@ -654,7 +660,7 @@ function extendShellTips(rig,extra){
 }
 
 if(!document.body.dataset.mapLab){
- const {installEditorGun}=await import('./editor-gun.mjs?batch1');
+ const {installEditorGun}=await import('./editor-gun.mjs?griplive2');
  editorGun=await installEditorGun({scene,rig,tips,head:combined,hands:()=>allHands,renderedHands});
  editorGun.grip.querySelector('input[type="checkbox"]').addEventListener('change',e=>{if(e.target.checked){const eye=firstPerson.panel.querySelector('[aria-label="First-person view"]');if(eye.checked){eye.checked=false;eye.dispatchEvent(new Event('input'));}}});
  const tabs=document.querySelector('[role="tablist"]'),extra=[editorGun.panel,editorGun.grip];
@@ -675,5 +681,3 @@ if(location.hostname==='127.0.0.1'&&new URLSearchParams(location.search).has('ve
  const {verifyEditor}=await import('../.lab-qa/editor-verify.mjs?v=magnet5');
  await verifyEditor({editorGun,rig,tips,combined,detect,getHands:()=>allHands,setFrame:frame=>{sampleSource=frame;},directDriver,finalConfig});
 }
-
-
