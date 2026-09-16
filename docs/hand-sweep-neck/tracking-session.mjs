@@ -61,7 +61,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
  }
  // Original standalone capture pattern: RAF drives work; video callbacks are not a gate.
  function fallbackTick(now){if(stopped)return;
-  const fresh=!!getOptions().freshFrames;if(fresh&&video.requestVideoFrameCallback){rafHandle=requestAnimationFrame(fallbackTick);return;}const stalled=now-lastClockProgress>250;
+  const fresh=!!getOptions().freshFrames;if(fresh&&video.requestVideoFrameCallback&&now-lastCallback<250){rafHandle=requestAnimationFrame(fallbackTick);return;}const stalled=now-lastClockProgress>250;
   if(!stalled||now-lastAccepted>=33)tick(now,undefined,stalled);
   rafHandle=requestAnimationFrame(fallbackTick);
  }
@@ -71,7 +71,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
   if(now-windowStart>=950){const seconds=(now-windowStart)/1000;const measured=frameMeter.read();stats.camera=measured.fps;stats.cameraCallbacks=Math.round(cameraCallbacks/seconds);stats.capturePolls=capturePolls;capturePolls=0;stats.cameraCounter=measured.source;cameraFrames=0;cameraCallbacks=0;for(const s of slots){stats[s.task]=Math.round(s.count/seconds);s.count=0;}windowStart=now;onStats({...stats,requested:opts.cameraFps,cameraSettings:video.srcObject?.getVideoTracks()[0]?.getSettings()});}
  },1000);
 
- function videoTick(now,meta){if(stopped)return;if(getOptions().freshFrames)tick(now,meta);handle=video.requestVideoFrameCallback(videoTick);}
+ function videoTick(now,meta){if(stopped)return;lastCallback=now;if(getOptions().freshFrames)tick(now,meta);handle=video.requestVideoFrameCallback(videoTick);}
  if(video.requestVideoFrameCallback)handle=video.requestVideoFrameCallback(videoTick);
  rafHandle=requestAnimationFrame(fallbackTick);
  return ()=>{stopped=true;frameMeter.stop();clearInterval(reportTimer);if(video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(handle);cancelAnimationFrame(rafHandle);for(const s of slots){clearTimeout(s.timer);s.worker?.terminate();}};
