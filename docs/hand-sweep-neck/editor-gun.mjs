@@ -10,7 +10,7 @@ import {BodyGunState} from './gun-state.mjs?v=aimrelease1';
 const V=()=>new T.Vector3(),rad=Math.PI/180;
 export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}){
  const original=await loadProvidedProfile();let profile=structuredClone(original);
- try{const saved=JSON.parse((localStorage.getItem('editor-gun-grip-v1')||localStorage.getItem('gun-grip-lab-v2')));if(saved)profile=validateProfile(saved);}catch{}
+ try{const saved=JSON.parse((localStorage.getItem('gun-grip-lab-v2')||localStorage.getItem('editor-gun-grip-v1')));if(saved)profile=validateProfile(saved);}catch{}
  const source=await new GripRig(new T.Scene(),profile).ready;
  const gun=new AlignedGun(scene,rig,tips,savedGripDriver(rig,tips,source,{preserveDirections:true}),source,profile),state=new BodyGunState();
  const cfg={pickRadius:.22,pickMs:100,dropMs:200,pickBend:40,holdBend:25,indexFree:55,aimEnabled:true,aimEnter:.12,aimExit:.17,depthEnter:.09,depthExit:.13,chestX:-.13,chestY:-.30,chestZ:.08,lookDown:.02};
@@ -68,7 +68,7 @@ export async function installEditorGun({scene,rig,tips,head,hands,renderedHands}
   const fresh=h&&now-h.seen<300&&entry&&now-entry.time<300;
   if(fresh&&h.landmarks!==lastSample){lastSample=h.landmarks;lastFresh=now;const o=observation(h.world),wrist=entry.result.points[0],p=o?.points;
    const event=state.step({time:now,valid:!!o&&hasHead,near:wrist.distanceTo(holster)<cfg.pickRadius,lookingDown:forward.y< -cfg.lookDown,open:!!o?.open,grip:!!o&&o.lower.every(v=>v>(state.held?cfg.holdBend:cfg.pickBend)),indexFree:!!p&&(bend(p,5,6,7)??180)<cfg.indexFree,eyeDistance:wrist.distanceTo(eye),eyeDepth:wrist.clone().sub(eye).dot(forward)},cfg);
-   if(event.picked){gun.controller.reset();gun.controller.held=true;gun.owner='Right';}
+   if(event.picked){loadSavedGrip();gun.controller.reset();gun.controller.held=true;gun.owner='Right';}
    if(event.dropped)release();
    if(state.held){gun.input=gun.controller.update(h.world,now,profile,'Right');gun.controller.held=true;}else gun.input=null;
   }else if(!fresh||now-lastFresh>350){state.step({time:now,valid:false},cfg);gun.controller.lose();gun.input=null;if(!state.held)release();}

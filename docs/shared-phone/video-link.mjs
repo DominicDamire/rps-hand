@@ -1,3 +1,4 @@
+import {openCamera} from './camera-capture.mjs?v=60fps1';
 const config={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},{urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}]};
 const KEY='rps-hand-phone-pair-v1',CHANNEL='rps-hand-phone-owner-v1';
 export function receivePhone(onStream,onStatus,onEnd){
@@ -17,7 +18,7 @@ export function receivePhone(onStream,onStatus,onEnd){
 export async function sendPhone(id,video,status,facing='user',resolution='720'){
  if(!/^handlab-[a-f0-9-]{36}$/.test(id))throw Error('Open the phone camera from the PC QR code.');
  const sizes={'480':[854,480],'720':[1280,720],'1080':[1920,1080]},[width,height]=sizes[resolution]||sizes['720'];
- const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:width},height:{ideal:height},frameRate:{ideal:60,max:60}}});
+ const stream=await openCamera({facingMode:{ideal:facing},width:{ideal:width},height:{ideal:height},frameRate:{ideal:60,max:60}});
  let peer,call,closed=false,wake,retry,timeout;
  const stop=()=>{if(closed)return;closed=true;clearTimeout(retry);clearTimeout(timeout);call?.close();peer?.destroy();stream.getTracks().forEach(t=>t.stop());video.srcObject=null;wake?.release().catch(()=>{});};
  function schedule(){if(closed)return;clearTimeout(timeout);const previous=call;call=null;previous?.close();clearTimeout(retry);status('Ready for another version. Keep this page open; reconnecting automatically…');retry=setTimeout(dial,1200);}

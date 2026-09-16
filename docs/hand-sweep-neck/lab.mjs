@@ -1,3 +1,4 @@
+import {openCamera} from '../shared-phone/camera-capture.mjs?v=60fps1';
 import {stableHands} from './hand-identity.mjs?v=identity1';
 import {finalConfig,installFinalSettings} from '../hand-range/settings.mjs?v=range1';
 const finalReference=await(await fetch(new URL('../hand-live-limits/hand-reference.json',import.meta.url))).json();
@@ -31,7 +32,7 @@ import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.18-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './video-link.mjs?v=shared-phone1';
+import {receivePhone} from './video-link.mjs?v=60fps1';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -203,7 +204,7 @@ function acceptTracking(data,frame,token=epoch){if($('reduceShake')?.checked)dat
  $('edit').disabled=true;$('resume').disabled=true;
 }
 function stopCamera(){twoHandMagnets?.reset();editorGun?.release();palmDepth.reset();depthExperiment?.cancel();contactAssist.reset();for(const s of ['L','R']){delete relaxedStates[s];}lastWallZ=-.6;for(const key of Object.keys(depthStates))delete depthStates[key];liveSession?.();liveSession=null;combined?.reset();trackingStats=null;if($('liveFps'))$('liveFps').textContent='CAM — FPS\nHAND — · FACE — · BODY —';allHands=[];recentHands.clear();closureState.reset();if(!editing){thumbReference=0;contactAngles=null;}epoch++;straight={};pinching=false;pinchFinger=null;contactHold=null;for(const f of Object.values(thumbFilters))f.reset();lastTracking=0;smoothPalmQ=previousPalmQ=heldPalmQ=null;palmQuiet=0;for(const f of Object.values(filters))f.reset();positionFilter.reset();curlFilter.reset();posePreview=false;closePhone?.();closePhone=null;phoneActive=false;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
-async function startCamera(){try{stopCamera();editing=false;sampleSource=null;latest=null;notice('Opening camera…');const id=$('cameraSelect').value;stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{...(id?{deviceId:{exact:id}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:+getCombinedOptions().cameraFps}}});$('video').srcObject=stream;await $('video').play();lastVideo=-1;await listCameras();liveSession=startTracking($('video'),(data,frame)=>{if(data.task==='hands')acceptTracking(data,frame);else{combined.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('Combined DEMO: hands, face and shoulders share this camera. GPU preferred; actual rates below.');updateMode();}catch(e){stopCamera();notice('Camera could not start: '+e.message);}}
+async function startCamera(){try{stopCamera();editing=false;sampleSource=null;latest=null;notice('Opening camera…');const id=$('cameraSelect').value;stream=await openCamera({...(id?{deviceId:{exact:id}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:+getCombinedOptions().cameraFps}});$('video').srcObject=stream;await $('video').play();lastVideo=-1;await listCameras();liveSession=startTracking($('video'),(data,frame)=>{if(data.task==='hands')acceptTracking(data,frame);else{combined.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('Combined DEMO: hands, face and shoulders share this camera. GPU preferred; actual rates below.');updateMode();}catch(e){stopCamera();notice('Camera could not start: '+e.message);}}
 async function listCameras(){const current=$('cameraSelect').value,devices=await navigator.mediaDevices.enumerateDevices();$('cameraSelect').replaceChildren(new Option('Default camera',''));for(const d of devices.filter(d=>d.kind==='videoinput'))$('cameraSelect').add(new Option(d.label||'Camera '+($('cameraSelect').options.length),d.deviceId));$('cameraSelect').value=current;}
 $('phone').onclick=()=>{stopCamera();editing=false;sampleSource=null;latest=null;updateMode();const token=epoch;try{closePhone=receivePhone(async received=>{liveSession?.();liveSession=null;if(token!==epoch){received.getTracks().forEach(t=>t.stop());return;}try{stream=received;phoneActive=true;$('video').srcObject=received;$('video').muted=true;await $('video').play();if(token!==epoch)return;liveSession=startTracking($('video'),(data,frame)=>{if(data.task==='hands')acceptTracking(data,frame,token);else{combined.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('PHONE VIDEO → PC TRACKING → PC RENDERING. Phone does not calculate landmarks.');updateMode();}catch(e){stopCamera();notice('Received video could not start: '+e.message);}},notice,message=>{stopCamera();notice(message);});}catch(e){notice(e.message);}};
 $('start').onclick=startCamera;$('stop').onclick=stopCamera;
@@ -650,7 +651,7 @@ function extendShellTips(rig,extra){
 }
 
 if(!document.body.dataset.mapLab){
- const {installEditorGun}=await import('./editor-gun.mjs?v=authored2');
+ const {installEditorGun}=await import('./editor-gun.mjs?v=livegrip3');
  editorGun=await installEditorGun({scene,rig,tips,head:combined,hands:()=>allHands,renderedHands});
  editorGun.grip.querySelector('input[type="checkbox"]').addEventListener('change',e=>{if(e.target.checked){const eye=firstPerson.panel.querySelector('[aria-label="First-person view"]');if(eye.checked){eye.checked=false;eye.dispatchEvent(new Event('input'));}}});
  const tabs=document.querySelector('[role="tablist"]'),extra=[editorGun.panel,editorGun.grip];
@@ -671,3 +672,4 @@ if(location.hostname==='127.0.0.1'&&new URLSearchParams(location.search).has('ve
  const {verifyEditor}=await import('../.lab-qa/editor-verify.mjs?v=magnet5');
  await verifyEditor({editorGun,rig,tips,combined,detect,getHands:()=>allHands,setFrame:frame=>{sampleSource=frame;},directDriver,finalConfig});
 }
+
