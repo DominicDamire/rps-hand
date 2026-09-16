@@ -2,7 +2,7 @@ import {reduceFalseDepthBends} from '../hand-sweep-neck/depth-lines.mjs?v=touch2
 import {crossingFingers} from './crossing.mjs?v=cross2';
 import {fitFingerSpacing} from './finger-spacing.mjs?v=cross2';
 import {HandJitterFilter} from './jitter.mjs?v=jitter1';
-import {finalHandLimits} from './final-hand-limits.mjs?v=constraints2';
+import {finalHandLimits} from './final-hand-limits.mjs?v=constraints3';
 import {PalmFlipGuard} from '../hand-pnp-photo/palm-flip.mjs?v=flip22';
 import {limitBaseSplay} from '../hand-pnp-photo/base-splay-limit.mjs?v=photo1';
 import * as T from 'three';

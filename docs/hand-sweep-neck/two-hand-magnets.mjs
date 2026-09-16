@@ -1,7 +1,7 @@
 import * as T from 'three';
 import {TipPairs} from './tip-pairs.mjs?v=predict1';
 import {reach} from '../hand-pnp-photo/contact-direct.mjs?v=photo1';
-import {finalHandLimits} from '../hand-live-limits/final-hand-limits.mjs?v=constraints2';
+import {finalHandLimits} from '../hand-live-limits/final-hand-limits.mjs?v=constraints3';
 import {crossingFingers} from '../hand-live-limits/crossing.mjs?v=cross2';
 const names=['Thumb','Index','Middle','Ring','Pinky'];
 export function installTwoHandMagnets({container,rig,hands,rendered,aspect,config,isPaused}){

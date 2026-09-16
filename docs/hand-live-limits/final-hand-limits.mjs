@@ -41,7 +41,7 @@ export function finalHandLimits(){
    }
    // Thumb is not a finger hinge: retain opposition and sideways motion.
    // Only restrict negative flexion in its own rest frame.
-   if(cfg.thumbBackLimit!==undefined){
+   if(cfg.thumbBackLimit!=null){
     const c=chains[0],rest=rig.rest[side+'Thumb2'].world.clone().sub(rig.rest[side+'Thumb1'].world).normalize().applyQuaternion(palmQ);
     const across=restAcross.clone().applyQuaternion(palmQ).normalize();
     for(let k=1;k<4;k++){
@@ -51,7 +51,7 @@ export function finalHandLimits(){
      const signed=Math.atan2(axis.dot(new T.Vector3().crossVectors(prev,dir)),prev.dot(dir));
      if(signed < -cfg.thumbBackLimit*rad)rotateChildren(c,k,dir,dir.clone().applyAxisAngle(axis,-cfg.thumbBackLimit*rad-signed));
     }
-   }else {capUpper(0,2,cfg.thumbMcpCap??70);capUpper(0,3,cfg.thumbIpCap??80);}
+   }else if(cfg.thumbBackLimit===undefined){capUpper(0,2,cfg.thumbMcpCap??70);capUpper(0,3,cfg.thumbIpCap??80);}
   }
   const before=[1,2,3,4].map(baseAngles);enforce();
   // Thresholds are pixels at 1280 image height, so photo/video use one scale.
