@@ -651,7 +651,7 @@ function extendShellTips(rig,extra){
 }
 
 if(!document.body.dataset.mapLab){
- const {installEditorGun}=await import('./editor-gun.mjs?v=livegrip3');
+ const {installEditorGun}=await import('./editor-gun.mjs?v=headlock1');
  editorGun=await installEditorGun({scene,rig,tips,head:combined,hands:()=>allHands,renderedHands});
  editorGun.grip.querySelector('input[type="checkbox"]').addEventListener('change',e=>{if(e.target.checked){const eye=firstPerson.panel.querySelector('[aria-label="First-person view"]');if(eye.checked){eye.checked=false;eye.dispatchEvent(new Event('input'));}}});
  const tabs=document.querySelector('[role="tablist"]'),extra=[editorGun.panel,editorGun.grip];
@@ -672,4 +672,5 @@ if(location.hostname==='127.0.0.1'&&new URLSearchParams(location.search).has('ve
  const {verifyEditor}=await import('../.lab-qa/editor-verify.mjs?v=magnet5');
  await verifyEditor({editorGun,rig,tips,combined,detect,getHands:()=>allHands,setFrame:frame=>{sampleSource=frame;},directDriver,finalConfig});
 }
+
 
