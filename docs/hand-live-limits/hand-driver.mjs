@@ -1,3 +1,4 @@
+import {fitFingerSpacing} from './finger-spacing.mjs?v=spacing1';
 import {HandJitterFilter} from './jitter.mjs?v=jitter1';
 import {finalHandLimits} from './final-hand-limits.mjs?v=1';
 import {PalmFlipGuard} from '../hand-pnp-photo/palm-flip.mjs?v=flip22';
@@ -118,6 +119,7 @@ export function directDriver(rig,tips){
    for(let k=1;k<4;k++){const dir=finalStabilizer.update(side+f+':'+k,dirs[k-1].applyQuaternion(inversePalm),dt,0,{smoothingMs:experiment.postSmoothMs}).applyQuaternion(palmQ);c[k].copy(c[k-1]).addScaledVector(dir,lengths[f][k-1]);}
   }
 
+  const spacingAudit=fitFingerSpacing(chains,rig,side,palmQ,lm,width,height,experiment);
   jitter.filterFingers(chains,lengths,palmQ,dt,experiment);
 
   // Final sideways constraint: image fitting, contact, and smoothing cannot undo it.
@@ -175,7 +177,7 @@ export function directDriver(rig,tips){
    // Geometry transforms are changed ONLY by the user's thickness/inset controls.
    if(shapeChanged){const rot=new T.Matrix4().makeRotationFromQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0,0,1),axis));const shapeMatrix=rot.clone().multiply(new T.Matrix4().makeScale(thickness,thickness,1+(k===3?tipInset/1000/rest.length():0))).multiply(rot.clone().invert());for(const m of rig.parts)if(m.parent===j){m.matrixAutoUpdate=false;m.matrix.copy(shapeMatrix).multiply(matrices.get(m));m.matrixWorldNeedsUpdate=true;}}
   }
-  lastShape=shape;rig.directShape??={};rig.directShape[side]=shape;rig.root.updateMatrixWorld(true);return {points:p,contact,contactGap,palmFlipRejected,baseBefore,baseAfter,baseSplayAudit,fitPoints,finalAudit};
+  lastShape=shape;rig.directShape??={};rig.directShape[side]=shape;rig.root.updateMatrixWorld(true);return {points:p,contact,contactGap,palmFlipRejected,baseBefore,baseAfter,baseSplayAudit,fitPoints,finalAudit,spacingAudit};
  };
 }
 
