@@ -28,17 +28,20 @@ export function installTwoHandMagnets({container,rig,hands,rendered,aspect,confi
   // Give opposing extended fingers room above their root-to-root line.
   // A reachable shared target avoids the straight-chain FABRIK singularity.
   const targets=new Map();
+  const imageStraight=(h,f)=>{const b=1+4*f,p=h.landmarks;const dist=(i,j)=>Math.hypot((p[i].x-p[j].x)*aspect(),p[i].y-p[j].y);const total=dist(b,b+1)+dist(b+1,b+2)+dist(b+2,b+3);return total>1e-6&&dist(b,b+3)/total>.9;};
+  function straightTo(chain,lengths,target){const direction=target.clone().sub(chain[0]).normalize();for(let k=1;k<4;k++)chain[k].copy(chain[k-1]).addScaledVector(direction,lengths[k-1]);}
+
   for(const pair of pairs){
    const l=pair.a/4-1,r=pair.b/4-1,L=chains.L[l],R=chains.R[r],key=pair.a+':'+pair.b;
    const target=L[3].clone().add(R[3]).multiplyScalar(.5),axis=R[0].clone().sub(L[0]),d=axis.length();
    const a=lengths.L[l].reduce((x,y)=>x+y,0),b=lengths.R[r].reduce((x,y)=>x+y,0);
    const ld=L[3].clone().sub(L[0]),rd=R[3].clone().sub(R[0]);
-   if(l>0&&r>0&&d>1e-5&&ld.length()>.85*a&&rd.length()>.85*b&&ld.normalize().dot(rd.normalize())<-.7&&d<.98*(a+b)&&d>Math.abs(a-b)){
+   if(l>0&&r>0&&d>1e-5&&imageStraight(left,l)&&imageStraight(right,r)&&ld.normalize().dot(rd.normalize())<-.3&&d<.98*(a+b)&&d>Math.abs(a-b)){
     axis.divideScalar(d);
     let up=new T.Vector3(0,1,0).addScaledVector(axis,-axis.y);
     if(up.lengthSq()<.01)up.set(0,0,1).addScaledVector(axis,-axis.z);
     up.normalize();
-    const previous=archDirections.get(key);if(previous&&up.dot(previous)<0)up.negate();archDirections.set(key,up.clone());
+    archDirections.set(key,up.clone());
     const x=(a*a-b*b+d*d)/(2*d),height=Math.sqrt(Math.max(0,a*a-x*x));
     target.copy(L[0]).addScaledVector(axis,x).addScaledVector(up,height);
     targets.set(key,target);
@@ -47,7 +50,11 @@ export function installTwoHandMagnets({container,rig,hands,rendered,aspect,confi
   let gap=Infinity;
   for(let pass=0;pass<8;pass++){
    for(const pair of pairs){const l=pair.a/4-1,r=pair.b/4-1,target=targets.get(pair.a+':'+pair.b)??chains.L[l][3].clone().add(chains.R[r][3]).multiplyScalar(.5);reach(chains.L[l],lengths.L[l],target);reach(chains.R[r],lengths.R[r],target);}
-   enforce('L');enforce('R');gap=Math.max(...pairs.map(p=>chains.L[p.a/4-1][3].distanceTo(chains.R[p.b/4-1][3])));if(gap<.0005)break;
+   enforce('L');enforce('R');
+   // Apply the straight contact last: the iterative solver and joint caps must
+   // not buckle an explicitly straight tracked finger to reach this target.
+   for(const pair of pairs){const target=targets.get(pair.a+':'+pair.b);if(target){const l=pair.a/4-1,r=pair.b/4-1;straightTo(chains.L[l],lengths.L[l],target);straightTo(chains.R[r],lengths.R[r],target);}}
+   gap=Math.max(...pairs.map(p=>chains.L[p.a/4-1][3].distanceTo(chains.R[p.b/4-1][3])));if(gap<.0005)break;
   }
   for(const S of ['L','R']){
    const result=rendered[S].result,old=snapshots[S],p=[old[0].clone().add(shifts[S]),...chains[S].flat()];
