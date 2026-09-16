@@ -1,12 +1,12 @@
 import * as T from 'three';
 import {TipPairs} from './tip-pairs.mjs?v=predict1';
 import {reach} from '../hand-pnp-photo/contact-direct.mjs?v=photo1';
-import {finalHandLimits} from '../hand-live-limits/final-hand-limits.mjs?v=cross2';
+import {finalHandLimits} from '../hand-live-limits/final-hand-limits.mjs?v=constraints2';
 import {crossingFingers} from '../hand-live-limits/crossing.mjs?v=cross2';
 const names=['Thumb','Index','Middle','Ring','Pinky'];
 export function installTwoHandMagnets({container,rig,hands,rendered,aspect,config,isPaused}){
- const cfg={enabled:true,enter:45,release:70,confirm:80,maxShift:.12},matcher=new TipPairs(),caps={L:finalHandLimits(),R:finalHandLimits()};
- const panel=document.createElement('fieldset');panel.innerHTML='<legend>Fingertip magnets between hands</legend><label><input type="checkbox" checked> Join fingertips across both hands</label><p>Index to index, or up to five fingertip pairs at once. Each fingertip joins only one on the other hand. Pull apart to release. Pixels use a 1280-pixel-high image, matching the thumb contact controls.</p>';container.prepend(panel);
+ const cfg={enabled:false,enter:45,release:70,confirm:80,maxShift:.12},matcher=new TipPairs(),caps={L:finalHandLimits(),R:finalHandLimits()};
+ const panel=document.createElement('fieldset');panel.innerHTML='<legend>Fingertip magnets between hands</legend><label><input type="checkbox"> Join fingertips across both hands</label><p>Index to index, or up to five fingertip pairs at once. Each fingertip joins only one on the other hand. Pull apart to release. Pixels use a 1280-pixel-high image, matching the thumb contact controls.</p>';container.prepend(panel);
  panel.querySelector('input').onchange=e=>{cfg.enabled=e.target.checked;matcher.reset();};
  for(const [key,label,min,max,step,factor]of [['enter','Two-hand connect distance (px)',0,120,1,1],['release','Two-hand release distance (px)',0,180,1,1],['confirm','Two-hand contact confirmation (ms)',0,400,20,1],['maxShift','Maximum hand correction (cm)',0,25,1,100]]){const l=document.createElement('label'),i=document.createElement('input');l.textContent=label;i.type='number';i.min=min;i.max=max;i.step=step;i.value=cfg[key]*factor;i.onchange=()=>{cfg[key]=T.MathUtils.clamp(Number(i.value)||0,min,max)/factor;cfg.release=Math.max(cfg.enter,cfg.release);matcher.reset();};l.append(i);panel.append(l);}
  const archDirections=new Map();
@@ -56,6 +56,7 @@ export function installTwoHandMagnets({container,rig,hands,rendered,aspect,confi
    for(const pair of pairs){const target=targets.get(pair.a+':'+pair.b);if(target){const l=pair.a/4-1,r=pair.b/4-1;straightTo(chains.L[l],lengths.L[l],target);straightTo(chains.R[r],lengths.R[r],target);}}
    gap=Math.max(...pairs.map(p=>chains.L[p.a/4-1][3].distanceTo(chains.R[p.b/4-1][3])));if(gap<.0005)break;
   }
+  enforce('L');enforce('R');
   for(const S of ['L','R']){
    const result=rendered[S].result,old=snapshots[S],p=[old[0].clone().add(shifts[S]),...chains[S].flat()];
    const savedQ=names.map(n=>[1,2,3].map(k=>rig.joints[S+n+k].getWorldQuaternion(new T.Quaternion())));

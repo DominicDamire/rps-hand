@@ -1,7 +1,8 @@
+import {reduceFalseDepthBends} from '../hand-sweep-neck/depth-lines.mjs?v=touch2.4.18-final';
 import {crossingFingers} from './crossing.mjs?v=cross2';
 import {fitFingerSpacing} from './finger-spacing.mjs?v=cross2';
 import {HandJitterFilter} from './jitter.mjs?v=jitter1';
-import {finalHandLimits} from './final-hand-limits.mjs?v=cross2';
+import {finalHandLimits} from './final-hand-limits.mjs?v=constraints2';
 import {PalmFlipGuard} from '../hand-pnp-photo/palm-flip.mjs?v=flip22';
 import {limitBaseSplay} from '../hand-pnp-photo/base-splay-limit.mjs?v=photo1';
 import * as T from 'three';
@@ -69,6 +70,13 @@ export function directDriver(rig,tips){
   }
 
   const fitPoints=[p[0].toArray(),...chains.flatMap(c=>c.map(v=>v.toArray()))];
+  // Optional depth assistance runs after 2D fitting, before all final constraints.
+  if(experiment.depthScaleEnabled||experiment.straightDepth){
+   let adjusted=[p[0].clone(),...chains.flatMap(c=>c.map(v=>v.clone()))];
+   if(experiment.depthScaleEnabled)for(let f=0;f<5;f++){const b=1+4*f,z=adjusted[b].z;for(let k=1;k<4;k++)adjusted[b+k].z=z+(adjusted[b+k].z-z)*experiment.depthScale;}
+   if(experiment.straightDepth)adjusted=reduceFalseDepthBends(adjusted,lm,width,height,true);
+   for(let f=0;f<5;f++)for(let k=1;k<4;k++){const i=1+4*f+k,d=adjusted[i].clone().sub(adjusted[i-1]);if(d.lengthSq()>1e-12)chains[f][k].copy(chains[f][k-1]).addScaledVector(d.normalize(),lengths[f][k-1]);}
+  }
   // Optional assists run after image fitting so their effects are not overwritten.
   const palmAcross=rig.rest[side+'Index1'].world.clone().sub(rig.rest[side+'Pinky1'].world).normalize();
   const palmAlong=rig.rest[side+'Middle1'].world.clone().sub(rig.rest[side+'Hand'].world).normalize();

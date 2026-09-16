@@ -1,8 +1,8 @@
-import {installPerformance} from './performance-options.mjs?v=latency2';
+import {installPerformance} from './performance-options.mjs?v=constraints2';
 let performanceOptions=null;
 import {openCamera} from '../shared-phone/camera-capture.mjs?v=verify60';
 import {stableHands} from './hand-identity.mjs?v=perfcompare1';
-import {finalConfig,installFinalSettings} from '../hand-range/settings.mjs?v=range1';
+import {finalConfig,installFinalSettings} from '../hand-range/settings.mjs?v=constraints2';
 const finalReference=await(await fetch(new URL('../hand-live-limits/hand-reference.json',import.meta.url))).json();
 import {installFirstPersonCamera} from '../hand-sweep-neck/editor-camera.mjs?v=closeaim1';
 let firstPerson=null,editorGun=null,twoHandMagnets=null;
@@ -29,7 +29,7 @@ import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=latency2';
 import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.18-final';
 import {CombinedHead} from './head-model.mjs?v=raw19';
-import {directDriver} from '../hand-live-limits/hand-driver.mjs?v=cross2';
+import {directDriver} from '../hand-live-limits/hand-driver.mjs?v=constraints2';
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.18-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
@@ -260,9 +260,9 @@ $('import').onchange=async e=>{try{if(e.target.files[0])importText(await e.targe
 $('importPaste').onclick=()=>{try{importText($('jsonText').value);}catch(e){notice('Import rejected: '+e.message);}};
 $('png').onclick=()=>{renderDemo();const c=document.createElement('canvas');c.width=1400;c.height=850;const ctx=c.getContext('2d');ctx.fillStyle='#10151d';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#edf6ff';ctx.font='bold 25px system-ui';ctx.fillText('Hand Pose Lab — '+($('poseName').value||'Live comparison'),28,42);ctx.font='16px system-ui';ctx.fillText(editing?'Frozen input and corrected model':'Latest tracked frame and model',28,74);const fit=(img,x,y,w,h)=>{const a=img.width/img.height;let iw=w,ih=w/a;if(ih>h){ih=h;iw=h*a;}if(img===$('scene')&&$('viewMode').value!=='first'){ctx.save();ctx.translate(x+(w+iw)/2,y+(h-ih)/2);ctx.scale(-1,1);ctx.drawImage(img,0,0,iw,ih);ctx.restore();}else ctx.drawImage(img,x+(w-iw)/2,y+(h-ih)/2,iw,ih);};fit($('preview'),24,100,510,710);fit($('scene'),560,100,810,710);c.toBlob(blob=>{if(blob)download(blob,'hand-pose-comparison.png');});};
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set(1-(e.clientX-rect.left)/rect.width*2,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children.filter(m=>m.visible))[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
-await rig.ready;const {snapshotModel,installSweepSettings}=await import('./settings.mjs?v=flip22');const restoreModel=snapshotModel(rig);const photoReport=fitPhotoHand(rig,{referencePoints:finalReference.points});extendShellTips(rig,finalReference.shellTipExtraFractions);
-tips=buildTips(rig);for(const S of ['R','L'])for(const [f,name]of ['Thumb','Index','Middle','Ring','Pinky'].entries())tips[S+name].copy(rig.photoReference.targets[S][4+4*f]).sub(rig.photoReference.targets[S][3+4*f]);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>{resetHandScale(rig,args[1]);args[0]=placePalmBeforeFingers(args[0],args[1],args[2]);for(let f=0;f<5;f++){const b=1+4*f,z=args[0][b].z;for(let k=1;k<=3;k++)args[0][b+k].z=z+(args[0][b+k].z-z)*.5;}args[0]=reduceFalseDepthBends(args[0],args[4].lm,$('preview').width,$('preview').height,true);let result=drivers[args[1]](...args);if(mapLab)result=mapLab.drive(args[1],args[2],result,args[3]);applyHandScale(rig,args[1],result,depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);mapLab?.scale(args[1],depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);applyDisplayOffset(args[1],result);return keepHandBeforeWall(args[1],result);};let directResult=null;
-function directOptions(lm){return {noiseDegrees:0,smoothingMs:0,staticInput:!!sampleSource,postCaps:true,postCoupling:.65,lockUpper:false,baseSplay:false,thickness:1,tipInset:0,fitAngles:true,lm,width:$('preview').width,height:$('preview').height,experiment:{...finalConfig,imageFocal:1/(2*Math.tan(Math.PI/6)*cameraFrame(captureAspect,camera.aspect).height)}};}
+await rig.ready;const {snapshotModel,installSweepSettings}=await import('./settings.mjs?v=constraints2');const restoreModel=snapshotModel(rig);const photoReport=fitPhotoHand(rig,{referencePoints:finalReference.points});extendShellTips(rig,finalReference.shellTipExtraFractions);
+tips=buildTips(rig);for(const S of ['R','L'])for(const [f,name]of ['Thumb','Index','Middle','Ring','Pinky'].entries())tips[S+name].copy(rig.photoReference.targets[S][4+4*f]).sub(rig.photoReference.targets[S][3+4*f]);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>{resetHandScale(rig,args[1]);args[0]=placePalmBeforeFingers(args[0],args[1],args[2]);let result=drivers[args[1]](...args);if(mapLab)result=mapLab.drive(args[1],args[2],result,args[3]);applyHandScale(rig,args[1],result,depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);mapLab?.scale(args[1],depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);applyDisplayOffset(args[1],result);return keepHandBeforeWall(args[1],result);};let directResult=null;
+function directOptions(lm){return {noiseDegrees:0,smoothingMs:0,staticInput:!!sampleSource,postCaps:finalConfig.postCaps,postCoupling:finalConfig.postCoupling,lockUpper:false,baseSplay:false,thickness:1,tipInset:0,fitAngles:true,lm,width:$('preview').width,height:$('preview').height,experiment:{...finalConfig,imageFocal:1/(2*Math.tan(Math.PI/6)*cameraFrame(captureAspect,camera.aspect).height)}};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
@@ -632,29 +632,29 @@ if(!document.body.dataset.mapLab){
  const grace=$('trackingGrace').closest('label');
  for(const panel of [tracking,constraints,defaults])for(const child of [...panel.childNodes])hidden.append(child);
  const finalPanel=installFinalSettings(tracking,()=>{drivers.R=directDriver(rig,tips);drivers.L=directDriver(rig,tips);});
- const fields=[...finalPanel.querySelectorAll('fieldset')];constraints.append(fields[2]);$('sweep-contact-and-collisions').prepend(fields[3]);tracking.append(grace);
- const partial=document.createElement('label');partial.innerHTML='<input id="partialHands" type="checkbox" checked> Keep tracking partially visible hands';tracking.append(partial);
+ const fields=[...finalPanel.querySelectorAll('fieldset')];constraints.append(fields[2]);tracking.append(fields[4]);$('sweep-contact-and-collisions').prepend(fields[3]);tracking.append(grace);$('trackingGrace').value=0;$('trackingGrace').nextElementSibling.value=0;
+ const partial=document.createElement('label');partial.innerHTML='<input id="partialHands" type="checkbox"> Keep tracking partially visible hands';tracking.append(partial);
  const partialHelp=document.createElement('p');partialHelp.textContent='Accept weaker hand detections when fingers are visible but the palm is obscured. This may also accept false detections. If landmarks disappear entirely, hold the last pose only for the tracking-grace time; one visible finger cannot guarantee full-hand detection.';tracking.append(partialHelp);
- const prediction=document.createElement('label');prediction.innerHTML='<input id="predictMissingHand" type="checkbox" checked> Predict brief hand tracking gaps (last finger pose, 150 ms motion)';tracking.append(prediction);performanceOptions=installPerformance(tracking);
+ const prediction=document.createElement('label');prediction.innerHTML='<input id="predictMissingHand" type="checkbox"> Predict brief hand tracking gaps (last finger pose, 150 ms motion)';tracking.append(prediction);performanceOptions=installPerformance(tracking);
  if(document.body.dataset.handLab||document.body.dataset.heldGunLab){
-  $('lighterHead').checked=false;$('lighterHead').closest('fieldset').querySelector('p').textContent='Fresh frames are enabled. Face and shoulder reduction is off so the 30 FPS caps apply. Toggle options to compare measured performance.';
+  $('lighterHead').checked=false;$('lighterHead').closest('fieldset').querySelector('p').textContent='Optional tracking aids are off. Face and shoulder caps are 30 FPS. Toggle options to compare measured performance.';
   const rates=document.createElement('fieldset');rates.innerHTML='<legend>Tracking FPS caps</legend><p>Targets: hands 60, face 30, shoulders 30. Live measured rates appear on the viewport. Actual rates depend on camera and processing speed.</p>';tracking.prepend(rates);
   for(const [id,cap]of [['handRate',60],['faceRate',30],['shoulderRate',30]]){const input=$(id);input.max=cap;input.value=cap;input.nextElementSibling.value=cap;input.dispatchEvent(new Event('input'));const label=input.closest('label');label.style.setProperty('display','block','important');rates.append(label);}
   $('uncappedTracking').checked=false;$('uncappedTracking').dispatchEvent(new Event('input'));
  }
 
  for(const id of ['tipContact','contactAttach','contactRelease'])hidden.append($(id).closest('label'));
- defaults.innerHTML='<h2>Final hands + alien head</h2><p>Both hands use the final original-photo proportions, fingertip shells, 2D direction fitting, Sweep placement, crossing and jitter controls. Joint limits and thumb contact run after fitting. The head and eye camera retain the existing editor setup.</p><p>Hand tracking: finger spacing and jitter. Finger constraints: joint limits. Contact and collisions: fingertip contact and two-hand/head interaction. Calibration adjusts distance only.</p>';
- $('sweep-hand-model').innerHTML='<h2>Fixed final hand model</h2><p>The original palm-photo proportions and fingertip shells are applied once to both hands. Distance calibration below does not reshape the fingers.</p>';
+ defaults.innerHTML='<h2>Final hands + alien head</h2><p>Both hands use the final original-photo proportions, fingertip shells, 2D direction fitting, Sweep placement, optional assistance switched off. Only final finger constraints are enabled. The head and eye camera retain the existing editor setup.</p><p>Hand tracking: finger spacing and jitter. Finger constraints: joint limits. Contact and collisions: fingertip contact and two-hand/head interaction. Calibration adjusts distance only.</p>';
+ defaults.insertAdjacentHTML('beforeend','<p>Depth correction and depth scaling are now optional Hand tracking controls. The old pre-fit hinge, base lock and duplicate jitter controls are replaced by the final-stage controls; they do not run separately. Fixed photo proportions, 2D directions and tracked depth remain the core solver.</p>');$('sweep-hand-model').innerHTML='<h2>Fixed final hand model</h2><p>The original palm-photo proportions and fingertip shells are applied once to both hands. Distance calibration below does not reshape the fingers.</p>';
  $('sweep-first-person-camera-tab').textContent='Camera';
  const exploreButton=[...document.querySelectorAll('button')].find(b=>b.textContent.startsWith('Explore in 3D'));
  if(exploreButton){$('sweep-first-person-camera').prepend(exploreButton);exploreButton.style.display='block';const originalExplore=exploreButton.onclick;exploreButton.onclick=()=>{const eye=firstPerson.panel.querySelector('[aria-label="First-person view"]');if(eye.checked){eye.checked=false;eye.dispatchEvent(new Event('input'));}originalExplore();};firstPerson.panel.querySelector('[aria-label="First-person view"]').addEventListener('input',()=>{if(exploreButton.textContent==='Return to camera mirror')originalExplore();});}
  $('sweep-head-and-position').prepend($('bothHands').closest('label'));$('bothHands').closest('label').style.setProperty('display','block','important');
  $('reduceShake').checked=false;$('tipContact').checked=false;
- $('lockBody').checked=true;$('bothHands').checked=true;$('showHead').checked=!document.body.dataset.heldGunLab;
+ $('lockBody').checked=false;$('bothHands').checked=true;$('showHead').checked=!document.body.dataset.heldGunLab;
  if(document.body.dataset.heldGunLab){$('showHead').disabled=true;$('showHead').closest('label').title='The held-gun movement lab hides the head and shoulders.';}
  $('fingerThickness').value=1;$('tipInset').value=0;
- const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands.html?v=gunlab2">Hands and head lab</a> · <a href="held-gun.html?v=gunlab2">Held-gun lab</a> · <a href="./?v=heldlab1">Full editor</a>';$('directSettings').prepend(labLinks);
+ const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands.html?v=constraints2">Hands and head lab</a> · <a href="held-gun.html?v=constraints2">Held-gun lab</a> · <a href="./?v=heldlab1">Full editor</a>';$('directSettings').prepend(labLinks);
  document.querySelector('header b').textContent=document.body.dataset.heldGunLab?'GUN MOVEMENT LAB':document.body.dataset.handLab?'HANDS + HEAD TRACKING LAB':'FINAL HANDS + ALIEN HEAD';document.querySelector('header span').textContent=document.body.dataset.heldGunLab?'Palm-driven gun · saved grip · no head':'Two hands · Sweep positioning · tracked eye camera';notice(document.body.dataset.heldGunLab?'Held-gun lab ready. Edit the saved grip or connect your camera to drive it with your right hand.':'Final hands and alien head ready. Connect your camera or iPhone.');
 }
 function extendShellTips(rig,extra){
@@ -680,7 +680,7 @@ if(!document.body.dataset.mapLab&&!document.body.dataset.handLab){
  }
 }
 if(!document.body.dataset.mapLab){
- const {installTwoHandMagnets}=await import('./two-hand-magnets.mjs?v=predict1');
+ const {installTwoHandMagnets}=await import('./two-hand-magnets.mjs?v=constraints2');
  twoHandMagnets=installTwoHandMagnets({container:$('sweep-contact-and-collisions'),rig,hands:()=>allHands,rendered:renderedHands,aspect:()=>captureAspect,config:finalConfig,isPaused:()=>!!depthExperiment?.recording||!!editorGun?.state.held||!!editorGun?.grip.querySelector('input[type="checkbox"]').checked});
  // Replace the previous single-pair matching controls with multi-tip magnets.
  for(const id of ['nearbyTips','handsTouch','indexContactOnly'])$(id).checked=false;

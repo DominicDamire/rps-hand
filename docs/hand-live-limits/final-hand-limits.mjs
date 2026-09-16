@@ -17,13 +17,41 @@ export function finalHandLimits(){
   function enforce(){
    if(!cfg.jointLimits)return;
    for(let f=1;f<5;f++){
-    capUpper(f,2,cfg.pipCap??110);capUpper(f,3,cfg.dipCap??80);
+
     const c=chains[f],b=frames[f],a=baseAngles(f),limit=cfg.mcpLimits?.[f-1]??{extension:30,flexion:90,splay:25};
-    const crossing=cfg.crossingFingers?.includes(f)&&Math.abs(a.flex)<45;
-    const flex=T.MathUtils.clamp(a.flex,-limit.extension,limit.flexion),dirs=[1,2,3].map(k=>c[k].clone().sub(c[k-1]).normalize()),bend=Math.max(Math.abs(flex),crossing?0:dirs[0].angleTo(dirs[1])/rad,crossing?0:dirs[1].angleTo(dirs[2])/rad),start=cfg.splayStart??45,lock=cfg.splayLock??70,t=T.MathUtils.clamp((bend-start)/Math.max(1,lock-start),0,1),allowed=(crossing?(cfg.crossingSplay??40):limit.splay)*(1-t*t*(3-2*t)),splay=T.MathUtils.clamp(a.splay,-allowed,allowed);
+    const crossing=cfg.crossingFingers?.includes(f)&&Math.abs(a.flex)<(cfg.splayStart??45);
+    const flex=T.MathUtils.clamp(a.flex,-limit.extension,limit.flexion),dirs=[1,2,3].map(k=>c[k].clone().sub(c[k-1]).normalize()),bend=Math.max(Math.abs(flex),dirs[0].angleTo(dirs[1])/rad,dirs[1].angleTo(dirs[2])/rad),start=cfg.splayStart??45,lock=cfg.splayLock??70,t=T.MathUtils.clamp((bend-start)/Math.max(1,lock-start),0,1),allowed=(crossing?(cfg.crossingSplay??40):limit.splay)*(1-t*t*(3-2*t)),splay=T.MathUtils.clamp(a.splay,-allowed,allowed);
     const target=b.forward.clone().multiplyScalar(Math.cos(flex*rad)*Math.cos(splay*rad)).addScaledVector(b.normal,Math.sin(flex*rad)*Math.cos(splay*rad)).addScaledVector(b.across,Math.sin(splay*rad));rotateChildren(c,1,dirs[0],target.normalize());
+    // Final signed hinge projection, after every other positional correction.
+    // Use the palm frame for curl sign; preserve all fixed segment lengths.
+    const base=c[1].clone().sub(c[0]).normalize();
+    const axis=b.across.clone().addScaledVector(base,-b.across.dot(base)).normalize().multiplyScalar(side==='R'?1:-1);
+    for(let k=2;k<4;k++){
+     const prev=c[k-1].clone().sub(c[k-2]).normalize(),dir=c[k].clone().sub(c[k-1]).normalize();
+     if(cfg.upperHinge){
+      const signed=Math.atan2(axis.dot(new T.Vector3().crossVectors(prev,dir)),prev.dot(dir));
+      const angle=T.MathUtils.clamp(signed,cfg.upperNoBack?0:-Math.PI,(k===2?(cfg.pipCap??110):(cfg.dipCap??80))*rad);
+      rotateChildren(c,k,dir,prev.clone().applyAxisAngle(axis,angle).normalize());
+     }else {
+      if(cfg.upperNoBack){const signed=Math.atan2(axis.dot(new T.Vector3().crossVectors(prev,dir)),prev.dot(dir));if(signed<0)rotateChildren(c,k,dir,dir.clone().applyAxisAngle(axis,-signed));}
+      capUpper(f,k,k===2?(cfg.pipCap??110):(cfg.dipCap??80));
+     }
+    }
+
    }
-   capUpper(0,2,cfg.thumbMcpCap??70);capUpper(0,3,cfg.thumbIpCap??80);
+   // Thumb is not a finger hinge: retain opposition and sideways motion.
+   // Only restrict negative flexion in its own rest frame.
+   if(cfg.thumbBackLimit!==undefined){
+    const c=chains[0],rest=rig.rest[side+'Thumb2'].world.clone().sub(rig.rest[side+'Thumb1'].world).normalize().applyQuaternion(palmQ);
+    const across=restAcross.clone().applyQuaternion(palmQ).normalize();
+    for(let k=1;k<4;k++){
+     const prev=k===1?rest:c[k-1].clone().sub(c[k-2]).normalize(),dir=c[k].clone().sub(c[k-1]).normalize();
+     const axis=across.clone().addScaledVector(prev,-across.dot(prev)).normalize().multiplyScalar(side==='R'?1:-1);
+     if(axis.lengthSq()<1e-10)continue;
+     const signed=Math.atan2(axis.dot(new T.Vector3().crossVectors(prev,dir)),prev.dot(dir));
+     if(signed < -cfg.thumbBackLimit*rad)rotateChildren(c,k,dir,dir.clone().applyAxisAngle(axis,-cfg.thumbBackLimit*rad-signed));
+    }
+   }else {capUpper(0,2,cfg.thumbMcpCap??70);capUpper(0,3,cfg.thumbIpCap??80);}
   }
   const before=[1,2,3,4].map(baseAngles);enforce();
   // Thresholds are pixels at 1280 image height, so photo/video use one scale.
