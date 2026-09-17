@@ -2,12 +2,20 @@ import {faceIds} from './face-overlay.mjs?v=20';
 const MP=new URL('../vendor/mediapipe',import.meta.url).href,base=new URL('../vendor/models/',import.meta.url).href;
 const params=new URLSearchParams(self.location.search),task=params.get('task')||'hands',preferred=params.get('delegate')||'GPU',fullBody=params.get('fullBody')==='1';
 let tracker;
+const stage=message=>self.postMessage({type:'loading',task,message});
 const round=n=>Math.round(n*100000)/100000;
 self.onmessage=async({data})=>{try{
  if(data.type==='init'){
+  stage('Loading tracking runtime');
   const api=await import(MP+'/vision_bundle.mjs'),files=await api.FilesetResolver.forVisionTasks(MP+'/wasm',true);
   const spec=task==='hands'?['HandLandmarker','hand_landmarker/hand_landmarker',{numHands:2,minHandDetectionConfidence:params.get('partialHands')==='1'?.4:.6,minHandPresenceConfidence:params.get('partialHands')==='1'?.35:.6,minTrackingConfidence:.45}]:task==='face'?['FaceLandmarker','face_landmarker/face_landmarker',{numFaces:1,outputFacialTransformationMatrixes:true,outputFaceBlendshapes:false}]:['PoseLandmarker','pose_landmarker/pose_landmarker_'+(['lite','full','heavy'].includes(params.get('poseModel'))?params.get('poseModel'):'lite'),{numPoses:1}];
-  let delegate;for(delegate of preferred==='CPU'?['CPU']:['GPU','CPU']){try{tracker=await api[spec[0]].createFromOptions(files,{baseOptions:{modelAssetPath:base+spec[1]+'/float16/1/'+spec[1].split('/')[1]+'.task',delegate},runningMode:'VIDEO',...spec[2]});break;}catch(e){if(delegate==='CPU')throw e;}}
+  stage('Downloading '+task+' model');
+  const response=await fetch(base+spec[1]+'/float16/1/'+spec[1].split('/')[1]+'.task',{signal:AbortSignal.timeout(90000)});
+  if(!response.ok)throw Error('Model download failed: HTTP '+response.status);
+  const total=Number(response.headers.get('content-length')),reader=response.body?.getReader();let model;
+  if(reader){const chunks=[];let received=0,last=0;while(true){const {done,value}=await reader.read();if(done)break;chunks.push(value);received+=value.length;if(performance.now()-last>500){stage('Downloading '+task+' model: '+(received/1048576).toFixed(1)+' MB'+(total?' / '+(total/1048576).toFixed(1)+' MB':''));last=performance.now();}}model=new Uint8Array(received);let offset=0;for(const c of chunks){model.set(c,offset);offset+=c.length;}}
+  else model=new Uint8Array(await response.arrayBuffer());
+  let delegate;for(delegate of preferred==='CPU'?['CPU']:['GPU','CPU']){try{stage('Starting '+delegate+' inference');tracker=await api[spec[0]].createFromOptions(files,{baseOptions:{modelAssetBuffer:model,delegate},runningMode:'VIDEO',...spec[2]});break;}catch(e){if(delegate==='CPU')throw e;stage('GPU unavailable; starting CPU inference');}}
   self.postMessage({type:'ready',task,delegate});
  }else if(data.type==='frame'){
   const source=data.bitmap||data.image,start=performance.now();try{

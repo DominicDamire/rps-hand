@@ -1,5 +1,5 @@
 import {drawFace,drawShoulders,drawUpperBody,encodeAux,decodeAux} from './face-overlay.mjs?v=demo9';
-import {startTracking,defaults} from './tracking-session.mjs?v=network1';
+import {startTracking,defaults} from './tracking-session.mjs?v=ios-start2';
 // Cross-device link: the phone runs hand tracking and sends landmark numbers.
 // This avoids peer-to-peer video, which commonly fails across NATs and guest Wi-Fi.
 import {connectLink,packHands,unpackHands} from './relay-link.mjs?v=network1';
