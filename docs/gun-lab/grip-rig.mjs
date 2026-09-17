@@ -32,7 +32,7 @@ export class GripRig {
   async load() {
     const [, g] = await Promise.all([
       this.rig.ready,
-      new GLTFLoader().loadAsync(new URL("../gun.glb", import.meta.url).href),
+      new GLTFLoader().loadAsync(new URL("../gun.glb?v=user-export1", import.meta.url).href),
     ]);
     this.gun.add(g.scene);
     this.model = g.scene;
