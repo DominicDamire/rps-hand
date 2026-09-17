@@ -4,19 +4,18 @@ export const defaults = {cameraFps:30,handRate:30,faceRate:30,shoulderRate:30,tr
 export function startTracking(video, onResult, onStats, getOptions=()=>defaults,captureOptions={}) {
  let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0,cameraCallbacks=0,lastPresented=null,handStreak=0,lastAccepted=-Infinity,lastClockProgress=performance.now(),capturePolls=0;
  const frameMeter=measureVideoFrames(video);
- const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},age:{},errors:{},loading:{}};
+ const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},age:{},errors:{}};
  const slots=['hands','face','pose'].map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
  function startWorker(s){
   const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;s.fullBody=!!opts.fullBody;s.poseModel=opts.poseModel;s.partialHands=!!opts.partialHands;
-  const url=new URL('./tracker.mjs?v=handoff1',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('partialHands',s.partialHands?'1':'0');url.searchParams.set('delegate',s.delegate);url.searchParams.set('fullBody',s.fullBody?'1':'0');url.searchParams.set('poseModel',s.poseModel||'lite');
-  stats.loading[s.task]='initializing';const w=s.worker=new Worker(url,{type:'module'});
-  s.timer=setTimeout(()=>{if(!s.ready){delete stats.loading[s.task];stats.errors[s.task]='Tracker initialization timed out. Press Restart tracking; if repeated, check access to the model download service.';w.terminate();s.busy=false;}},60000);
-  w.onerror=e=>{clearTimeout(s.timer);delete stats.loading[s.task];stats.errors[s.task]=e.message;s.busy=false;s.ready=false;};
+  const url=new URL('./tracker.mjs?v=partial1',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('partialHands',s.partialHands?'1':'0');url.searchParams.set('delegate',s.delegate);url.searchParams.set('fullBody',s.fullBody?'1':'0');url.searchParams.set('poseModel',s.poseModel||'lite');
+  const w=s.worker=new Worker(url,{type:'module'});
+  s.timer=setTimeout(()=>{if(!s.ready){stats.errors[s.task]='Tracker initialization timed out';w.terminate();s.busy=false;}},60000);
+  w.onerror=e=>{clearTimeout(s.timer);stats.errors[s.task]=e.message;s.busy=false;s.ready=false;};
   w.onmessage=({data})=>{if(stopped||s.worker!==w)return;
-   if(data.type==='loading'){stats.loading[s.task]=data.message;return;}
-   if(data.type==='ready'){delete stats.loading[s.task];delete stats.errors[s.task];clearTimeout(s.timer);s.ready=true;stats.delegate[s.task]=data.delegate;return;}
+   if(data.type==='ready'){clearTimeout(s.timer);s.ready=true;stats.delegate[s.task]=data.delegate;return;}
    s.busy=false;
-   if(data.type==='error'){delete stats.loading[s.task];clearTimeout(s.timer);stats.errors[s.task]=data.message;return;}
+   if(data.type==='error'){stats.errors[s.task]=data.message;return;}
    if(data.type==='result'){delete stats.errors[s.task];s.count++;stats.ms[s.task]=data.inferenceMs??data.ms;stats.age[s.task]=performance.now()-data.time;onResult(data,s.canvas);
     // Reuse no old frames: start the newest one after a slow hand result,
     // without waiting an additional camera interval or queuing any work.

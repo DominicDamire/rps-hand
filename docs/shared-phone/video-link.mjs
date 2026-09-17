@@ -1,4 +1,4 @@
-import {openCamera} from './camera-capture.mjs?v=camera-restore1';
+import {openCamera} from './camera-capture.mjs?v=verify60';
 const config={iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'turn:openrelay.metered.ca:80',username:'openrelayproject',credential:'openrelayproject'},{urls:'turn:openrelay.metered.ca:443?transport=tcp',username:'openrelayproject',credential:'openrelayproject'}]};
 const KEY='rps-hand-phone-pair-v1',CHANNEL='rps-hand-phone-owner-v1';
 export function receivePhone(onStream,onStatus,onEnd){
@@ -6,7 +6,7 @@ export function receivePhone(onStream,onStatus,onEnd){
  let id;try{id=localStorage.getItem(KEY);if(!/^handlab-[a-f0-9-]{36}$/.test(id||'')){id='handlab-'+crypto.randomUUID();localStorage.setItem(KEY,id);}}catch{id='handlab-'+crypto.randomUUID();}
  let peer,call,closed=false,retry,attempts=0;const owner=crypto.randomUUID(),channel=new BroadcastChannel(CHANNEL);
  const box=document.createElement('dialog');box.className='phonePair';box.innerHTML='<h2>Connect iPhone / phone camera</h2><p>Already paired? Keep the phone camera page open. It reconnects here automatically. This page takes over from the other versions.</p><details><summary>First connection: scan QR</summary><div class="qr"></div><a target="_blank" rel="noopener">Open phone camera page</a></details><p class="pairStatus">Reconnecting phone…</p><button>Cancel connection</button>';
- const url=new URL('../hand-pnp-photo/video-camera.html',import.meta.url);url.searchParams.set('pair',id);url.searchParams.set('quality',document.getElementById('phoneQuality')?.value||'720');url.searchParams.set('v','camera-restore1');box.querySelector('a').href=url.href;
+ const url=new URL('../hand-pnp-photo/video-camera.html',import.meta.url);url.searchParams.set('pair',id);url.searchParams.set('quality',document.getElementById('phoneQuality')?.value||'720');url.searchParams.set('v','shared-phone1');box.querySelector('a').href=url.href;
  const status=t=>{if(!closed){box.querySelector('.pairStatus').textContent=t;onStatus(t);}};
  const close=()=>{if(closed)return;closed=true;clearTimeout(retry);call?.close();peer?.destroy();channel.close();removeEventListener('pagehide',close);box.close();box.remove();};
  const finish=t=>{close();onEnd(t);};channel.onmessage=e=>{if(e.data?.type==='claim'&&e.data.owner!==owner)finish('Phone camera moved to another version.');};channel.postMessage({type:'claim',owner});addEventListener('pagehide',close);
