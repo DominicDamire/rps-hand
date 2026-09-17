@@ -28,8 +28,10 @@ import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
 import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=latency2';
 import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.18-final';
-import {CombinedHead} from './head-model.mjs?v=raw19';
-import {directDriver} from '../hand-live-limits/hand-driver.mjs?v=constraints3';
+import {CombinedHead} from './head-model.mjs?v=aliencolor1';
+import {directDriver as modernDriver} from '../hand-live-limits/hand-driver.mjs?v=constraints3';
+import {directDriver as archive102Driver} from './archive-102-driver.mjs?v=1';
+const isArchive102=!!document.body.dataset.archive102;const directDriver=isArchive102?archive102Driver:modernDriver;
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.18-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
@@ -261,8 +263,9 @@ $('importPaste').onclick=()=>{try{importText($('jsonText').value);}catch(e){noti
 $('png').onclick=()=>{renderDemo();const c=document.createElement('canvas');c.width=1400;c.height=850;const ctx=c.getContext('2d');ctx.fillStyle='#10151d';ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle='#edf6ff';ctx.font='bold 25px system-ui';ctx.fillText('Hand Pose Lab — '+($('poseName').value||'Live comparison'),28,42);ctx.font='16px system-ui';ctx.fillText(editing?'Frozen input and corrected model':'Latest tracked frame and model',28,74);const fit=(img,x,y,w,h)=>{const a=img.width/img.height;let iw=w,ih=w/a;if(ih>h){ih=h;iw=h*a;}if(img===$('scene')&&$('viewMode').value!=='first'){ctx.save();ctx.translate(x+(w+iw)/2,y+(h-ih)/2);ctx.scale(-1,1);ctx.drawImage(img,0,0,iw,ih);ctx.restore();}else ctx.drawImage(img,x+(w-iw)/2,y+(h-ih)/2,iw,ih);};fit($('preview'),24,100,510,710);fit($('scene'),560,100,810,710);c.toBlob(blob=>{if(blob)download(blob,'hand-pose-comparison.png');});};
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set(1-(e.clientX-rect.left)/rect.width*2,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children.filter(m=>m.visible))[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
 await rig.ready;const {snapshotModel,installSweepSettings}=await import('./settings.mjs?v=constraints3');const restoreModel=snapshotModel(rig);const photoReport=fitPhotoHand(rig,{referencePoints:finalReference.points});extendShellTips(rig,finalReference.shellTipExtraFractions);
+for(const mesh of rig.parts)if(/^[LR](Hand|Thumb|Index|Middle|Ring|Pinky)/.test(mesh.name)){mesh.material=Array.isArray(mesh.material)?mesh.material.map(m=>m.clone()):mesh.material.clone();for(const m of Array.isArray(mesh.material)?mesh.material:[mesh.material]){m.color.set('#65764a');m.roughness=.7;m.metalness=0;}}
 tips=buildTips(rig);for(const S of ['R','L'])for(const [f,name]of ['Thumb','Index','Middle','Ring','Pinky'].entries())tips[S+name].copy(rig.photoReference.targets[S][4+4*f]).sub(rig.photoReference.targets[S][3+4*f]);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>{resetHandScale(rig,args[1]);args[0]=placePalmBeforeFingers(args[0],args[1],args[2]);let result=drivers[args[1]](...args);if(mapLab)result=mapLab.drive(args[1],args[2],result,args[3]);applyHandScale(rig,args[1],result,depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);mapLab?.scale(args[1],depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);applyDisplayOffset(args[1],result);return keepHandBeforeWall(args[1],result);};let directResult=null;
-function directOptions(lm){return {noiseDegrees:0,smoothingMs:0,staticInput:!!sampleSource,postCaps:finalConfig.postCaps,postCoupling:finalConfig.postCoupling,lockUpper:false,baseSplay:false,thickness:1,tipInset:0,fitAngles:true,lm,width:$('preview').width,height:$('preview').height,experiment:{...finalConfig,imageFocal:1/(2*Math.tan(Math.PI/6)*cameraFrame(captureAspect,camera.aspect).height)}};}
+function directOptions(lm){return {noiseDegrees:0,smoothingMs:0,staticInput:!!sampleSource,postCaps:isArchive102?false:finalConfig.postCaps,postCoupling:isArchive102?0:finalConfig.postCoupling,lockUpper:false,baseSplay:false,thickness:1,tipInset:0,fitAngles:true,lm,width:$('preview').width,height:$('preview').height,experiment:{...finalConfig,imageFocal:1/(2*Math.tan(Math.PI/6)*cameraFrame(captureAspect,camera.aspect).height)}};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
@@ -654,7 +657,7 @@ if(!document.body.dataset.mapLab){
  $('lockBody').checked=false;$('bothHands').checked=true;$('showHead').checked=!document.body.dataset.heldGunLab;
  if(document.body.dataset.heldGunLab){$('showHead').disabled=true;$('showHead').closest('label').title='The held-gun movement lab hides the head and shoulders.';}
  $('fingerThickness').value=1;$('tipInset').value=0;
- const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands.html?v=constraints3">Hands and head lab</a> · <a href="held-gun.html?v=constraints3">Held-gun lab</a> · <a href="./?v=heldlab1">Full editor</a>';$('directSettings').prepend(labLinks);
+ const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands.html?v=alien102">Current hands</a> · <a href="hands-102.html?v=alien102">Live #102</a> · <a href="held-gun.html?v=constraints3">Held-gun lab</a> · <a href="./?v=heldlab1">Full editor</a>';$('directSettings').prepend(labLinks);
  document.querySelector('header b').textContent=document.body.dataset.heldGunLab?'GUN MOVEMENT LAB':document.body.dataset.handLab?'HANDS + HEAD TRACKING LAB':'FINAL HANDS + ALIEN HEAD';document.querySelector('header span').textContent=document.body.dataset.heldGunLab?'Palm-driven gun · saved grip · no head':'Two hands · Sweep positioning · tracked eye camera';notice(document.body.dataset.heldGunLab?'Held-gun lab ready. Edit the saved grip or connect your camera to drive it with your right hand.':'Final hands and alien head ready. Connect your camera or iPhone.');
 }
 function extendShellTips(rig,extra){
@@ -689,4 +692,14 @@ if(!document.body.dataset.mapLab){
 if(location.hostname==='127.0.0.1'&&new URLSearchParams(location.search).has('verify')){
  const {verifyEditor}=await import('../.lab-qa/editor-verify.mjs?v=magnet5');
  await verifyEditor({editorGun,rig,tips,combined,detect,getHands:()=>allHands,setFrame:frame=>{sampleSource=frame;},directDriver,finalConfig});
+}
+
+if(isArchive102){
+ for(const key of ['jointLimits','upperHinge','upperNoBack','fingerSpacing','adjacentFingers','fingerJitter','palmJitter','contactEnabled','postCaps','postRoll','straightDepth','depthScaleEnabled'])finalConfig[key]=false;
+ for(const i of document.querySelectorAll('#directSettings input[id^=final-], #sweep-finger-constraints input')){if(i.type==='checkbox')i.checked=false;i.disabled=true;}
+ const contacts=$('sweep-contact-and-collisions');for(const i of contacts.querySelectorAll('input')){if(i.type==='checkbox')i.checked=false;i.disabled=true;}
+ twoHandMagnets.cfg.enabled=false;
+ document.querySelector('header b').textContent='LIVE #102 — ORIGINAL 2D DRIVER';
+ $('sweep-defaults').innerHTML='<h2>Archived #102, live camera</h2><p>Original 2D-direction driver, original-photo hand proportions, Sweep placement. No finger constraints, depth reduction, bend coupling, contact, spacing or smoothing assistance. Green materials are cosmetic. Uses the current camera/identity/head infrastructure, not an archived capture engine.</p><p>Finger and contact controls are disabled here to preserve #102. Use the current lab to experiment with assistance.</p>';
+ notice('Live #102 ready. Connect your camera or iPhone.');
 }
