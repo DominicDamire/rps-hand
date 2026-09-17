@@ -41,5 +41,5 @@ const clockStop=startTracking(video,()=>{},()=>{},()=>defaults);
 await new Promise(r=>setImmediate(r));
 let completed=0;const base=performance.now();
 for(let i=0;i<90;i++){const now=base+i*17;fallback(now);await new Promise(r=>setImmediate(r));for(const w of workers){if(w.frames.length){completed+=w.frames.length;w.frames=[];w.onmessage({data:{type:'result',task:w.task,inferenceMs:5}});}}}
-assert.ok(completed>10,'A stalled media clock must not freeze tracking even when video callbacks keep arriving');clockStop();
-console.log('PASS constant Safari media clock: live image capture continues without relying on timestamps');
+assert.ok(completed<=3,'A frozen video with no new-frame evidence must never loop inference');clockStop();
+console.log('PASS frozen input: at most the first frame is processed, never repeated');
