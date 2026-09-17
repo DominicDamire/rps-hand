@@ -26,7 +26,7 @@ import {palmSize} from './palm-distance.mjs?v=alien13';
 import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
-import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=latency2';
+import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=eyegaze1';
 import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.18-final';
 import {CombinedHead} from './head-model.mjs?v=aliencolor1';
 import {directDriver as modernDriver} from '../hand-live-limits/hand-driver.mjs?v=constraints3';
@@ -180,10 +180,10 @@ function drawPreview(source,landmarks){if(stream&&$('video').readyState>=2)sourc
  for(let i=0;i<21;i++){ctx.beginPath();ctx.arc(...point(i),i%4===0?4:2.5,0,Math.PI*2);ctx.fill();}
 }
 }
-function ensureWorker(){if(workerReady)return workerReady;worker=new Worker(new URL('./tracker.mjs?v=alien18.4&task=hands&delegate=GPU',import.meta.url),{type:'module'});
+function ensureWorker(){if(workerReady)return workerReady;worker=new Worker(new URL('./tracker.mjs?v=eyegaze1&task=hands&delegate=GPU',import.meta.url),{type:'module'});
  workerReady=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out')),45000);worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();return;}if(data.type==='error'){if(request){request.reject(Error(data.message));request=null;}else{clearTimeout(timer);reject(Error(data.message));}return;}if(request&&data.type==='result'){request.resolve(data);request=null;}};worker.onerror=e=>{clearTimeout(timer);if(request){request.reject(Error(e.message));request=null;}reject(Error(e.message));};worker.postMessage({type:'init'});});return workerReady;}
 async function detectAuxFrame(frame,time,task){
- const bitmap=await createImageBitmap(frame),w=new Worker(new URL('./tracker.mjs?v=alien18.4&task='+task+'&delegate=GPU',import.meta.url),{type:'module'});
+ const bitmap=await createImageBitmap(frame),w=new Worker(new URL('./tracker.mjs?v=eyegaze1&task='+task+'&delegate=GPU',import.meta.url),{type:'module'});
  let sent=false;
  try{return await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Face image tracker timed out')),60000);const finish=(f,v)=>{clearTimeout(timer);f(v);};w.onerror=e=>finish(reject,Error(e.message));w.onmessage=({data})=>{if(data.type==='ready'){sent=true;w.postMessage({type:'frame',bitmap,time},[bitmap]);}else if(data.type==='result')finish(resolve,data);else if(data.type==='error')finish(reject,Error(data.message));};w.postMessage({type:'init'});});}finally{if(!sent)bitmap.close();w.terminate();}
 }
@@ -674,7 +674,7 @@ if(!document.body.dataset.mapLab){
  $('lockBody').checked=false;$('bothHands').checked=true;$('showHead').checked=!document.body.dataset.heldGunLab;
  if(document.body.dataset.heldGunLab){$('showHead').disabled=true;$('showHead').closest('label').title='The held-gun movement lab hides the head and shoulders.';}
  $('fingerThickness').value=1;$('tipInset').value=0;
- const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands.html?v=phoneabort1">Current hands + head</a> · <a href="hands-102.html?v=phoneabort1">Archived #102 test</a> · <a href="held-gun.html?v=constraints3">Held-gun lab</a> · <a href="./?v=heldlab1">Full editor</a>';$('directSettings').prepend(labLinks);
+ const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands.html?v=eyegaze1">Current hands + head</a> · <a href="hands-102.html?v=eyegaze1">Archived #102 test</a> · <a href="held-gun.html?v=eyegaze1">Held-gun lab</a> · <a href="./?v=eyegaze1">Full editor</a>';$('directSettings').prepend(labLinks);
  document.querySelector('header b').textContent=document.body.dataset.heldGunLab?'GUN MOVEMENT LAB':document.body.dataset.handLab?'HANDS + HEAD TRACKING LAB':'FINAL HANDS + ALIEN HEAD';document.querySelector('header span').textContent=document.body.dataset.heldGunLab?'Palm-driven gun · saved grip · no head':'Two hands · Sweep positioning · tracked eye camera';notice(document.body.dataset.heldGunLab?'Held-gun lab ready. Edit the saved grip or connect your camera to drive it with your right hand.':'Final hands and alien head ready. Connect your camera or iPhone.');
 }
 function extendShellTips(rig,extra){

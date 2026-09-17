@@ -8,7 +8,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
  const slots=['hands','face','pose'].map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
  function startWorker(s){
   const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;s.fullBody=!!opts.fullBody;s.poseModel=opts.poseModel;s.partialHands=!!opts.partialHands;
-  const url=new URL('./tracker.mjs?v=partial1',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('partialHands',s.partialHands?'1':'0');url.searchParams.set('delegate',s.delegate);url.searchParams.set('fullBody',s.fullBody?'1':'0');url.searchParams.set('poseModel',s.poseModel||'lite');
+  const url=new URL('./tracker.mjs?v=eyegaze1',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('partialHands',s.partialHands?'1':'0');url.searchParams.set('delegate',s.delegate);url.searchParams.set('fullBody',s.fullBody?'1':'0');url.searchParams.set('poseModel',s.poseModel||'lite');
   const w=s.worker=new Worker(url,{type:'module'});
   s.timer=setTimeout(()=>{if(!s.ready){stats.errors[s.task]='Tracker initialization timed out';w.terminate();s.busy=false;}},60000);
   w.onerror=e=>{clearTimeout(s.timer);stats.errors[s.task]=e.message;s.busy=false;s.ready=false;};
