@@ -3,12 +3,13 @@ import {limitBaseSplay} from '../hand-pnp-photo/base-splay-limit.mjs?v=photo1';
 import * as T from 'three';
 import {DirectionStabilizer,fingerPlane,constrainFinger} from '../hand-pnp-photo/stability.mjs?v=photo1';
 import {ContactLatch,fitContact} from '../hand-pnp-photo/contact-direct.mjs?v=photo1';
+import {cameraPosition,projectCamera} from './projection.mjs';
 const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';
  const flipGuard=new PalmFlipGuard();let acceptedPose=null;const fingerGuards=new Map();
  const stabilizer=new DirectionStabilizer(),contactLatch=new ContactLatch();
- return function(points,side,palmQ,dt,{fingerFlipDegrees=0,palmFlipDegrees=0,staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,postCaps=false,postCoupling=0,thumbOpposition=0,upperCoupling=0,lockUpper=true,baseSplay=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,rays,width,height,fitImage=false,fitAngles=false,copyLines=false}){
+ return function(points,side,palmQ,dt,{fingerFlipDegrees=0,palmFlipDegrees=0,staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,postCaps=false,postCoupling=0,thumbOpposition=0,upperCoupling=0,lockUpper=true,baseSplay=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,rays,width,height,fitImage=false,fitAngles=false,copyLines=false,viewAspect=width/height}){
   if(lastSide!==side){contact=null;lastSide=side;lastShape='';flipGuard.reset();acceptedPose=null;fingerGuards.clear();}
   const palmFlipRejected=flipGuard.update(palmQ.toArray(),lm,performance.now(),palmFlipDegrees,staticInput);
   if(palmFlipRejected&&acceptedPose){const wrist=points[0];points=acceptedPose.offsets.map(p=>p.clone().add(wrist));palmQ.copy(acceptedPose.q);}
@@ -17,7 +18,15 @@ export function directDriver(rig,tips){
   // Keep rigid attachments; copy only segment directions from the earlier direct tracker.
   for(let f=0;f<5;f++){
    const name=side+FINGERS[f],base=rig.rest[name+'1'].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(palmQ).add(p[0]);
-   if(copyLines){chains.push([0,1,2,3].map(k=>p[1+4*f+k].clone()));lengths.push([1,2,3].map(k=>(k<3?rig.rest[name+(k+1)].world.clone().sub(rig.rest[name+k].world):tips[name]).length()));continue;}
+   if(copyLines){
+    const first=1+4*f,observed=projectCamera(p[first].toArray(),viewAspect),anchored=projectCamera(base.toArray(),viewAspect);
+    const chain=[base.clone()];
+    for(let k=1;k<4;k++){
+     const uv=projectCamera(p[first+k].toArray(),viewAspect);
+     chain.push(new T.Vector3().fromArray(cameraPosition({x:uv.x+anchored.x-observed.x,y:uv.y+anchored.y-observed.y},-base.z,viewAspect)));
+    }
+    chains.push(chain);lengths.push([1,2,3].map(k=>(k<3?rig.rest[name+(k+1)].world.clone().sub(rig.rest[name+k].world):tips[name]).length()));continue;
+   }
    // The thumb metacarpal can oppose around the palm base. Its fixed reach
    // follows the observed CMC ray rather than freezing the open-hand spread.
    if(fitImage&&f===0)base.copy(pointOnRay(p[0],rays?.[1]??points[1].clone().normalize(),rig.rest[name+'1'].world.distanceTo(rig.rest[side+'Hand'].world),points[1]));
