@@ -1,5 +1,6 @@
 import * as T from 'three';
 import {reach,ContactLatch} from '../hand-pnp-photo/contact-direct.mjs?v=photo1';
+import {hasVisibleCurl} from './curl-evidence.mjs';
 const rad=Math.PI/180,names=['Thumb','Index','Middle','Ring','Pinky'];
 export function finalHandLimits(){
  const latch=new ContactLatch();let lastSide=null;
@@ -30,7 +31,11 @@ export function finalHandLimits(){
      const prev=c[k-1].clone().sub(c[k-2]).normalize(),dir=c[k].clone().sub(c[k-1]).normalize();
      if(cfg.upperHinge){
       const signed=Math.atan2(axis.dot(new T.Vector3().crossVectors(prev,dir)),prev.dot(dir));
-      const angle=T.MathUtils.clamp(signed,cfg.upperNoBack?0:-Math.PI,(k===2?(cfg.pipCap??110):(cfg.dipCap??80))*rad);
+      // #94 kept the unsigned curl. Restore that bend only when the tracked
+      // projected finger is visibly folded; preserve the no-back limit elsewhere.
+      const observedCurl=cfg.legacy94Assist&&hasVisibleCurl(lm,1+4*f,width/height);
+      const forwardCurl=observedCurl&&signed<0?-signed:signed;
+      const angle=T.MathUtils.clamp(forwardCurl,cfg.upperNoBack?0:-Math.PI,(k===2?(cfg.pipCap??110):(cfg.dipCap??80))*rad);
       rotateChildren(c,k,dir,prev.clone().applyAxisAngle(axis,angle).normalize());
      }else {
       if(cfg.upperNoBack){const signed=Math.atan2(axis.dot(new T.Vector3().crossVectors(prev,dir)),prev.dot(dir));if(signed<0)rotateChildren(c,k,dir,dir.clone().applyAxisAngle(axis,-signed));}

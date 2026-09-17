@@ -21,6 +21,8 @@ export function directDriver(rig,tips){
   if(palmFlipRejected&&acceptedPose){const wrist=points[0];points=acceptedPose.offsets.map(p=>p.clone().add(wrist));palmQ.copy(acceptedPose.q);}
   else acceptedPose={q:palmQ.clone(),offsets:points.map(p=>p.clone().sub(points[0]))};
   const p=points.map(v=>v.clone()),chains=[],lengths=[],inversePalm=palmQ.clone().invert();
+  // #94 changed only finger-relative depth, leaving Sweep's wrist/palm alone.
+  if(experiment.legacy94Assist){const gain=experiment.legacy94Depth??.5;for(let f=0;f<5;f++){const b=1+4*f,z=p[b].z;for(let k=1;k<4;k++)p[b+k].z=z+(p[b+k].z-z)*gain;}}
   // Keep rigid attachments; copy only segment directions from the earlier direct tracker.
   for(let f=0;f<5;f++){
    const name=side+FINGERS[f],base=rig.rest[name+'1'].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(palmQ).add(p[0]);
@@ -66,7 +68,7 @@ export function directDriver(rig,tips){
   if(fitAngles)for(let f=0;f<5;f++)for(let k=1;k<4;k++){
    const i=1+4*f+k, a=lm[i-1],b=lm[i],aspect=width/height,focal=experiment.imageFocal??1/(2*Math.tan(Math.PI/6));
    const delta=new T.Vector2((b.x-a.x)*aspect/focal,-(b.y-a.y)/focal);
-   chains[f][k]=angleEndpoint(chains[f][k-1],delta,lengths[f][k-1],(points[i].z-points[i-1].z)*(f>0&&k===1&&experiment.proximalDepth!==undefined&&(!experiment.proximalGate||visibleBend(lm,1+4*f,width/height)>25)?experiment.proximalDepth/(experiment.depthHint??.5):1));
+   chains[f][k]=angleEndpoint(chains[f][k-1],delta,lengths[f][k-1],(p[i].z-p[i-1].z)*(f>0&&k===1&&experiment.proximalDepth!==undefined&&(!experiment.proximalGate||visibleBend(lm,1+4*f,width/height)>25)?experiment.proximalDepth/(experiment.depthHint??.5):1));
   }
 
   const fitPoints=[p[0].toArray(),...chains.flatMap(c=>c.map(v=>v.toArray()))];
