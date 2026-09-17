@@ -30,8 +30,9 @@ import {startTracking as startSweepTracking,defaults as trackingDefaults} from '
 import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.18-final';
 import {CombinedHead} from './head-model.mjs?v=aliencolor1';
 import {directDriver as modernDriver} from '../hand-live-limits/hand-driver.mjs?v=constraints3';
-import {directDriver as archive102Driver} from './archive-102-driver.mjs?v=1';
-const isArchive102=!!document.body.dataset.archive102;const directDriver=isArchive102?archive102Driver:modernDriver;
+import {directDriver as archive102Driver} from './archive-102-driver.mjs?v=linecopy1';
+import {copyImageLines,lineCopyError} from './line-copy.mjs?v=1';
+const isArchive102=!!document.body.dataset.archive102,isLineCopy=!!document.body.dataset.lineCopy;const directDriver=isArchive102||isLineCopy?archive102Driver:modernDriver;
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.18-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
@@ -117,6 +118,7 @@ function shiftRenderedHand(S,delta){
 const interactionShifts={L:new THREE.Vector3(),R:new THREE.Vector3()};
 function applyHandInteractions(now){
  interactionShifts.L.set(0,0,0);interactionShifts.R.set(0,0,0);
+ if(isLineCopy)return;
  const options=getCombinedOptions(),status=$('handContactStatus');
  if(!options.nearbyTips&&!options.handsTouch&&!options.outerCollision&&!options.headCollision){contactAssist.reset();const message=twoHandMagnets?'Outer collisions off.':'Contact assistance and outer collisions off.';if(status.textContent!==message)status.textContent=message;return;}
  if(depthExperiment?.recording){contactAssist.reset();status.textContent='Recording: contact and collision corrections paused.';return;}
@@ -281,8 +283,8 @@ $('png').onclick=()=>{renderDemo();const c=document.createElement('canvas');c.wi
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();let pointer=null;renderer.domElement.addEventListener('pointerdown',e=>pointer=[e.clientX,e.clientY]);renderer.domElement.addEventListener('pointerup',e=>{if(!pointer||Math.hypot(e.clientX-pointer[0],e.clientY-pointer[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();mouse.set(1-(e.clientX-rect.left)/rect.width*2,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(mouse,camera);const hit=ray.intersectObjects(markerGroup.children.filter(m=>m.visible))[0];if(hit){selected=hit.object.userData.joint;renderControls();}});
 await rig.ready;const {snapshotModel,installSweepSettings}=await import('./settings.mjs?v=constraints3');const restoreModel=snapshotModel(rig);const photoReport=fitPhotoHand(rig,{referencePoints:finalReference.points});extendShellTips(rig,finalReference.shellTipExtraFractions);
 for(const mesh of rig.parts)if(/^[LR](Hand|Thumb|Index|Middle|Ring|Pinky)/.test(mesh.name)){mesh.material=Array.isArray(mesh.material)?mesh.material.map(m=>m.clone()):mesh.material.clone();for(const m of Array.isArray(mesh.material)?mesh.material:[mesh.material]){m.color.set('#65764a');m.roughness=.7;m.metalness=0;}}
-tips=buildTips(rig);for(const S of ['R','L'])for(const [f,name]of ['Thumb','Index','Middle','Ring','Pinky'].entries())tips[S+name].copy(rig.photoReference.targets[S][4+4*f]).sub(rig.photoReference.targets[S][3+4*f]);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>{resetHandScale(rig,args[1]);args[0]=placePalmBeforeFingers(args[0],args[1],args[2]);let result=drivers[args[1]](...args);if(mapLab)result=mapLab.drive(args[1],args[2],result,args[3]);applyHandScale(rig,args[1],result,depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);mapLab?.scale(args[1],depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);applyDisplayOffset(args[1],result);return keepHandBeforeWall(args[1],result);};let directResult=null;
-function directOptions(lm){return {noiseDegrees:0,smoothingMs:0,staticInput:!!sampleSource,postCaps:isArchive102?false:finalConfig.postCaps,postCoupling:isArchive102?0:finalConfig.postCoupling,lockUpper:false,baseSplay:false,thickness:1,tipInset:0,fitAngles:true,lm,width:$('preview').width,height:$('preview').height,experiment:{...finalConfig,imageFocal:1/(2*Math.tan(Math.PI/6)*cameraFrame(captureAspect,camera.aspect).height)}};}
+tips=buildTips(rig);for(const S of ['R','L'])for(const [f,name]of ['Thumb','Index','Middle','Ring','Pinky'].entries())tips[S+name].copy(rig.photoReference.targets[S][4+4*f]).sub(rig.photoReference.targets[S][3+4*f]);const drivers={R:directDriver(rig,tips),L:directDriver(rig,tips)};const driveDirect=(...args)=>{resetHandScale(rig,args[1]);args[0]=placePalmBeforeFingers(args[0],args[1],args[2]);if(isLineCopy){const depth=Math.max(.04,-args[0][0].z),reference=args[4].lm;args[0]=copyImageLines(reference,depth,captureAspect,camera.aspect).map(p=>new THREE.Vector3().fromArray(p));}let result=drivers[args[1]](...args);if(mapLab)result=mapLab.drive(args[1],args[2],result,args[3]);if(!isLineCopy)applyHandScale(rig,args[1],result,depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);mapLab?.scale(args[1],depthExperiment?.recording?1:depthExperiment?.fit?.handScale??1);applyDisplayOffset(args[1],result);return keepHandBeforeWall(args[1],result);};let directResult=null;
+function directOptions(lm){return {noiseDegrees:0,smoothingMs:0,staticInput:!!sampleSource,postCaps:isArchive102||isLineCopy?false:finalConfig.postCaps,postCoupling:isArchive102||isLineCopy?0:finalConfig.postCoupling,lockUpper:false,baseSplay:false,thickness:1,tipInset:0,fitAngles:!isLineCopy,copyLines:isLineCopy,lm,width:$('preview').width,height:$('preview').height,experiment:{...finalConfig,imageFocal:1/(2*Math.tan(Math.PI/6)*cameraFrame(captureAspect,camera.aspect).height)}};}
 for(const f of FINGERS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.002,12,8),new THREE.MeshBasicMaterial({color:0xffd56a,depthTest:false}));dot.userData.joint=f+'3';dot.renderOrder=101;markerGroup.add(dot);tipDots[f]=dot;}
 
 for(const n of JOINTS){const dot=new THREE.Mesh(new THREE.SphereGeometry(.003,10,8),new THREE.MeshBasicMaterial({color:0x8ee3bf,depthTest:false}));dot.userData.joint=n;dot.renderOrder=100;markerGroup.add(dot);jointDots[n]=dot;}
@@ -295,7 +297,7 @@ function updateLiveHud(now){
  liveHud.textContent=(s?(new URLSearchParams(location.search).has('fixture')?'TEST INPUT':'LIVE TRACKING'):'TRACKING OFF / NO RECENT RESULTS')+'\nCamera '+number(s?.camera)+' FPS · Hands '+number(s?.hands)+' FPS · Scene '+number(measuredScene)+' FPS\nFace '+number(s?.face)+' · Shoulders '+number(s?.pose)+' FPS\nHand inference '+number(s?.ms?.hands)+' ms · Frame-to-result '+number(s?.age?.hands)+' ms';
 }
 let sceneFrames=0,sceneWindow=performance.now(),measuredScene=0,lastPaint=0,lastControls=0;function loop(now){requestAnimationFrame(loop);if(+getCombinedOptions().handRate===0){latest=null;allHands=[];}
- if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(stream&&$('video').readyState>=2)drawPreview($('video'),latest?.landmarks);const calculationStart=performance.now();if(getCombinedOptions().rawOnly){measuredScene=0;sceneFrames=0;sceneWindow=now;$('scene').style.visibility='hidden';$('calculationTiming').textContent='RAW: model calculations and 3D rendering OFF. Read tracking FPS on camera preview.';return;}$('scene').style.visibility='';if(sampleSource&&combined){combined.seen=combined.poseSeen=now;}combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.wallLimited?'Hand at head back-wall limit':directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':'Fixed hand proportions · tracked segment directions';}renderOtherHand(renderDt);applyPalmPlacement();depthExperiment?.observe(allHands,renderedHands,captureAspect);applyHandInteractions(now);twoHandMagnets?.update(now);editorGun?.tick(now);directResult=renderedHands[side]?.result??directResult;refreshOtherLines();if(wallTest)wallTest.textContent='Test wrist coordinates: '+Object.entries(renderedHands).map(([s,h])=>s+' '+h.result.points[0].toArray().map(v=>(v*1000).toFixed(2)).join(', ')).join(' / ');if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&!!latest;
+ if(now-lastPaint<1000/(getCombinedOptions().sceneRate||60)-1)return;const renderDt=lastPaint?(now-lastPaint)/1000:1/60;lastPaint=now;if(stream&&$('video').readyState>=2)drawPreview($('video'),latest?.landmarks);const calculationStart=performance.now();if(getCombinedOptions().rawOnly){measuredScene=0;sceneFrames=0;sceneWindow=now;$('scene').style.visibility='hidden';$('calculationTiming').textContent='RAW: model calculations and 3D rendering OFF. Read tracking FPS on camera preview.';return;}$('scene').style.visibility='';if(sampleSource&&combined){combined.seen=combined.poseSeen=now;}combined?.update(renderDt,captureAspect,camera,+$('phoneDistance').value/100,+$('depthGain').value);sceneFrames++;if(now-sceneWindow>=1000){measuredScene=Math.round(sceneFrames*1000/(now-sceneWindow));sceneFrames=0;sceneWindow=now;}if(latest){const pts=cameraPoints(latest.world,latest.landmarks);palmQ.setFromRotationMatrix(frameBasis(pts[0],pts[5],pts[9],pts[17]).multiply(restBasis(side).invert()));directResult=driveDirect(pts,side,palmQ,renderDt,directOptions(latest.landmarks));renderedHands[side]={result:directResult,time:now};$('directStatus').textContent=directResult.wallLimited?'Hand at head back-wall limit':directResult.surfaceGap!=null?'Selected hand/head surface gap: '+(directResult.surfaceGap*1000).toFixed(1)+' mm':directResult.contact?'Estimated contact · remaining tip gap '+(directResult.contactGap*1000).toFixed(1)+' mm':(isLineCopy?'Exact 2D camera lines · Sweep wrist depth':'Fixed hand proportions · tracked segment directions');}renderOtherHand(renderDt);applyPalmPlacement();depthExperiment?.observe(allHands,renderedHands,captureAspect);applyHandInteractions(now);twoHandMagnets?.update(now);editorGun?.tick(now);directResult=renderedHands[side]?.result??directResult;refreshOtherLines();if(wallTest)wallTest.textContent='Test wrist coordinates: '+Object.entries(renderedHands).map(([s,h])=>s+' '+h.result.points[0].toArray().map(v=>(v*1000).toFixed(2)).join(', ')).join(' / ');if(controls.enabled)controls.update();rig.root.updateMatrixWorld(true);markerGroup.visible=gizmo.visible=$('dots').checked&&!!latest;
  wristDot.position.setFromMatrixPosition(rig.joints[side+'Hand'].matrixWorld);for(const n of JOINTS){const dot=jointDots[n];dot.visible=true;dot.position.setFromMatrixPosition(rig.joints[side+n].matrixWorld);dot.material.color.setHex(n===selected?0xffc56e:0x8ee3bf);dot.scale.setScalar(n===selected?1.7:1);}
  for(const [i,f] of FINGERS.entries())tipDots[f].position.copy(directResult?directResult.points[4+i*4]:tipWorld(rig,tips,side,f));
  updateAlignmentReadout();modelLines.visible=$('dots').checked&&!!latest;let lineIndex=0;const linePoints=lineGeometry.attributes.position;
@@ -560,11 +562,12 @@ function placePalmBeforeFingers(points,s,q){
  const measurement=points.map(p=>p.clone()),wrist=points[0],base=-wrist.z;if(!(base>0))return points;
  for(const [id,name] of [[5,'Index1'],[9,'Middle1'],[13,'Ring1'],[17,'Pinky1']])measurement[id].copy(rig.rest[s+name].world).sub(rig.rest[s+'Hand'].world).applyQuaternion(q).add(wrist);
  const focal=1/(2*Math.tan(Math.PI/6)*cameraFrame(captureAspect,camera.aspect).height),o=palmObservation(h.landmarks,measurement,captureAspect,focal);
- const saved=depthExperiment?.recording?null:depthExperiment?.fit;
+ const saved=isLineCopy||depthExperiment?.recording?null:depthExperiment?.fit;
  const depth=palmDepth.update(s,h.confidence>=.5?o:null,saved,base,h.time),delta=wrist.clone().multiplyScalar((depth-base)/base);
  return points.map(p=>p.clone().add(delta));
 }
 function applyPalmPlacement(){
+ if(isLineCopy)return;
  const saved=depthExperiment?.recording?null:depthExperiment?.fit;if(!saved)return;
  for(const s of ['L','R']){
   const result=renderedHands[s]?.result,h=allHands.find(h=>h.label===(s==='L'?'Left':'Right'));if(!result||!h)continue;
@@ -619,6 +622,17 @@ contactPanel.style.setProperty('display','block','important');
 for(const label of contactPanel.querySelectorAll('label'))label.style.setProperty('display','block','important');
 
 function refreshOtherLines(){
+ if(isLineCopy&&latest){
+  const result=renderedHands[side]?.result,metrics=$('lineCopyMetrics');
+  if(result&&metrics){
+   const fit=lineCopyError(result.points.map(p=>p.toArray()),latest.landmarks,captureAspect,camera.aspect,$('scene').clientWidth,$('scene').clientHeight);
+   let maxStretch=0;for(const [f,name]of ['Thumb','Index','Middle','Ring','Pinky'].entries())for(let k=1;k<=3;k++){
+    const i=1+4*f+k-1,rest=k<3?rig.rest[side+name+(k+1)].world.distanceTo(rig.rest[side+name+k].world):tips[side+name].length();
+    maxStretch=Math.max(maxStretch,Math.abs(result.points[i+1].distanceTo(result.points[i])/rest-1));
+   }
+   metrics.textContent='Camera line fit: '+fit.rms.toFixed(2)+' px RMS · '+fit.max.toFixed(2)+' px maximum. Largest segment length change from photo: '+Math.round(maxStretch*100)+'%.';
+  }
+ }
  if(!secondLines.visible)return;
  const result=renderedHands[side==='R'?'L':'R']?.result;if(!result)return;
  let n=0;for(let f=0;f<5;f++){const ids=[0,1+f*4,2+f*4,3+f*4,4+f*4];for(let k=0;k<4;k++)for(const i of [ids[k],ids[k+1]]){const v=result.points[i];secondLineGeometry.attributes.position.setXYZ(n++,v.x,v.y,v.z);}}secondLineGeometry.attributes.position.needsUpdate=true;
@@ -631,7 +645,7 @@ for(const [title,ids] of [
 ]){const section=document.createElement('section'),heading=document.createElement('h2');heading.textContent=title;section.append(heading);for(const id of ids){const input=$(id),label=input?.closest('label');if(!label)continue;label.style.setProperty('display','block','important');section.append(label);if(input.type==='range'&&input.nextElementSibling)input.nextElementSibling.value=input.value;}section.style.setProperty('display','block','important');$('directSettings').append(section);}
 
 function applyDisplayOffset(s,result){
- if(depthExperiment?.recording)return;
+ if(isLineCopy||depthExperiment?.recording)return;
  const o=getCombinedOptions(),distance=(o.handDistance||0)/100,height=(o.handHeight||0)/100;
  if(!distance&&!height)return;
  const wrist=result.points[0],depth=Math.max(.04,-wrist.z),next=Math.max(.04,depth+distance),delta=wrist.clone().multiplyScalar(next/depth-1);delta.y+=height;
@@ -674,7 +688,7 @@ if(!document.body.dataset.mapLab){
  $('lockBody').checked=false;$('bothHands').checked=true;$('showHead').checked=!document.body.dataset.heldGunLab;
  if(document.body.dataset.heldGunLab){$('showHead').disabled=true;$('showHead').closest('label').title='The held-gun movement lab hides the head and shoulders.';}
  $('fingerThickness').value=1;$('tipInset').value=0;
- const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands.html?v=eyegaze1">Current hands + head</a> · <a href="hands-102.html?v=eyegaze1">Archived #102 test</a> · <a href="held-gun.html?v=eyegaze1">Held-gun lab</a> · <a href="./?v=eyegaze1">Full editor</a>';$('directSettings').prepend(labLinks);
+ const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands-lines.html?v=linecopy1">Exact 2D lines</a> · <a href="hands.html?v=eyegaze1">Current hands + head</a> · <a href="hands-102.html?v=eyegaze1">Archived #102 test</a> · <a href="held-gun.html?v=eyegaze1">Held-gun lab</a> · <a href="./?v=eyegaze1">Full editor</a>';$('directSettings').prepend(labLinks);
  document.querySelector('header b').textContent=document.body.dataset.heldGunLab?'GUN MOVEMENT LAB':document.body.dataset.handLab?'HANDS + HEAD TRACKING LAB':'FINAL HANDS + ALIEN HEAD';document.querySelector('header span').textContent=document.body.dataset.heldGunLab?'Palm-driven gun · saved grip · no head':'Two hands · Sweep positioning · tracked eye camera';notice(document.body.dataset.heldGunLab?'Held-gun lab ready. Edit the saved grip or connect your camera to drive it with your right hand.':'Final hands and alien head ready. Connect your camera or iPhone.');
 }
 function extendShellTips(rig,extra){
@@ -711,12 +725,12 @@ if(location.hostname==='127.0.0.1'&&new URLSearchParams(location.search).has('ve
  await verifyEditor({editorGun,rig,tips,combined,detect,getHands:()=>allHands,setFrame:frame=>{sampleSource=frame;},directDriver,finalConfig});
 }
 
-if(isArchive102){
+if(isArchive102||isLineCopy){
  for(const key of ['jointLimits','upperHinge','upperNoBack','fingerSpacing','adjacentFingers','fingerJitter','palmJitter','contactEnabled','postCaps','postRoll','straightDepth','depthScaleEnabled'])finalConfig[key]=false;
  for(const i of document.querySelectorAll('#directSettings input[id^=final-], #sweep-finger-constraints input')){if(i.type==='checkbox')i.checked=false;i.disabled=true;}
  const contacts=$('sweep-contact-and-collisions');for(const i of contacts.querySelectorAll('input')){if(i.type==='checkbox')i.checked=false;i.disabled=true;}
  twoHandMagnets.cfg.enabled=false;
- document.querySelector('header b').textContent='LIVE #102 — ORIGINAL 2D DRIVER';
- $('sweep-defaults').innerHTML='<h2>Archived #102, live camera</h2><p>Original 2D-direction driver, original-photo hand proportions, Sweep placement. No finger constraints, depth reduction, bend coupling, contact, spacing or smoothing assistance. Green materials are cosmetic. Uses the current camera/identity/head infrastructure, not an archived capture engine.</p><p>Finger and contact controls are disabled here to preserve #102. Use the current lab to experiment with assistance.</p>';
- notice('Live #102 ready. Connect your camera or iPhone.');
+ document.querySelector('header b').textContent=isLineCopy?'LIVE EXACT 2D LINES':'LIVE #102 — ORIGINAL 2D DRIVER';
+ $('sweep-defaults').innerHTML=isLineCopy?'<h2>Exact camera lines · Sweep depth</h2><p>The original palm photo supplies the model shape. Sweep places the wrist in depth. Every visible joint and connecting line is placed on the camera image at that wrist depth. No finger limits, contact, smoothing or extra bend correction runs.</p><p>This is an intentionally flat 2D experiment. Segment shells change length when needed to match the image exactly; the reference lengths remain available for comparison. Inspect the first-person view separately for depth limitations.</p><p id="lineCopyMetrics" role="status">Waiting for a tracked hand.</p>':'<h2>Archived #102, live camera</h2><p>Original 2D-direction driver, original-photo hand proportions, Sweep placement. No finger constraints, depth reduction, bend coupling, contact, spacing or smoothing assistance. Green materials are cosmetic. Uses the current camera/identity/head infrastructure, not an archived capture engine.</p><p>Finger and contact controls are disabled here to preserve #102. Use the current lab to experiment with assistance.</p>';
+ notice(isLineCopy?'Exact 2D line lab ready. Connect your camera or iPhone.':'Live #102 ready. Connect your camera or iPhone.');
 }

@@ -8,7 +8,7 @@ export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';
  const flipGuard=new PalmFlipGuard();let acceptedPose=null;const fingerGuards=new Map();
  const stabilizer=new DirectionStabilizer(),contactLatch=new ContactLatch();
- return function(points,side,palmQ,dt,{fingerFlipDegrees=0,palmFlipDegrees=0,staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,postCaps=false,postCoupling=0,thumbOpposition=0,upperCoupling=0,lockUpper=true,baseSplay=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,rays,width,height,fitImage=false,fitAngles=false}){
+ return function(points,side,palmQ,dt,{fingerFlipDegrees=0,palmFlipDegrees=0,staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,postCaps=false,postCoupling=0,thumbOpposition=0,upperCoupling=0,lockUpper=true,baseSplay=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,rays,width,height,fitImage=false,fitAngles=false,copyLines=false}){
   if(lastSide!==side){contact=null;lastSide=side;lastShape='';flipGuard.reset();acceptedPose=null;fingerGuards.clear();}
   const palmFlipRejected=flipGuard.update(palmQ.toArray(),lm,performance.now(),palmFlipDegrees,staticInput);
   if(palmFlipRejected&&acceptedPose){const wrist=points[0];points=acceptedPose.offsets.map(p=>p.clone().add(wrist));palmQ.copy(acceptedPose.q);}
@@ -17,6 +17,7 @@ export function directDriver(rig,tips){
   // Keep rigid attachments; copy only segment directions from the earlier direct tracker.
   for(let f=0;f<5;f++){
    const name=side+FINGERS[f],base=rig.rest[name+'1'].world.clone().sub(rig.rest[side+'Hand'].world).applyQuaternion(palmQ).add(p[0]);
+   if(copyLines){chains.push([0,1,2,3].map(k=>p[1+4*f+k].clone()));lengths.push([1,2,3].map(k=>(k<3?rig.rest[name+(k+1)].world.clone().sub(rig.rest[name+k].world):tips[name]).length()));continue;}
    // The thumb metacarpal can oppose around the palm base. Its fixed reach
    // follows the observed CMC ray rather than freezing the open-hand spread.
    if(fitImage&&f===0)base.copy(pointOnRay(p[0],rays?.[1]??points[1].clone().normalize(),rig.rest[name+'1'].world.distanceTo(rig.rest[side+'Hand'].world),points[1]));
@@ -71,7 +72,7 @@ export function directDriver(rig,tips){
   }
   for(let f=0;f<5;f++)for(let k=0;k<4;k++)p[1+4*f+k].copy(chains[f][k]);
   rig.root.position.set(0,0,0);rig.root.updateMatrixWorld(true);const hand=rig.joints[side+'Hand'];hand.position.copy(hand.parent.worldToLocal(p[0].clone()));rig.setWorldQuat(side+'Hand',palmQ);rig.refresh(hand);
-  const shape=side+':'+thickness+':'+tipInset,shapeChanged=shape!==lastShape||rig.directShape?.[side]!==shape;
+  const shape=side+':'+thickness+':'+tipInset+':'+copyLines,shapeChanged=copyLines||shape!==lastShape||rig.directShape?.[side]!==shape;
   for(let f=0;f<5;f++)for(let k=1;k<=3;k++){
    const name=side+FINGERS[f]+k,j=rig.joints[name],i=1+4*f+k-1,rest=k<3?rig.rest[side+FINGERS[f]+(k+1)].world.clone().sub(rig.rest[name].world):tips[side+FINGERS[f]].clone(),axis=rest.clone().normalize();
    const target=p[i+1].clone().sub(p[i]).normalize();j.position.copy(j.parent.worldToLocal(p[i].clone()));const facing=axis.clone().applyQuaternion(palmQ),q=new T.Quaternion().setFromUnitVectors(facing,target).multiply(palmQ);
@@ -84,7 +85,7 @@ export function directDriver(rig,tips){
    }
    rig.setWorldQuat(name,q);rig.refresh(j);
    // Geometry transforms are changed ONLY by the user's thickness/inset controls.
-   if(shapeChanged){const rot=new T.Matrix4().makeRotationFromQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0,0,1),axis));const shapeMatrix=rot.clone().multiply(new T.Matrix4().makeScale(thickness,thickness,1+(k===3?tipInset/1000/rest.length():0))).multiply(rot.clone().invert());for(const m of rig.parts)if(m.parent===j){m.matrixAutoUpdate=false;m.matrix.copy(shapeMatrix).multiply(matrices.get(m));m.matrixWorldNeedsUpdate=true;}}
+   if(shapeChanged){const rot=new T.Matrix4().makeRotationFromQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0,0,1),axis));const lengthScale=copyLines?p[i+1].distanceTo(p[i])/rest.length():1+(k===3?tipInset/1000/rest.length():0);const shapeMatrix=rot.clone().multiply(new T.Matrix4().makeScale(thickness,thickness,lengthScale)).multiply(rot.clone().invert());for(const m of rig.parts)if(m.parent===j){m.matrixAutoUpdate=false;m.matrix.copy(shapeMatrix).multiply(matrices.get(m));m.matrixWorldNeedsUpdate=true;}}
   }
   lastShape=shape;rig.directShape??={};rig.directShape[side]=shape;rig.root.updateMatrixWorld(true);return {points:p,contact,contactGap,palmFlipRejected};
  };
