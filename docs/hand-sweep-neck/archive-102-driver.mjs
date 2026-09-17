@@ -4,13 +4,17 @@ import * as T from 'three';
 import {DirectionStabilizer,fingerPlane,constrainFinger} from '../hand-pnp-photo/stability.mjs?v=photo1';
 import {ContactLatch,fitContact} from '../hand-pnp-photo/contact-direct.mjs?v=photo1';
 import {cameraPosition,projectCamera} from './projection.mjs';
+import {liftFinger,closeFingertips,updateOKContact} from './line-depth.mjs?v=1';
 const FINGERS=['Thumb','Index','Middle','Ring','Pinky'];
 export function directDriver(rig,tips){
  const matrices=new Map(rig.parts.map(m=>{m.userData.directRestMatrix??=m.matrix.clone();return [m,m.userData.directRestMatrix];}));let contact=null,lastSide=null,lastShape='';
  const flipGuard=new PalmFlipGuard();let acceptedPose=null;const fingerGuards=new Map();
  const stabilizer=new DirectionStabilizer(),contactLatch=new ContactLatch();
- return function(points,side,palmQ,dt,{fingerFlipDegrees=0,palmFlipDegrees=0,staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,postCaps=false,postCoupling=0,thumbOpposition=0,upperCoupling=0,lockUpper=true,baseSplay=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,rays,width,height,fitImage=false,fitAngles=false,copyLines=false,viewAspect=width/height}){
-  if(lastSide!==side){contact=null;lastSide=side;lastShape='';flipGuard.reset();acceptedPose=null;fingerGuards.clear();}
+ let depthObservation=null,depthHistory=null,nextDepth=null,lineContactActive=false;
+ return function(points,side,palmQ,dt,{fingerFlipDegrees=0,palmFlipDegrees=0,staticInput=false,confirmDegrees=0,noiseDegrees=1,smoothingMs=0,movementThresholdMm=0,postCaps=false,postCoupling=0,thumbOpposition=0,upperCoupling=0,lockUpper=true,baseSplay=true,contactPixels=0,contactReleasePixels=12,thickness=1,tipInset=0,lm,rays,width,height,fitImage=false,fitAngles=false,copyLines=false,viewAspect=width/height,lineDepth=false,depthHints=null,lineContact=false,lineEnter=12,lineRelease=20}){
+  if(lastSide!==side){contact=null;lastSide=side;lastShape='';flipGuard.reset();acceptedPose=null;fingerGuards.clear();depthHistory=nextDepth=null;depthObservation=null;lineContactActive=false;}
+  if(lm!==depthObservation){depthHistory=nextDepth;depthObservation=lm;}
+  if(!lineDepth)depthHistory=nextDepth=null;
   const palmFlipRejected=flipGuard.update(palmQ.toArray(),lm,performance.now(),palmFlipDegrees,staticInput);
   if(palmFlipRejected&&acceptedPose){const wrist=points[0];points=acceptedPose.offsets.map(p=>p.clone().add(wrist));palmQ.copy(acceptedPose.q);}
   else acceptedPose={q:palmQ.clone(),offsets:points.map(p=>p.clone().sub(points[0]))};
@@ -25,7 +29,12 @@ export function directDriver(rig,tips){
      const uv=projectCamera(p[first+k].toArray(),viewAspect);
      chain.push(new T.Vector3().fromArray(cameraPosition({x:uv.x+anchored.x-observed.x,y:uv.y+anchored.y-observed.y},-base.z,viewAspect)));
     }
-    chains.push(chain);lengths.push([1,2,3].map(k=>(k<3?rig.rest[name+(k+1)].world.clone().sub(rig.rest[name+k].world):tips[name]).length()));continue;
+    const lens=[1,2,3].map(k=>(k<3?rig.rest[name+(k+1)].world.clone().sub(rig.rest[name+k].world):tips[name]).length());
+    if(lineDepth&&depthHints){
+     chains.push(liftFinger({root:base.toArray(),observed:p.slice(first,first+4).map(v=>v.toArray()),lengths:lens,hints:depthHints.slice(first,first+4).map(v=>v.toArray()),previous:staticInput?null:depthHistory?.[f],aspect:viewAspect}).map(v=>new T.Vector3().fromArray(v)));
+     lengths.push(lens);
+    }else{chains.push(chain);lengths.push([1,2,3].map(k=>chain[k].distanceTo(chain[k-1])));}
+    continue;
    }
    // The thumb metacarpal can oppose around the palm base. Its fixed reach
    // follows the observed CMC ray rather than freezing the open-hand spread.
@@ -78,6 +87,14 @@ export function directDriver(rig,tips){
    let dip=Math.min(80*Math.PI/180,d[1].angleTo(d[2]));dip=dip*(1-postCoupling)+pip*.65*postCoupling;
    const next=d[0].clone().applyAxisAngle(axis,pip),last=next.clone().applyAxisAngle(axis,dip);
    c[2].copy(c[1]).addScaledVector(next,lengths[f][1]);c[3].copy(c[2]).addScaledVector(last,lengths[f][2]);
+  }
+  if(copyLines){
+   nextDepth=lineDepth?chains.map(c=>c.map(v=>v.toArray())):null;
+   lineContactActive=updateOKContact(lineContactActive,lm,width,height,lineContact,lineEnter,lineRelease);
+   if(lineContactActive){
+    const solve=closeFingertips(chains[0].map(v=>v.toArray()),chains[1].map(v=>v.toArray()),lengths[0],lengths[1]);
+    chains[0]=solve.a.map(v=>new T.Vector3().fromArray(v));chains[1]=solve.b.map(v=>new T.Vector3().fromArray(v));contact=8;contactGap=solve.gap;
+   }
   }
   for(let f=0;f<5;f++)for(let k=0;k<4;k++)p[1+4*f+k].copy(chains[f][k]);
   rig.root.position.set(0,0,0);rig.root.updateMatrixWorld(true);const hand=rig.joints[side+'Hand'];hand.position.copy(hand.parent.worldToLocal(p[0].clone()));rig.setWorldQuat(side+'Hand',palmQ);rig.refresh(hand);
