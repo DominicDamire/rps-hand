@@ -16,3 +16,6 @@ test('keeps 30 FPS fallback when no 60 FPS mode succeeds',async()=>{
  const result=await openCamera({frameRate:{ideal:60}},{getUserMedia:async()=>{calls++;return {getVideoTracks:()=>[t],getTracks:()=>[t]};}});
  assert.equal(calls,3);assert.equal(stops,2);assert.equal(result.getVideoTracks()[0].getSettings().frameRate,30);
 });
+
+test('missing camera API explains secure-context requirement',async()=>{await assert.rejects(openCamera({},{}),/HTTPS/);});
+test('stale device ID falls back to default camera',async()=>{const calls=[];const stream={};assert.equal(await openCamera({deviceId:{exact:'gone'},frameRate:{ideal:30}},{getUserMedia:async r=>{calls.push(r);if(calls.length===1)throw Object.assign(new Error('gone'),{name:'NotFoundError'});return stream;}}),stream);assert.equal(calls[1].video.deviceId,undefined);});

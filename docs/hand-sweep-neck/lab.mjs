@@ -1,6 +1,7 @@
+import {cameraError} from '../shared-phone/camera-errors.mjs';
 import {installPerformance} from './performance-options.mjs?v=constraints3';
 let performanceOptions=null;
-import {openCamera} from '../shared-phone/camera-capture.mjs?v=verify60';
+import {openCamera} from '../shared-phone/camera-capture.mjs?v=network1';
 import {stableHands} from './hand-identity.mjs?v=perfcompare1';
 import {finalConfig,installFinalSettings} from '../hand-range/settings.mjs?v=constraints3';
 const finalReference=await(await fetch(new URL('../hand-live-limits/hand-reference.json',import.meta.url))).json();
@@ -26,7 +27,7 @@ import {palmSize} from './palm-distance.mjs?v=alien13';
 import {createRoom} from './room.mjs?v=demo9';
 import {supportedContact} from './surface-contact.mjs?v=demo9';
 import {fitHeadGrip} from './head-grip.mjs?v=demo9';
-import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=latency2';
+import {startTracking as startSweepTracking,defaults as trackingDefaults} from './tracking-session.mjs?v=network1';
 import {installCombinedUI} from './combined-ui.mjs?v=touch2.4.18-final';
 import {CombinedHead} from './head-model.mjs?v=aliencolor1';
 import {directDriver as modernDriver} from '../hand-live-limits/hand-driver.mjs?v=constraints3';
@@ -36,7 +37,7 @@ import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.18-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
 import {buildTips,tipWorld,fitPinch,fitThumb} from './contact.mjs?v=8-final';
 import {FIST,AngleLimiter,alignment,poseAlignment,ClosureTracker,thumbFistWeight,thumbContact,closure,referencePose,Settler,depthEstimate,positionAt,straightJoints,pinchDistance} from './motion.mjs?v=8-final';
-import {receivePhone} from './video-link.mjs?verify60';
+import {receivePhone} from './video-link.mjs?network1';
 import * as THREE from 'three';
 import {OrbitControls} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/controls/OrbitControls.js';
 import {DollRig} from '../doll/DollRig.js?v=hand-lab-1';
@@ -180,10 +181,10 @@ function drawPreview(source,landmarks){if(stream&&$('video').readyState>=2)sourc
  for(let i=0;i<21;i++){ctx.beginPath();ctx.arc(...point(i),i%4===0?4:2.5,0,Math.PI*2);ctx.fill();}
 }
 }
-function ensureWorker(){if(workerReady)return workerReady;worker=new Worker(new URL('./tracker.mjs?v=alien18.4&task=hands&delegate=GPU',import.meta.url),{type:'module'});
+function ensureWorker(){if(workerReady)return workerReady;worker=new Worker(new URL('./tracker.mjs?v=network1&task=hands&delegate=GPU',import.meta.url),{type:'module'});
  workerReady=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Tracker loading timed out')),45000);worker.onmessage=({data})=>{if(data.type==='ready'){clearTimeout(timer);resolve();return;}if(data.type==='error'){if(request){request.reject(Error(data.message));request=null;}else{clearTimeout(timer);reject(Error(data.message));}return;}if(request&&data.type==='result'){request.resolve(data);request=null;}};worker.onerror=e=>{clearTimeout(timer);if(request){request.reject(Error(e.message));request=null;}reject(Error(e.message));};worker.postMessage({type:'init'});});return workerReady;}
 async function detectAuxFrame(frame,time,task){
- const bitmap=await createImageBitmap(frame),w=new Worker(new URL('./tracker.mjs?v=alien18.4&task='+task+'&delegate=GPU',import.meta.url),{type:'module'});
+ const bitmap=await createImageBitmap(frame),w=new Worker(new URL('./tracker.mjs?v=network1&task='+task+'&delegate=GPU',import.meta.url),{type:'module'});
  let sent=false;
  try{return await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Face image tracker timed out')),60000);const finish=(f,v)=>{clearTimeout(timer);f(v);};w.onerror=e=>finish(reject,Error(e.message));w.onmessage=({data})=>{if(data.type==='ready'){sent=true;w.postMessage({type:'frame',bitmap,time},[bitmap]);}else if(data.type==='result')finish(resolve,data);else if(data.type==='error')finish(reject,Error(data.message));};w.postMessage({type:'init'});});}finally{if(!sent)bitmap.close();w.terminate();}
 }
@@ -208,7 +209,7 @@ function acceptTracking(data,frame,token=epoch){if($('reduceShake')?.checked)dat
  $('edit').disabled=true;$('resume').disabled=true;
 }
 function stopCamera(){twoHandMagnets?.reset();editorGun?.release();palmDepth.reset();depthExperiment?.cancel();contactAssist.reset();for(const s of ['L','R']){delete relaxedStates[s];}lastWallZ=-.6;for(const key of Object.keys(depthStates))delete depthStates[key];liveSession?.();liveSession=null;combined?.reset();trackingStats=null;if($('liveFps'))$('liveFps').textContent='CAM — FPS\nHAND — · FACE — · BODY —';allHands=[];recentHands.clear();closureState.reset();if(!editing){thumbReference=0;contactAngles=null;}epoch++;straight={};pinching=false;pinchFinger=null;contactHold=null;for(const f of Object.values(thumbFilters))f.reset();lastTracking=0;smoothPalmQ=previousPalmQ=heldPalmQ=null;palmQuiet=0;for(const f of Object.values(filters))f.reset();positionFilter.reset();curlFilter.reset();posePreview=false;closePhone?.();closePhone=null;phoneActive=false;stream?.getTracks().forEach(t=>t.stop());stream=null;$('video').srcObject=null;if(!editing){latest=null;updateMode();}$('captureState').textContent=editing?'Frozen frame · camera disconnected':'Camera disconnected';}
-async function startCamera(){try{stopCamera();editing=false;sampleSource=null;latest=null;notice('Opening camera…');const id=$('cameraSelect').value;stream=await openCamera({...(id?{deviceId:{exact:id}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:+getCombinedOptions().cameraFps}});$('video').srcObject=stream;await $('video').play();lastVideo=-1;await listCameras();liveSession=startTracking($('video'),(data,frame)=>{if(data.task==='hands')acceptTracking(data,frame);else{combined.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('Combined DEMO: hands, face and shoulders share this camera. GPU preferred; actual rates below.');updateMode();}catch(e){stopCamera();notice('Camera could not start: '+e.message);}}
+async function startCamera(){stopCamera();const token=epoch;try{editing=false;sampleSource=null;latest=null;notice('Opening camera…');const id=$('cameraSelect').value;const opened=await openCamera({...(id?{deviceId:{exact:id}}:{}),width:{ideal:640},height:{ideal:480},frameRate:{ideal:+getCombinedOptions().cameraFps}});if(token!==epoch){opened.getTracks().forEach(t=>t.stop());return;}stream=opened;$('video').srcObject=stream;await $('video').play();if(token!==epoch)return;lastVideo=-1;await listCameras().catch(()=>{});if(token!==epoch)return;liveSession=startTracking($('video'),(data,frame)=>{if(token!==epoch)return;if(data.task==='hands')acceptTracking(data,frame,token);else{combined.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('Camera connected. Normal camera view shows incoming video; tracking loads separately.');updateMode();}catch(e){if(token===epoch){stopCamera();notice('Camera could not start: '+cameraError(e));}}}
 async function listCameras(){const current=$('cameraSelect').value,devices=await navigator.mediaDevices.enumerateDevices();$('cameraSelect').replaceChildren(new Option('Default camera',''));for(const d of devices.filter(d=>d.kind==='videoinput'))$('cameraSelect').add(new Option(d.label||'Camera '+($('cameraSelect').options.length),d.deviceId));$('cameraSelect').value=current;}
 $('phone').onclick=()=>{stopCamera();editing=false;sampleSource=null;latest=null;updateMode();const token=epoch;try{closePhone=receivePhone(async received=>{liveSession?.();liveSession=null;if(token!==epoch){received.getTracks().forEach(t=>t.stop());return;}try{stream=received;phoneActive=true;$('video').srcObject=received;$('video').muted=true;await $('video').play();if(token!==epoch)return;liveSession=startTracking($('video'),(data,frame)=>{if(data.task==='hands')acceptTracking(data,frame,token);else{combined.receive(data);drawPreview(frame,latest?.landmarks);}},showTrackingStats,getCombinedOptions);notice('PHONE VIDEO → PC TRACKING → PC RENDERING. Phone does not calculate landmarks.');updateMode();}catch(e){stopCamera();notice('Received video could not start: '+e.message);}},notice,message=>{stopCamera();notice(message);});}catch(e){notice(e.message);}};
 $('start').onclick=startCamera;$('stop').onclick=stopCamera;
@@ -702,4 +703,16 @@ if(isArchive102){
  document.querySelector('header b').textContent='LIVE #102 — ORIGINAL 2D DRIVER';
  $('sweep-defaults').innerHTML='<h2>Archived #102, live camera</h2><p>Original 2D-direction driver, original-photo hand proportions, Sweep placement. No finger constraints, depth reduction, bend coupling, contact, spacing or smoothing assistance. Green materials are cosmetic. Uses the current camera/identity/head infrastructure, not an archived capture engine.</p><p>Finger and contact controls are disabled here to preserve #102. Use the current lab to experiment with assistance.</p>';
  notice('Live #102 ready. Connect your camera or iPhone.');
+}
+
+// Raw video is independent of inference: camera visibility survives tracker load failures.
+{
+ const panel=document.createElement('section');panel.id='cameraConnectionTools';panel.style.cssText='display:block!important';
+ panel.innerHTML='<label><input id="rawCameraVisible" type="checkbox" checked> Normal camera view</label><p><a href="../shared-phone/camera-test.html" target="_blank">Open camera-only test (no models or tracking)</a></p><button id="relayPhone">Phone via relay · mobile data</button><p>Use relay if phone video cannot connect across networks. Tracking runs on the phone; camera images stay there. Tracking coordinates pass through public relay servers. Network availability varies.</p>';
+ $('phone').after(panel);const video=$('video');video.hidden=false;video.removeAttribute('hidden');video.setAttribute('playsinline','');video.muted=true;panel.prepend(video);video.style.cssText='display:block!important;width:100%;max-height:280px;object-fit:contain;background:#000;transform:scaleX(-1)';
+ $('rawCameraVisible').onchange=()=>video.style.setProperty('display',$('rawCameraVisible').checked?'block':'none','important');
+ $('relayPhone').onclick=async()=>{stopCamera();editing=false;sampleSource=null;latest=null;const token=epoch;notice('Loading mobile-data relay…');try{
+  const {receivePhone:receiveRelay}=await import('./phone-relay.mjs?v=network1');if(token!==epoch)return;
+  phoneActive=true;closePhone=receiveRelay((data,size)=>{if(token!==epoch)return;phoneFrame.width=size.w||640;phoneFrame.height=size.h||480;acceptTracking(data,phoneFrame,token);},notice,message=>{stopCamera();notice(message);},(data,size)=>{if(token!==epoch)return;combined.receive(data);},getCombinedOptions,showTrackingStats);updateMode();
+ }catch(e){stopCamera();notice('Relay could not start: '+e.message);}};
 }

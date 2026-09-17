@@ -1,5 +1,5 @@
 import {faceIds} from './face-overlay.mjs?v=20';
-const MP='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1',base='https://storage.googleapis.com/mediapipe-models/';
+const MP=new URL('../vendor/mediapipe',import.meta.url).href,base=new URL('../vendor/models/',import.meta.url).href;
 const params=new URLSearchParams(self.location.search),task=params.get('task')||'hands',preferred=params.get('delegate')||'GPU',fullBody=params.get('fullBody')==='1';
 let tracker;
 const round=n=>Math.round(n*100000)/100000;
