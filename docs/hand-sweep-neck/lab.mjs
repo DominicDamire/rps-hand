@@ -33,7 +33,7 @@ import {directDriver as modernDriver} from '../hand-live-limits/hand-driver.mjs?
 import {directDriver as archive102Driver} from './archive-102-driver.mjs?v=linecopy3';
 import {copyImageLines,lineCopyError} from './line-copy.mjs?v=2';
 import {installLineDepthControls} from './line-depth-ui.mjs?v=1';
-const isArchive102=!!document.body.dataset.archive102,isLineCopy=!!document.body.dataset.lineCopy;const directDriver=isArchive102||isLineCopy?archive102Driver:modernDriver;
+const isArchive102=!!document.body.dataset.archive102,isLineCopy=!!document.body.dataset.lineCopy,isPureLines=!!document.body.dataset.pureLines;const directDriver=isArchive102||isLineCopy?archive102Driver:modernDriver;
 if(!isArchive102&&!isLineCopy)finalConfig.legacy94Assist=true;
 import {reduceFalseDepthBends} from './depth-lines.mjs?v=touch2.4.18-final';
 import {cameraFrame,cameraUV,cameraPosition,fitPalmDepth,liftCameraLandmarks} from './projection.mjs?v=8-final';
@@ -700,7 +700,7 @@ if(!document.body.dataset.mapLab){
  $('lockBody').checked=false;$('bothHands').checked=true;$('showHead').checked=!document.body.dataset.heldGunLab;
  if(document.body.dataset.heldGunLab){$('showHead').disabled=true;$('showHead').closest('label').title='The held-gun movement lab hides the head and shoulders.';}
  $('fingerThickness').value=1;$('tipInset').value=0;
- const labLinks=document.createElement('p');labLinks.innerHTML='<a href="hands-lines.html?v=linecopy3">2D lines + depth lab</a> · <a href="hands-94.html?v=legacy94b">Current hands + head</a> · <a href="hands-102.html?v=eyegaze1">Archived #102 test</a> · <a href="held-gun.html?v=legacy94b">Held-gun lab</a> · <a href="./?v=legacy94b">Full editor</a>';$('directSettings').prepend(labLinks);
+ const labLinks=document.createElement('p');labLinks.innerHTML='<a href="compare-live.html?v=1">Live 2D vs current comparison</a> · <a href="hands-pure-lines.html?v=compare1">Pure attached 2D lines</a> · <a href="hands-lines.html?v=linecopy3">2D lines + depth lab</a> · <a href="hands-94.html?v=legacy94b">Current hands + head</a> · <a href="hands-102.html?v=eyegaze1">Archived #102 test</a> · <a href="held-gun.html?v=legacy94b">Held-gun lab</a> · <a href="./?v=legacy94b">Full editor</a>';$('directSettings').prepend(labLinks);
  document.querySelector('header b').textContent=document.body.dataset.heldGunLab?'GUN MOVEMENT LAB':document.body.dataset.handLab?'HANDS + HEAD TRACKING LAB':'FINAL HANDS + ALIEN HEAD';document.querySelector('header span').textContent=document.body.dataset.heldGunLab?'Palm-driven gun · saved grip · no head':'Two hands · Sweep positioning · tracked eye camera';notice(document.body.dataset.heldGunLab?'Held-gun lab ready. Edit the saved grip or connect your camera to drive it with your right hand.':'Final hands and alien head ready. Connect your camera or iPhone.');
 }
 function extendShellTips(rig,extra){
@@ -748,9 +748,19 @@ if(isArchive102||isLineCopy){
 }
 if(isLineCopy){
  installLineDepthControls($('sweep-defaults'));
- document.querySelector('header b').textContent='2D LINES + 3D DEPTH LAB';
- document.querySelector('.viewHelp').textContent='Attached finger roots · photo lengths + estimated depth · optional OK contact';
- notice('2D lines + depth lab ready. Both assists can be switched off in Defaults.');
+ if(isPureLines){
+  for(const id of ['lineDepthEnabled','lineContactEnabled','reduceShake']){const input=$(id);if(input)input.checked=false;}
+  for(const id of ['lineDepthEnabled','lineContactEnabled']){const input=$(id);if(input)input.disabled=true;}
+  document.querySelector('header b').textContent='PURE 2D LINES — ATTACHED FINGERS';
+  document.title='Pure attached 2D lines';
+  document.querySelector('.viewHelp').textContent='Attached finger roots · exact measured 2D segment lines · Sweep wrist depth · no finger assistance';
+  const compareLink=document.createElement('p');compareLink.innerHTML='<a href="compare-live.html?v=1">Compare live with current Sweep + #94 ↗</a>';$('sweep-defaults').prepend(compareLink);
+  notice('Pure attached 2D lines ready. Connect your camera or iPhone.');
+ }else{
+  document.querySelector('header b').textContent='2D LINES + 3D DEPTH LAB';
+  document.querySelector('.viewHelp').textContent='Attached finger roots · photo lengths + estimated depth · optional OK contact';
+  notice('2D lines + depth lab ready. Both assists can be switched off in Defaults.');
+ }
 }
 if(isLineCopy&&location.hostname==='127.0.0.1'&&new URLSearchParams(location.search).has('lineDepthQA')){
  const {installLineQA}=await import('../.lab-qa/line-depth-live.mjs?v=1');
