@@ -4,24 +4,18 @@ export const defaults = {cameraFps:30,handRate:30,faceRate:30,shoulderRate:30,tr
 export function startTracking(video, onResult, onStats, getOptions=()=>defaults,captureOptions={}) {
  let stopped=false,handle=null,rafHandle=null,lastCallback=-Infinity,serial=0,lastTime=-1,windowStart=performance.now(),cameraFrames=0,cameraCallbacks=0,lastPresented=null,handStreak=0,lastAccepted=-Infinity,lastClockProgress=performance.now(),capturePolls=0;
  const frameMeter=measureVideoFrames(video);
- const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},age:{},errors:{},loading:{}};
+ const stats={camera:0,hands:0,face:0,pose:0,delegate:{},ms:{},age:{},errors:{}};
  const slots=['hands','face','pose'].map(task=>({task,worker:null,ready:false,busy:false,sent:-Infinity,next:0,count:0,last:-Infinity,canvas:document.createElement('canvas')}));
- function startWorker(s,forceCPU=false){
+ function startWorker(s){
   const opts={...defaults,...getOptions()};s.delegate=opts.trackerDelegate;s.fullBody=!!opts.fullBody;s.poseModel=opts.poseModel;s.partialHands=!!opts.partialHands;
-  const url=new URL('./tracker.mjs?v=ios-start2',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('partialHands',s.partialHands?'1':'0');url.searchParams.set('delegate',forceCPU?'CPU':s.delegate);url.searchParams.set('fullBody',s.fullBody?'1':'0');url.searchParams.set('poseModel',s.poseModel||'lite');
-  s.failed=false;s.cpuAttempt=forceCPU;stats.loading[s.task]=forceCPU?'Retrying with CPU':'Loading runtime';delete stats.errors[s.task];
+  const url=new URL('./tracker.mjs?v=camera-restore1',import.meta.url);url.searchParams.set('task',s.task);url.searchParams.set('partialHands',s.partialHands?'1':'0');url.searchParams.set('delegate',s.delegate);url.searchParams.set('fullBody',s.fullBody?'1':'0');url.searchParams.set('poseModel',s.poseModel||'lite');
   const w=s.worker=new Worker(url,{type:'module'});
-  function fail(message){if(stopped||s.worker!==w)return;clearTimeout(s.timer);clearTimeout(s.gpuTimer);w.terminate();s.ready=s.busy=false;
-   if(!forceCPU&&s.delegate!=='CPU'){startWorker(s,true);return;}
-   s.failed=true;delete stats.loading[s.task];stats.errors[s.task]=message+' — disconnect and reconnect to retry';
-  }
-  s.timer=setTimeout(()=>fail('Tracking startup timed out'),120000);
-  w.onerror=e=>fail(e.message||'Tracking worker failed to load');
+  s.timer=setTimeout(()=>{if(!s.ready){stats.errors[s.task]='Tracker initialization timed out';w.terminate();s.busy=false;}},60000);
+  w.onerror=e=>{clearTimeout(s.timer);stats.errors[s.task]=e.message;s.busy=false;s.ready=false;};
   w.onmessage=({data})=>{if(stopped||s.worker!==w)return;
-   if(data.type==='loading'){stats.loading[s.task]=data.message;if(data.message==='Starting GPU inference'){clearTimeout(s.gpuTimer);s.gpuTimer=setTimeout(()=>fail('GPU initialization stalled'),20000);}return;}
-   if(data.type==='ready'){clearTimeout(s.timer);clearTimeout(s.gpuTimer);s.ready=true;stats.delegate[s.task]=data.delegate;delete stats.loading[s.task];delete stats.errors[s.task];return;}
+   if(data.type==='ready'){clearTimeout(s.timer);s.ready=true;stats.delegate[s.task]=data.delegate;return;}
    s.busy=false;
-   if(data.type==='error'){if(!s.ready)fail(data.message);else stats.errors[s.task]=data.message;return;}
+   if(data.type==='error'){stats.errors[s.task]=data.message;return;}
    if(data.type==='result'){delete stats.errors[s.task];s.count++;stats.ms[s.task]=data.inferenceMs??data.ms;stats.age[s.task]=performance.now()-data.time;onResult(data,s.canvas);
     // Reuse no old frames: start the newest one after a slow hand result,
     // without waiting an additional camera interval or queuing any work.
@@ -49,9 +43,9 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
   if(frameTime===lastTime&&!force)return;if(frameTime!==lastTime){lastClockProgress=now;lastTime=frameTime;}lastAccepted=now;if(force)capturePolls++;else cameraCallbacks++;const presented=metadata?.presentedFrames;if(!force)cameraFrames+=Number.isFinite(presented)&&lastPresented!==null?Math.max(1,presented-lastPresented):1;if(Number.isFinite(presented))lastPresented=presented;serial++;
   const opts={...defaults,...getOptions()},due=[];
   for(const s of slots){
-   if(!enabled(s,opts)){if(s.worker){s.worker.terminate();clearTimeout(s.timer);clearTimeout(s.gpuTimer);s.worker=null;s.ready=s.busy=false;}stats[s.task]=0;continue;}
-   if(s.worker&&(s.delegate!==opts.trackerDelegate||s.fullBody!==!!opts.fullBody||s.poseModel!==opts.poseModel||s.partialHands!==!!opts.partialHands)){s.worker.terminate();clearTimeout(s.timer);clearTimeout(s.gpuTimer);s.worker=null;s.ready=s.busy=false;}
-   if(!s.worker){const earlier=slots.slice(0,slots.indexOf(s));if(earlier.every(t=>!enabled(t,opts)||t.ready||t.failed))startWorker(s);}
+   if(!enabled(s,opts)){if(s.worker){s.worker.terminate();clearTimeout(s.timer);s.worker=null;s.ready=s.busy=false;}stats[s.task]=0;continue;}
+   if(s.worker&&(s.delegate!==opts.trackerDelegate||s.fullBody!==!!opts.fullBody||s.poseModel!==opts.poseModel||s.partialHands!==!!opts.partialHands)){s.worker.terminate();clearTimeout(s.timer);s.worker=null;s.ready=s.busy=false;}
+   if(!s.worker)startWorker(s);
    const rate=+(s.task==='hands'?opts.handRate:s.task==='face'?opts.faceRate:opts.shoulderRate);
    if(s.rate!==rate){s.rate=rate;s.next=now;}
    if(s.ready&&!s.busy&&(opts.uncappedTracking||now>=s.next-1))due.push(s);
@@ -72,7 +66,7 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
   rafHandle=requestAnimationFrame(fallbackTick);
  }
  // Initialization and telemetry must not depend on delivery of the first video callback.
- const first=slots.find(s=>enabled(s,{...defaults,...getOptions()}));if(first)startWorker(first);
+ for(const s of slots)if(enabled(s,{...defaults,...getOptions()}))startWorker(s);
  const reportTimer=setInterval(()=>{const now=performance.now(),opts={...defaults,...getOptions()};
   if(now-windowStart>=950){const seconds=(now-windowStart)/1000;const measured=frameMeter.read();stats.camera=measured.fps;stats.cameraCallbacks=Math.round(cameraCallbacks/seconds);stats.capturePolls=capturePolls;capturePolls=0;stats.cameraCounter=measured.source;cameraFrames=0;cameraCallbacks=0;for(const s of slots){stats[s.task]=Math.round(s.count/seconds);s.count=0;}windowStart=now;onStats({...stats,requested:opts.cameraFps,cameraSettings:video.srcObject?.getVideoTracks()[0]?.getSettings()});}
  },1000);
@@ -80,5 +74,5 @@ export function startTracking(video, onResult, onStats, getOptions=()=>defaults,
  function videoTick(now,meta){if(stopped)return;lastCallback=now;if(getOptions().freshFrames)tick(now,meta);handle=video.requestVideoFrameCallback(videoTick);}
  if(video.requestVideoFrameCallback)handle=video.requestVideoFrameCallback(videoTick);
  rafHandle=requestAnimationFrame(fallbackTick);
- return ()=>{stopped=true;frameMeter.stop();clearInterval(reportTimer);if(video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(handle);cancelAnimationFrame(rafHandle);for(const s of slots){clearTimeout(s.timer);clearTimeout(s.gpuTimer);s.worker?.terminate();}};
+ return ()=>{stopped=true;frameMeter.stop();clearInterval(reportTimer);if(video.cancelVideoFrameCallback)video.cancelVideoFrameCallback(handle);cancelAnimationFrame(rafHandle);for(const s of slots){clearTimeout(s.timer);s.worker?.terminate();}};
 }

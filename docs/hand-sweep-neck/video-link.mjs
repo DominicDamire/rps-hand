@@ -1,1 +1,1 @@
-export {receivePhone,sendPhone} from '../shared-phone/video-link.mjs?v=network1';
+export {receivePhone,sendPhone} from '../shared-phone/video-link.mjs?v=camera-restore1';
