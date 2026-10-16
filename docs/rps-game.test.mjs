@@ -1,0 +1,5 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {Round,outcome,MOVES} from './rps-game.mjs';
+test('all nine possible rounds have correct outcomes',()=>{const expected=[['draw','loss','win'],['win','draw','loss'],['loss','win','draw']];for(let i=0;i<3;i++)for(let j=0;j<3;j++)assert.equal(outcome(MOVES[i],MOVES[j]),expected[i][j]);});
+test('opponent committed before reveal and score only increments once',()=>{let n=0;const r=new Round(()=>{n++;return 0;});r.start(0);assert.equal(r.start(100),false);r.observe('PAPER',2500);r.observe('PAPER',2900);assert.equal(r.tick(3000).outcome,'win');assert.equal(r.tick(4000),null);assert.equal(n,1);assert.equal(r.score.win,1);});
+test('lost or unstable tracking cannot score',()=>{for(const seq of [[[1000,'ROCK']],[[2800,'ROCK']],[[2400,'ROCK'],[2900,null]],[[100,'ROCK'],[2900,'ROCK']]]){const r=new Round();r.start(0);for(const [t,m]of seq)r.observe(m,t);assert.ok(r.tick(3000).error);assert.deepEqual(r.score,{win:0,loss:0,draw:0});}});
+test('reset clears game and permits a new round',()=>{const r=new Round();r.start(0);r.reset();assert.equal(r.phase,'idle');assert.equal(r.start(1),true);});

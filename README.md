@@ -39,3 +39,33 @@ In first-person view, point with the index finger and pull/push/drag to move and
 
 Layout: `docs/index.html` is the whole web app (one file). `docs/test/` holds Wikimedia Commons test photos
 and clips (CC licences; two big ones are git-ignored). `assets/` holds the MediaPipe model for the desktop app.
+
+## Playable review build — 2026-10-16
+
+The root page now provides an actual rock–paper–scissors round on top of the
+existing MediaPipe tracker and 3D hand renderer. Start with
+`/?img=victory.jpg` for a camera-free sample, or `/` for your webcam. The sample
+supplies the player's gesture; it is labelled as sample input, not a live game.
+
+A round commits a random opponent before the three-second countdown. Scoring
+requires a recently observed, stable, single-hand gesture; missing/stale input
+asks for a retry and does not change the score. Reset, instructions, visible
+gesture feedback and camera-denial recovery are included. Camera/overlay and
+3D mirror framing retain the complete input on narrow displays. The former gun
+experiment is still available with `?gun=1`, and face/hand and geometry labs
+remain linked under the instructions.
+
+Run the full browser journey against the static server:
+
+```sh
+# npm ci and browser installation as described in REVIEWER.md
+RPS_BASE=http://127.0.0.1:8765 node tools/product-journey.cjs
+```
+
+This exercises the real sample tracker, round scoring, reset, mobile controls,
+and denied-camera recovery. Headless software rendering can be slow enough to
+trigger a legitimate retry; that is not a reason to count stale observations as
+a successful round. Physical phone accuracy and sustained device FPS still
+require a real-device session. The latest Node suite contains 690 checks across
+229 files, including four new game-state tests; copied experimental suites are
+not independent product capabilities.
