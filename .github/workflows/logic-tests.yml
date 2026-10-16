@@ -9,3 +9,17 @@ jobs:
         with:
           node-version: '22'
       - run: node tools/test-current.mjs
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory docs > /tmp/rps-server.log 2>&1 &
+          curl --retry 10 --retry-connrefused --retry-delay 1 --fail http://127.0.0.1:8765/ > /dev/null
+          npm run test:browser
+          npm run test:alignment

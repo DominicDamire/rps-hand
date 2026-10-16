@@ -1,3 +1,4 @@
+import {centreFingerShells} from './centre-shell.mjs';
 import {restoreOriginalShell} from './original-shell.mjs?v=flat11';
 import {restorePalmRelief} from './palm-relief.mjs?v=palm4';
 import * as T from 'three';
@@ -89,7 +90,7 @@ export function fitPhotoHand(rig,{preservePalmRelief=false,referencePoints=PHOTO
   m.position.set(0,0,0);m.quaternion.identity();m.scale.set(1,1,1);m.updateMatrix();m.geometry.computeVertexNormals();m.geometry.computeBoundingBox();m.geometry.computeBoundingSphere();delete m.userData.directRestMatrix;
  }
 
- rig.root.updateMatrixWorld(true);rig.photoReference={report,targets:allTargets};if(preservePalmRelief)restorePalmRelief(rig,old,oldTips,surfaceSection);restoreOriginalShell(rig,originals,old,oldTips);return report;
+ rig.root.updateMatrixWorld(true);rig.photoReference={report,targets:allTargets};if(preservePalmRelief)restorePalmRelief(rig,old,oldTips,surfaceSection);restoreOriginalShell(rig,originals,old,oldTips,surfaceSection);centreFingerShells(rig,surfaceSection);return report;
 }
 
 // Intersect the complete triangulated shell along its thickness axis.

@@ -1,0 +1,10 @@
+Command: node tools/test-current.mjs
+Current test files: 228 (copied experimental suites included)
+ℹ tests 686
+ℹ suites 0
+ℹ pass 686
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2473.817709

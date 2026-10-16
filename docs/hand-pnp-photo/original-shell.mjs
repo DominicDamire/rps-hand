@@ -3,7 +3,7 @@ import * as T from 'three';
 const fingers=['Thumb','Index','Middle','Ring','Pinky'];
 // Retain authored finger surfaces. Remove the old palm thumb socket and
 // cut/cap the adjoining palm edge once, before live tracking.
-export function restoreOriginalShell(rig,originals,old,oldTips){
+export function restoreOriginalShell(rig,originals,old,oldTips,section){
  for(const s of ['R','L']){
   const palmParts=[...originals.keys()].filter(m=>m.name.startsWith(s+'Hand__palm')).sort((a,b)=>originals.get(b).geometry.attributes.position.count-originals.get(a).geometry.attributes.position.count);
   const mainPalm=palmParts[0];
@@ -26,6 +26,14 @@ export function restoreOriginalShell(rig,originals,old,oldTips){
     const anchor=origin.clone().addScaledVector(x,a.dot(x)-.008).addScaledVector(y,a.dot(y));
     const plane=new T.Plane().setFromNormalAndCoplanarPoint(normal,anchor).applyMatrix4(m.parent.matrixWorld.clone().invert());
     const cut=cutClosedPalm(m.geometry,plane);m.geometry.dispose();m.geometry=cut;
+    // Centre the authored palm before symmetric depth clipping. Otherwise a
+    // thin face on one side of the wrist survives clipping off-centre.
+    const frame=rig.photoReference.report[s],cx=new T.Vector3().fromArray(frame.cameraRight),cy=new T.Vector3().fromArray(frame.cameraUp),cz=new T.Vector3().crossVectors(cx,cy).normalize();
+    const pa=m.geometry.attributes.position,world=Array.from({length:pa.count},(_,i)=>new T.Vector3().fromBufferAttribute(pa,i).applyMatrix4(m.parent.matrixWorld));
+    const pair=section(m,world,origin,cx,cy,cz);
+    if(!pair)throw Error('Missing palm shell at wrist');
+    const shift=origin.dot(cz)-(pair[0]+pair[1])/2,inv=m.parent.matrixWorld.clone().invert();
+    for(let i=0;i<world.length;i++){const p=world[i].addScaledVector(cz,shift).applyMatrix4(inv);pa.setXYZ(i,p.x,p.y,p.z);}
     // Flatten both palm faces in depth, not just the thumb-side silhouette.
     const along=ref[9].clone().sub(origin),faceNormal=z.clone().addScaledVector(y,-along.dot(z)/along.dot(y)).normalize();
     const inverse=m.parent.matrixWorld.clone().invert(),halfThickness=.009;

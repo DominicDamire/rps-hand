@@ -14,12 +14,16 @@ for(const s of ['R','L']){
   if(best){const error=Math.abs((best[0]+best[1])/2-pts[i].dot(z))*1000;maxCentre=Math.max(maxCentre,error);centres.push([s+i,error]);}else missing.push(s+i);
  }
 }
-checks.maxThicknessCentreErrorMm=maxCentre;checks.noSurfaceAt=missing;
+checks.originalTopologyPreserved=rig.photoReference.originalShell===true;
+checks.flatPalms=rig.parts.filter(m=>m.geometry.userData.flatPalm).map(m=>m.geometry.userData.flatPalm);
+checks.palmsWithinThickness=checks.flatPalms.length===2&&checks.flatPalms.every(p=>p.maximum<=p.halfThickness+1e-6);
+checks.shellCentring=rig.photoReference.shellCentring;
+checks.centres=centres;checks.maxThicknessCentreErrorMm=maxCentre;checks.noSurfaceAt=missing;
 checks.mirrorError=Math.max(...rig.photoReference.targets.R.map((p,i)=>p.clone().setX(-p.x).distanceTo(rig.photoReference.targets.L[i])));
 checks.finite=rig.parts.every(m=>Array.from(m.geometry.attributes.position.array).every(Number.isFinite));
 checks.rayBoneError=0;checks.rayProjectionError=0;
 for(let i=0;i<100;i++){const base=new T.Vector3(.01,-.01,-.5),target=new T.Vector3(.01+Math.sin(i)*.02,-.01+Math.cos(i)*.02,-.5-.04),ray=target.clone().normalize(),out=pointOnRay(base,ray,base.distanceTo(target),target);checks.rayBoneError=Math.max(checks.rayBoneError,Math.abs(out.distanceTo(base)-base.distanceTo(target)));checks.rayProjectionError=Math.max(checks.rayProjectionError,out.distanceTo(target));}
-checks.passed=checks.finite&&checks.mirrorError<1e-9&&checks.rayBoneError<1e-9&&checks.rayProjectionError<1e-9&&maxCentre<.00001&&!missing.length;
+checks.passed=checks.originalTopologyPreserved&&checks.palmsWithinThickness&&checks.shellCentring.maximumProjectionShiftMm<.0001&&checks.finite&&checks.mirrorError<1e-9&&checks.rayBoneError<1e-9&&checks.rayProjectionError<1e-9&&maxCentre<.00001&&!missing.length;
 
 let maxDriverError=0,maxLengthError=0;
 for(const side of ['R','L']){

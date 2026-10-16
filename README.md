@@ -1,4 +1,4 @@
-[Reproduction steps, current test results and known failures](REVIEWER.md)
+[Reproduction steps, verified results and remaining limits](REVIEWER.md)
 
 # Hand tracking: current pages
 
