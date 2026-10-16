@@ -1,0 +1,11 @@
+{
+  "name": "rps-hands-review",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "node tools/test-current.mjs",
+    "test:browser": "node tools/browser-review.cjs demo",
+    "test:alignment": "node tools/browser-review.cjs alignment"
+  },
+  "devDependencies": { "playwright": "1.62.1" }
+}

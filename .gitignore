@@ -12,3 +12,5 @@ __pycache__/
 docs/test/handclap.webm
 docs/test/handwash.webm
 /vid_out/
+
+node_modules/
