@@ -46,8 +46,8 @@ export class BodyView {
       this.video.readyState>=2&&this.video.currentTime!==this.lastVideo;
   }
   async capture(now){
-    // Two completed face frames earn one body frame. Serial inference prevents
-    // GPU competition, while this turn-taking prevents body starvation on CPU.
+    // Each worker admits at most one fresh frame. Its adaptive interval limits
+    // load without serializing body inference behind the face worker.
     if(!this.wantsFrame(now))return;
     this.busy=true;this.lastCapture=now;this.lastVideo=this.video.currentTime;
     this.lastFaceCount=this.head.completedFrames;

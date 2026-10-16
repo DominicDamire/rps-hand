@@ -1,3 +1,5 @@
+[Reproduction steps, current test results and known failures](REVIEWER.md)
+
 # Hand tracking: current pages
 
 [**PnP**](https://d14life.github.io/rps-hand/hand-pnp-photo/?v=motion5) · [**Sweep**](https://d14life.github.io/rps-hand/hand-sweep-neck/?v=aligned2) · [**PnP gun lab**](https://d14life.github.io/rps-hand/hand-pnp-gun/?v=motion5) · [Compare the hand against the original lines](https://d14life.github.io/rps-hand/hand-pnp-photo/reference.html)
