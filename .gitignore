@@ -1,4 +1,4 @@
-# build outputs of the desktop app
+# build outputs of the desktop app (PyInstaller, see README)
 dist/
 build/
 *.spec
