@@ -1,8 +1,8 @@
 // Guided seated/standing setup dialog (DOM ids as on the branch: calibration, setup-*, body-mode, head-mode, the four
-// sensitivity sliders and their outputs). Adapted from origin/hand-rig-workflow mirror/head/Calibration.js for
+// sensitivity sliders and their outputs). Adapted from mirror/head/Calibration.js on the hand-rig-workflow branch for
 // rps_hand: no camera ownership (the page already has the camera), no auto-open unless asked, the FOV field writes the
-// page's shared HFOV through onHfov (one HFOV for hands and head), and the "measured distance" is replaced by decision
-// D1: while the centre is captured, the hand tracker's metric depth (handDepth()) is sampled and the head's depth scale
+// page's shared HFOV through onHfov (one HFOV for hands and head), and the "measured distance" is replaced by this rule:
+// while the centre is captured, the hand tracker's metric depth (handDepth()) is sampled and the head's depth scale
 // becomes hand depth / head depth, so hands and head share one depth scale. Without a visible hand the scale is 1.
 import {NeutralCapture,median} from './spatial.mjs';
 const $=id=>document.getElementById(id);

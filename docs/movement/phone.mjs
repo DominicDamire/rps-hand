@@ -1,7 +1,7 @@
 // The phone side of "phone as camera": the phone runs the trackers on its own camera and sends the landmarks to the PC
 // through the broker link (link.mjs). No video leaves the phone, so no peer-to-peer connection and no relay is needed -
 // which is the whole point: the WebRTC video path (camlink.mjs) only completes when both devices can reach each other
-// directly, and every free TURN relay it could fall back on is dead (owner: it worked on one phone, not on his).
+// directly, and every free TURN relay it could fall back on is dead (it worked on one phone, not on another).
 // Extra: the phone does the inference, so the PC only draws, and the link carries about 0.5 KB per hand frame.
 import { connectLink, packHands } from "./link.mjs?v=90";
 
@@ -19,7 +19,7 @@ export async function startPhone(code, video, onStatus = () => {}) {
   onStatus("connected · loading tracking…");
 
   let wantBody = new URLSearchParams(location.search).get("body") === "1";   // off until the PC asks: with "head only" there is nothing to drive
-  const dbg = window.rpshPhone = { face: null, body: null, get ready() { return ready; }, get fps() { return fps; }, get err() { return err; } };   // diagnostics for the owner's phone
+  const dbg = window.rpshPhone = { face: null, body: null, get ready() { return ready; }, get fps() { return fps; }, get err() { return err; } };   // diagnostics for the author's phone
   const hand = new Worker(new URL("./tracker.mjs?v=90", import.meta.url), { type: "module" });
   const head = new Worker(new URL("./head-tracker.mjs?v=90", import.meta.url), { type: "module" });
   let bodyW = null;   // started a few seconds later: the hand and the face matter more and three models at once stall a phone

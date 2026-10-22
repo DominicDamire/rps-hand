@@ -1,4 +1,4 @@
-// Ported from origin/hand-rig-workflow mirror/head/spatial.mjs (MEDIAPIPE-LICENSE.txt applies to the template).
+// Ported from mirror/head/spatial.mjs on the hand-rig-workflow branch (MEDIAPIPE-LICENSE.txt applies to the template).
 // Canonical points from Google MediaPipe canonical_face_model.obj (Apache-2.0).
 // Source: https://github.com/google-ai-edge/mediapipe/blob/master/mediapipe/modules/face_geometry/data/canonical_face_model.obj
 // Convert centimetres, Y-up/Z-out to eye-centred Y-down/Z-away; scale outer eyes to 90mm.

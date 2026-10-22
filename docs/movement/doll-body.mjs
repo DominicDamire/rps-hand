@@ -75,8 +75,8 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
   // swings along an arc to the next contact, and both legs are solved to their foot with the same two-bone IK the arms
   // use. That is the only way the feet stop treading air: the previous version rotated the thigh and knee on a sine
   // and never referenced the floor at all, so for most of the cycle neither foot was near it.
-  // Standing still, both feet ease back under the hips and stay there (owner: "the feet can just stay on the ground
-  // as long as the joystick has not been moved").
+  // Standing still, both feet ease back under the hips and stay there (on the ground
+  // as long as the joystick has not been moved).
   const _v = new THREE.Vector3(), _t = new THREE.Vector3(), _hint = new THREE.Vector3(), _w = new THREE.Vector3(), _e = new THREE.Vector3();
   const STEP_LEN = 0.42;      // metres of travel between footfalls
   const STEP_TIME = 0.26;     // seconds a swing takes
@@ -196,7 +196,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
   }
 
   // Which meshes belong to each arm, so an arm the camera cannot see can be taken off the screen rather than left
-  // frozen in mid-air (owner: "if the camera can[not] see the hand remove [it] from the user's view"). Built once.
+  // frozen in mid-air. Built once.
   const armParts = { L: [], R: [] };
   const armBone = /^([LR])(UpperArm|Forearm|Hand|Thumb|Index|Middle|Ring|Pinky)/;
   const buildArmParts = () => {
@@ -241,7 +241,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
         yaw: look ?? (p.physicalYaw || 0),
         roll: p.physicalRoll || 0, facing: heading });
       // The doll's eyes are pinned to the camera, so the way to show the head moving through space is to lean the body
-      // under it (owner: "the head can move in 3D plane space"). The face tracker gives where the head is in the
+      // under it. The face tracker gives where the head is in the
       // picture and how far away it is; the offset from where it started becomes a lean at the waist and the chest.
       const L = head?.latest;
       if (L && L.span > 0) {
@@ -295,7 +295,7 @@ export function setupBody({ scene, camera, handModel, handModelL = null, video, 
         setPalm(rig, S, src, handModel.group.matrixWorld);
         setFingers(rig, S, src, handModel.group.matrixWorld);
       }
-      // the steering hand: same treatment, it is a tracked hand like the other (owner: "make the left hand appear too")
+      // the steering hand: same treatment, it is a tracked hand like the other
       if (handModelL?.visible) {
         handModelL.group.updateMatrixWorld(true);
         const srcL = handModelL.points, SL = handModelL.right ? "R" : "L";

@@ -28,7 +28,7 @@ Earlier implementation notes below describe superseded mesh construction where i
 
 The reference fit runs once at model load. Live PnP, PnP gun and both current Sweep pages use the original constrained direction driver (`fitImage:false`). The ray-based screen matching is only an explicit static reference-comparison option. PIP/DIP plane locks and base-splay limits are active again; existing temporal settings are preserved. No further mesh changes were made in this restoration. The PnP solver blob remains exactly 186a377f0fb348836b65176dcee72546c9830ed1.
 
-The existing contact panel is visible again. PnP's unconditional collision bypass is removed, restoring optional hand/hand, hand/head and contact controls. Collisions remain optional; capture/check suspends corrections as before. Gun-specific work is deferred at the user’s request. Both model-line overlays are updated after corrections.
+The existing contact panel is visible again. PnP's unconditional collision bypass is removed, restoring optional hand/hand, hand/head and contact controls. Collisions remain optional; capture/check suspends corrections as before. Gun-specific work is deferred. Both model-line overlays are updated after corrections.
 
 motion-check.mjs: 72 poses, no image-target influence, unchanged geometry, preserved lengths and upper-joint planes. Compared locally with the 9d9addf driver: zero point difference. Collision/contact regression tests pass. No claim that raw camera noise is eliminated.
 

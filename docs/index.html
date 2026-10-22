@@ -75,8 +75,8 @@ const DEBUG_OVERLAY = Q.get("debug") === "1";
 const SHOW_LINES = Q.get("lines") === "1";   // green skeleton + dots on the 3D hand (off by default so the skin can be judged)
 const PALMS_ONLY = Q.get("arms") !== "1";   // default: hands from the wrist only
 const GUN = Q.get("gun") === "1";            // a pistol on a table: close the hand on it to pick it up, curl the index to fire, open the hand to drop it (?gun=0 off, ?grab=1 holds at once)
-const FINGER_FAT = Q.get("fat") ? +Q.get("fat") : 1.3;   // width scale of the rigged hand (owner: "fingers too thin")
-const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "arm";   // the owner's rigged arms model with its own textures (the one model we stick to)   // default: the owner's pre-rigged arms (arm_L/arm_R.glb); ?skin=hand.glb = the scan rig, ?skin=thing = the Thing rig, ?skin=0 = capsules
+const FINGER_FAT = Q.get("fat") ? +Q.get("fat") : 1.3;   // width scale of the rigged hand (fingers looked too thin)
+const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "arm";   // the author's rigged arms model with its own textures (the one model we stick to)   // default: the author's pre-rigged arms (arm_L/arm_R.glb); ?skin=hand.glb = the scan rig, ?skin=thing = the Thing rig, ?skin=0 = capsules
 const DS = Q.get("ds") != null ? +Q.get("ds") : 480;   // tracker input width after downscale (?ds=0 = the full camera frame). MediaPipe resizes to 192/224 anyway; 320 lost far hands
 const RVFC = Q.get("rvfc") !== "0";                        // start the tracker from requestVideoFrameCallback (?rvfc=0 = poll currentTime in rAF, the old way)
 const HAND_SHADOW = Q.get("shadow") === "1";               // the skin casts a shadow: a second skinning pass over 79 k triangles per hand, off by default (props still cast)
@@ -84,7 +84,7 @@ const LOD_MIN_FPS = Q.get("lodfps") != null ? +Q.get("lodfps") : 25;   // high-d
 // ?bench=1 runs the tracker with NO 3D rendering at all: whatever "tracker" reads then is the model's real cost on this
 // device, and the difference from the normal run is what our rendering is stealing from it.
 const BENCH = Q.get("bench") === "1";
-const NHANDS = Q.get("hands") ? +Q.get("hands") : 1;   // one hand by default: measured on the owner's phone 104-137 ms with two hands, 16 ms with one (?hands=2 for both)
+const NHANDS = Q.get("hands") ? +Q.get("hands") : 1;   // one hand by default: measured on the author's phone 104-137 ms with two hands, 16 ms with one (?hands=2 for both)
 const TRACKER_OPTS = { runningMode: "VIDEO", numHands: NHANDS, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.4 };
 
 // --- skeleton (MediaPipe's 21 landmarks) --------------------------------------------------------
@@ -448,11 +448,11 @@ const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 8);
 // First person: ONE fixed eye camera = the phone's view reflected through a plane FP_DEPTH in front of the phone (the eye
 // sits 2 * FP_DEPTH from the phone, same crop fov as the video pane). A hand at FP_DEPTH covers exactly the screen area
 // it covers in the video; a hand moving toward the phone moves AWAY from the eye and gets smaller, as in real first
-// person (owner: "when I move my hand closer to the camera it should move further away from me"). Build 32 drew each
+// person. Build 32 drew each
 // hand with its own reflected camera (video footprint at every depth) - that reversed the depth feel and is gone.
 const worldObjs = [];   // room objects (the gun module hides/uses them for bullet targets)
 const FP_DEPTH = +Q.get("fpz") || 0.3;
-// Head tracking (owner: "the FPS camera is the head, it should be tracked too"): the pose worker's eyes give the head's
+// Head tracking: the pose worker's eyes give the head's
 // picture position and, from the eye spacing (IPD 63 mm), its distance from the phone. First person then projects from
 // the tracked head through a fixed window at the phone plane (the crop-fov rectangle seen from the reference eye at
 // 2 * FP_DEPTH), an off-axis frustum: move your head and the room and your hand shift like a real window, bring the
@@ -518,7 +518,7 @@ const _pd = V(), _pu2 = V(), _lk = V(), _wgi = new THREE.Matrix4();
 
 
 // --- skinned hand mesh driven by the 21 tracked points -----------------------------------------------
-// The GLB (docs/hand.glb, built from the owner's hand scan hand1.OBJ) has one bone per skeleton edge, named
+// The GLB (docs/hand.glb, built from the author's hand scan hand1.OBJ) has one bone per skeleton edge, named
 // b<child joint>, no bone hierarchy. hand.json holds the 21 joint positions of the bind pose in the mesh's own units.
 // Each frame every bone gets a frame built from the tracked points: y along the bone, scaled to the TRACKED bone length,
 // x across the palm, width scaled by the palm-length ratio. The bind inverse is the same frame built from the bind joints,
@@ -539,7 +539,7 @@ function meshPts(pts) {
   }
   return out;
 }
-// EXACT drive (default, the owner's rule: the skin's joints sit on the tracked points, nothing canonical). What made it
+// EXACT drive (default: the skin's joints sit on the tracked points, nothing canonical). What made it
 // look fat and crooked before: every bone was stretched to its tracked length while keeping the scan's thickness, so a
 // finger the tracker measures 15 % short became 15 % fatter, and the nail got crushed. Now each finger's thickness is
 // scaled by that finger's own tracked-to-scan length ratio (a shape fit, as hand-model fitting does), smoothed over
@@ -970,7 +970,7 @@ function renderOverlay(displayed) {   // displayed: flat GL arrays of the hands 
       octx.fillStyle = i === 0 ? "#ff7878" : tips.includes(i) ? "#ffe678" : "#fff"; octx.fill();
     });
   }
-  if (DEBUG_OVERLAY) for (const a of displayed) skeleton(toImage(a), "#4de3ff", Math.max(1.5, ovW / 400));   // cyan = 3D hand reprojected; ?debug=1 (the owner wants one overlay)
+  if (DEBUG_OVERLAY) for (const a of displayed) skeleton(toImage(a), "#4de3ff", Math.max(1.5, ovW / 400));   // cyan = 3D hand reprojected; ?debug=1 (one overlay only)
 }
 
 // --- main ---------------------------------------------------------------------------------------

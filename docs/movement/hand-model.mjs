@@ -339,16 +339,16 @@ function makeRigSkin(variant, color) {
 // Joint depths come from the world model + one translation (locate, as the main page); the picture fixes x/y exactly.
 export const view = { phoneFov: 60, dist: 0.6, height: 0, tilt: 0, smooth: 0.5, eye: null, reach: 1.15, drop: 5, near: 0.28, far: 0.52 };
 // near/far: the hand is kept between these distances from the eye. Without a limit, holding the hand right up to the
-// phone threw it far away and tiny (the depth is inverted on purpose: toward the phone = away from you), and the owner
-// could not see his own hands. reach 1.35 and drop 5 deg keep them big and in frame while still reaching the table.
+// phone threw it far away and tiny (the depth is inverted on purpose: toward the phone = away from you), and you
+// could not see your own hands. reach 1.35 and drop 5 deg keep them big and in frame while still reaching the table.
 // drop: degrees the whole hand is swung DOWN about the eye, so it rests low in the frame the way a shooter's viewmodel
-// does instead of sitting in the middle of the screen (owner sent CS:GO screenshots: "that is how much view the hand
-// should take"). It is an angle, not a distance, so the hand keeps the same place in the frame however far out it is.   // reach: the hand's distance from the eye is multiplied by this (the shape is not stretched, the whole hand moves), so a
+// does instead of sitting in the middle of the screen (reference CS:GO screenshots: that is how much view the hand
+// should take). It is an angle, not a distance, so the hand keeps the same place in the frame however far out it is.   // reach: the hand's distance from the eye is multiplied by this (the shape is not stretched, the whole hand moves), so a
 // comfortable half-extended arm reaches the table 0.55 m away - without it the hand could never get further from the eye
-// than the eye-to-phone distance (0.6 m) and the gun on the table was out of reach (owner: "the hand just would not extend")   // sliders write here; eye = [x, y up, distance] of the tracked eye behind the phone (phone frame, metres), set by the app when the head is seen
+// than the eye-to-phone distance (0.6 m) and the gun on the table was out of reach   // sliders write here; eye = [x, y up, distance] of the tracked eye behind the phone (phone frame, metres), set by the app when the head is seen
 // The eye is FIXED (the slider distance, or the tracked head): a hand brought toward the face comes close to the eye and
 // the gun's sight fills the view, as on the main page. (Before, the eye retreated to keep the hand 0.25 m ahead, so a
-// hand near the face moved AWAY - the owner wants aiming by bringing the gun to the eye.) The hand is only kept from
+// hand near the face moved AWAY - aiming works by bringing the gun to the eye.) The hand is only kept from
 // passing behind the eye: if any point would be closer than MIN_AHEAD, the whole hand is pushed toward the phone.
 const MIN_AHEAD = 0.12;
 function locate(world, image, W, H) {
@@ -398,8 +398,8 @@ export function makeHandModel(parent, lights = true) {   // sync: the rig loads 
         pts[i].lerp(_w, a);
       }
       const ex = view.eye ? view.eye[0] : 0, ey = view.eye ? view.eye[1] : view.height, D = view.eye ? view.eye[2] : view.dist;
-      // Where the hand goes, so that it is ALWAYS in the picture (owner: "it always has to be in the view; I really have
-      // to stretch it out in front of the screen to be able to see it").
+      // Where the hand goes, so that it is ALWAYS in the picture (it must stay in view without having
+      // to stretch it out in front of the screen to be able to see it).
       // The group is turned 180 degrees about y, so a tracked point (x, y, z) lands at (-x, y, -z) + group.position in
       // the eye's frame. Placing it by its raw offset from the eye failed: that offset collapses to nothing when the
       // hand is held back at about the eye-to-phone distance, which left the direction undefined and threw the hand

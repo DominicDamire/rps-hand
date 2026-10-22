@@ -14,7 +14,7 @@ import {makeHandModel,view as handView} from './hand-model.mjs?v=90';
 import {createNet} from './net.mjs?v=90';
 import {setupShooter} from './shooter.mjs?v=90';
 import {setupBody} from './doll-body.mjs?v=90';   // the ball-joint doll; the old skinned avatar is body.mjs, kept for reference
-import {startRemote,shimVideoSize} from './remote.mjs?v=90';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // the upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
+import {startRemote,shimVideoSize} from './remote.mjs?v=90';   // ?cam = the phone runs the trackers and sends the landmarks here (works on any network); &video=1 keeps the old WebRTC camera stream   // The upper-body rig + body tracker (docs/avatar, docs/body from hands-lapse), joined to the tracked right hand   // Table + pistol + shooting range + mirror in the map, the right hand picks up and fires (docs/gun.mjs)   // lobbies / quick match: the same broker + WebRTC data channels as the main page   // the right hand as the rigged arm model, in front of the eye
 const $=id=>document.getElementById(id);const CAM=new URLSearchParams(location.search).has('cam');   // ?cam: the phone streams its camera here
 const trackingUI=setupUI();const stick=setupThumbstick($('thumbstick'),$('stickKnob'));
 const trackingLog=[];
@@ -25,7 +25,7 @@ let lookDemo=0;
 const renderClock=new RenderClock();
 const renderer=new THREE.WebGLRenderer({canvas:$('scene'),antialias:false});renderer.setPixelRatio(Math.min(1,Math.sqrt(900000/(innerWidth*innerHeight))));
 const scene=new THREE.Scene();scene.background=new THREE.Color('#25394a');scene.fog=new THREE.FogExp2('#25394a',.018);
-const camera=new THREE.PerspectiveCamera(65,1,.05,200);camera.position.set(0,1.65,7);scene.add(camera);const handModel=makeHandModel(camera);window.handModel=handModel;const handModelL=makeHandModel(camera,false);window.handModelL=handModelL;   // the joystick hand is drawn too (the doll's left arm follows it)
+const camera=new THREE.PerspectiveCamera(65,1,.05,200);camera.position.set(0,1.65,7);scene.add(camera);const handModel=makeHandModel(camera);window.handModel=handModel;const handModelL=makeHandModel(camera,false);window.handModelL=handModelL;   // The joystick hand is drawn too (the doll's left arm follows it)
 const remote={group:new THREE.Group(),eye:new THREE.Group(),seen:-Infinity,target:{p:new THREE.Vector3(),pitch:0,yaw:0}};remote.group.visible=false;scene.add(remote.group);remote.group.add(remote.eye);
 {const skin=new THREE.MeshStandardMaterial({color:0xd9a58a,roughness:.7}),body=new THREE.Mesh(new THREE.CapsuleGeometry(.18,1.05,4,10),new THREE.MeshStandardMaterial({color:0x7d8fa6,roughness:.8}));body.position.y=-.95;remote.group.add(body);
  const head=new THREE.Mesh(new THREE.SphereGeometry(.12,16,12),skin);remote.eye.add(head);}
@@ -48,7 +48,7 @@ const dustMap=new DustMap(scene);const shooter=setupShooter({scene,camera,dustMa
 dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · auto-step on';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
 function resize(){renderer.setPixelRatio(Math.min(1,Math.sqrt(900000/(innerWidth*innerHeight))));renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();handView.aspect=camera.aspect;}addEventListener('resize',resize);resize();
 let head=null,lastHeadVideo=-1,lastFrameTime=0,lastHUD=-Infinity,phoneLink=null;const hf={n:0,t:performance.now()},dbg=window.dbg=window.dbg||{};let headSeen=false;
-// a tap = the thumb tip meets
+// Jump on a right-hand tap: a tap = the thumb tip meets
 // the index tip while the other three fingers stay up (a fist, and the gun grip, also bring those tips together,
 // so without that condition every fist would be a jump). Rising edge only: hold the pinch and you jump once.
 const jump={h:0,v:0,applied:0,pinched:false,taps:0};
@@ -82,7 +82,7 @@ async function start(){
     let handIndex=inputMode==='index'?selectLeftHand(data):n===1?0:n===2?(data.landmarks[0][0].x>data.landmarks[1][0].x?0:1):-1;   // two hands: the physical left (image right, unmirrored) is the joystick, the other one the model
     let modelIndex=n===2&&handIndex>=0?1-handIndex:-1;
     if(n===1){const w=data.worldLandmarks[0],ax=w[5].x-w[0].x,ay=w[5].y-w[0].y,az=w[5].z-w[0].z,bx=w[17].x-w[0].x,by=w[17].y-w[0].y,bz=w[17].z-w[0].z,tx=w[4].x-w[0].x,ty=w[4].y-w[0].y,tz=w[4].z-w[0].z;
-      singleChir+=.25*(Math.sign(tx*(ay*bz-az*by)+ty*(az*bx-ax*bz)+tz*(ax*by-ay*bx))-singleChir);   // one hand alone: the thumb's side of the palm says which hand it is (+ = physical right; the same test as hand-model.mjs - the tracker's label said "Right" for the owner's right fist)
+      singleChir+=.25*(Math.sign(tx*(ay*bz-az*by)+ty*(az*bx-ax*bz)+tz*(ax*by-ay*bx))-singleChir);   // One hand alone: the thumb's side of the palm says which hand it is (+ = physical right; the same test as hand-model.mjs - the tracker's label said "Right" for the author's right fist)
       if(singleChir>.3)singleRole='model';else if(singleChir<-.3)singleRole='stick';if(inputMode==='touch')singleRole='model';   // the physical RIGHT hand is the 3D hand that takes the gun, the physical left stays the joystick; the screen thumbstick never needs a tracked hand
       if(singleRole==='model'){modelIndex=0;handIndex=-1;}}
     window.dbg=Object.assign(window.dbg||{},{hands:n,label:data.handedness?.map(h=>h[0]?(h[0].categoryName+':'+h[0].score.toFixed(2)):'?'),handIndex,modelIndex,wl:window.dbgWL&&n?data.worldLandmarks[0].map(p=>[p.x,p.y,p.z]):undefined});
@@ -153,17 +153,17 @@ function frame(now){
  if(inputMode==='touch'&&!document.hidden&&!demo&&!resting){const v=stick.vector,step=bodyDisplacement(v.x*held.speed*Math.min(.05,dt),v.z*held.speed*Math.min(.05,dt),headLook.heading);dustMap.move(camera.position,step.x,step.z);const moving=Math.hypot(v.x,v.z)>.001;status(moving?'WALKING · release to stop':'Thumbstick ready · drag to walk',moving);$('gestureStats').textContent=moving?'Walking '+Math.round(Math.hypot(v.x,v.z)*100)+'%':'Stopped';}
  if(running&&!resting){
   const movement=held.step(now,dt);
-  // the joystick's own
+  // Joystick smoothing: the joystick's own
   // output jumps as the finger jitters. A 120 ms low-pass on the walking vector removes that without adding lag you
   // can feel, and the default gain slider starts lower.
   {const k=1-Math.exp(-Math.min(.1,dt)/.12);walkF.x+=(movement.dx-walkF.x)*k;walkF.z+=(movement.dz-walkF.z)*k;if(!held.direction&&Math.hypot(walkF.x,walkF.z)<1e-4){walkF.x=walkF.z=0;}}
   const world=bodyDisplacement(walkF.x,walkF.z,headLook.heading),beforeX=camera.position.x,beforeZ=camera.position.z;dustMap.move(camera.position,world.x,world.z);if(held.direction){walkReason=!dustMap.ready?'MAP LOADING':Math.hypot(camera.position.x-beforeX,camera.position.z-beforeZ)<.00001?'BLOCKED BY MAP':'MOVING';}
   if(inputMode!=='touch'&&now-lastResult>450){held.receive(null,now);swipe.update(null,now);trackingUI.draw([],$('cam').videoWidth,$('cam').videoHeight,false,{tip:fingerMode==='index'?8:4,centre:held.centre,viewScale:held.scale,scale:held.effectiveScale,reason:held.reason});handModel.hide();handModelL.hide();walkReason='WAITING FOR TRACKING';status(walkReason);}
   if(!phoneLink){const v=$('cam');   // with the phone tracking there is nothing to capture here; results arrive over the link
-  // the two trackers live in separate workers and each already refuses a second frame while it is busy, so they
+  // The two trackers live in separate workers and each already refuses a second frame while it is busy, so they
   // run side by side instead of taking turns. Sharing one turn meant the hand (13 ms) waited for the face (85 ms) every
   // other frame and both crawled at 6 fps; independently the hand keeps up with the camera and the face runs at its own
-  // pace. (owner: "make all tracking work at the same time, now nothing properly works")
+  // pace.
   const ready=v.readyState>=2;
   if(ready&&!!head?.wantsFrame(now)&&v.currentTime!==lastHeadVideo){lastHeadVideo=v.currentTime;head.capture(v,now);}
   if(ready&&inputMode!=='touch'&&!busy&&v.currentTime!==lastVideo){lastVideo=v.currentTime;busy=true;const capture=now,owner=worker;createImageBitmap(v,{resizeWidth:640,resizeHeight:Math.round(640*v.videoHeight/v.videoWidth),resizeQuality:'low'}).then(bitmap=>{if(worker!==owner||!running){bitmap.close();return;}owner.postMessage({type:'frame',bitmap,time:capture},[bitmap]);}).catch(e=>{busy=false;status('Frame unavailable');$('error').textContent=e.message;});}}

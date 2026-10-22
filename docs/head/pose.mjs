@@ -1,5 +1,5 @@
 // Face orientation from the face-mesh landmarks, the head-rotation filter and the movement gains.
-// Ported from origin/hand-rig-workflow mirror/head/pose.mjs; WindowPose / windowFrustum / firstPersonOrigin
+// Ported from mirror/head/pose.mjs on the hand-rig-workflow branch; WindowPose / windowFrustum / firstPersonOrigin
 // (the historical "window" mode) were dropped, firstPersonRotation was added for the rps_hand first-person camera.
 const clamp = (v, max) => Math.max(-max, Math.min(max, v));
 

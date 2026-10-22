@@ -29,9 +29,7 @@ export function thumbVector(point,centre){
  return {x:x/r*magnitude,z:z/r*magnitude};
 }
 export class ThumbJoystick {
- // `fistCentre` (for the owner: "when it detects the thumb it puts the centre where my finger cannot reach the
- // edges, let alone forward"; "make not moving easier, it constantly follows the thumb - when the thumb is in a fist we
- // stop using it to move"): with it on, a fist is both the stop AND the calibration - the circle jumps to wherever the
+ // `fistCentre`: with it on, a fist is both the stop AND the calibration - the circle jumps to wherever the
  // thumb is resting, so neutral is exact and every direction, forward included, is the same distance away. Off by
  // default, which keeps the original rule (the circle is captured once and never moves) and the tests that check it;
  // the movement page turns it on, and ?fistcentre=0 turns it back off.

@@ -1,6 +1,6 @@
 import * as T from 'three';
 import {GLTFLoader} from 'https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/loaders/GLTFLoader.js';   // rps-hand: the movement page's import map only maps "three"
-// rps-hand: copied from tagirz500/hands-lapse (branch hand-rig-workflow, mirror/avatar). One addition: update() takes a
+// Copied from tagirz500/hands-lapse (hand-rig-workflow branch, mirror/avatar). One addition: update() takes a
 // `facing` yaw (radians) so the body, head and relaxed arms turn with the game heading; the torso lean limit is relative to it.
 const V=a=>new T.Vector3().fromArray(a);
 const identity=new T.Quaternion();

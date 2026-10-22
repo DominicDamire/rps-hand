@@ -18,7 +18,7 @@ const ICE = { iceServers: [
 ] };
 const ROOMS = 8;                 // ids rpsh-room-1..8 are probed for the lobby list
 const PROBE_MS = 2500;
-const CODE_LEN = 3;              // owner: 3 digits are enough to type across the room
+const CODE_LEN = 3;              // 3 digits are enough to type across the room
 const rnd = () => String(Math.floor(10 ** (CODE_LEN - 1) + Math.random() * 9 * 10 ** (CODE_LEN - 1)));
 let wake = null;
 async function keepAwake() {     // a sleeping phone drops the broker socket and its code; ask the screen to stay on while online

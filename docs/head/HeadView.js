@@ -1,7 +1,7 @@
 // Face tracker glue for rps_hand: captures frames, talks to head/worker.mjs, keeps the rotation (ViewPose) and position
 // (SpatialPose) filters and reports the head in the CAMERA frame (x right, y down, z away, metres). It never touches a
 // three.js camera: docs/index.html owns the views and converts to its own frame.
-// Adapted from origin/hand-rig-workflow mirror/head/HeadView.js (which drove the camera and read DOM controls).
+// Adapted from mirror/head/HeadView.js on the hand-rig-workflow branch (which drove the camera and read DOM controls).
 import { ViewPose } from './pose.mjs';
 import { SpatialPose, median } from './spatial.mjs';
 
@@ -57,7 +57,7 @@ export class HeadView {
     } catch (e) { this.busy = false; this.failed = true; this.error = e.message; this.worker.terminate(); return false; }
   }
   // samples: fitHead results captured while the user held still; scaleTo: a measured depth for the same moment
-  // (rps_hand passes the hand's metric depth, decision D1) -> the head's depth scale becomes scaleTo / median depth.
+  // (rps_hand passes the hand's metric depth) -> the head's depth scale becomes scaleTo / median depth.
   calibrate(samples, scaleTo = null) {
     this.spatial.calibrate(samples, scaleTo);
     this.pose.neutral = { ...(this.pose.latest || samples[samples.length - 1]), yaw: median(samples.map(s => s.yaw)), pitch: median(samples.map(s => s.pitch)) };

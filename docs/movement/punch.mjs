@@ -1,5 +1,4 @@
-// Punching, touching and the sounds that go with them (owner: "add a punching thing so I can punch with my hands
-// and this makes sounds too", "make it so my hand can touch things, we still have the no-touching issue").
+// Punching, touching and the sounds that go with them.
 //
 // A free-standing heavy bag next to the shooting range: punch it with a closed fist and it thumps and rocks back, touch
 // it with an open hand and it taps. The hand is also pushed out of the bag and off the table top instead of sliding
@@ -37,7 +36,7 @@ export function setupPunch({ scene, camera, handModel, floorY, at, getGun }) {
   const applied = new THREE.Vector3(), leftAt = new THREE.Vector3(); let pushing = false;   // our own push, taken back each frame so it never accumulates
   let have = false, speed = 0, touching = false, lastHit = -Infinity, lastWhoosh = -Infinity, walked = 0, lastCam = null, hits = 0, touches = 0;
 
-  window.sfx = sfx;   // so a probe (and the owner) can check whether sound is allowed yet
+  window.sfx = sfx;   // so a probe (and a developer) can check whether sound is allowed yet
   const wake = () => sfx.ensure();
   addEventListener("pointerdown", wake, { capture: true });
   addEventListener("keydown", wake, { capture: true });

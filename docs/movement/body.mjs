@@ -1,5 +1,5 @@
-// The player's upper body in the movement map (for the owner: "copy the head, torso, neck and elbow movement
-// from hands-lapse, put them together with our right hand, finish the upper-body tracking"):
+// The player's upper body in the movement map (the head, torso, neck and elbow movement
+// from hands-lapse, put together with the tracked right hand):
 //  - docs/avatar/RiggedAvatar.js + upper-body.glb: hands-lapse's connected 15-bone rig (pelvis, spine, chest, neck, head,
 //    clavicles, upper arms, forearms, twist helpers), eyes glued to the camera, head hidden for the first-person camera
 //    only (the mirror and the other player see the whole body);
@@ -22,7 +22,7 @@ export function setupBody({ scene, camera, handModel, video, getRemote = () => n
   const cur = { head: null };
   const box = document.createElement("div"); box.id = "bodyBox";
   box.style.cssText = "position:fixed;top:64px;left:16px;z-index:5;display:flex;gap:6px;align-items:center;padding:6px 10px;background:#101b25cc;border-radius:8px;font:12px system-ui,sans-serif;color:#dfe8f0";
-  // Head only is the default (owner: "remove the body, shoulders and all, just leave the head"): the rig draws the head
+  // Head only is the default: the rig draws the head
   // alone, and with no body to drive there is no reason to run the pose tracker at all, which gives the hand tracker the
   // GPU back. "seated"/"standing" bring the shoulders, torso and arms back with their tracker.
   box.innerHTML = `<span>Body</span><select id="bodyMode" style="font:inherit"><option value="head">head only</option><option value="seated">seated</option><option value="standing">standing</option><option value="off">off</option></select><button id="bodyCal" type="button" style="font:inherit">Calibrate</button><span id="bodyStatus" style="color:#9fb3c8;max-width:46vw"></span>`;

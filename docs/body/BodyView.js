@@ -36,10 +36,10 @@ export class BodyView {
   }
   wantsFrame(now){
     const nearEdge=this.pose.partial||this.pose.evidence?.length>0;
-    // rps-hand: the arms do not need 15 samples a second, and the hand tracker does need the GPU, so the base
+    // The arms do not need 15 samples a second, and the hand tracker does need the GPU, so the base
     // interval is 150 ms (about 6 a second) instead of 66 ms.
     const interval=this.misses>=3&&!nearEdge?320:Math.max(this.latency,this.head.performance.latency)>65?220:150;
-    // rps-hand: the "two finished face frames earn one body frame" rule and the head.busy check below made all
+    // The "two finished face frames earn one body frame" rule and the head.busy check below made all
     // three trackers queue behind each other. They are separate workers, so each one now just keeps its own interval.
     return this.enabled&&this.head.mode!=='off'&&!document.hidden&&this.ready&&!this.busy&&!this.failed&&
       now-this.lastCapture>=interval&&

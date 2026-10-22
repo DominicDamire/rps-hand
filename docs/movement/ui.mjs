@@ -77,7 +77,7 @@ export function setupUI(){
    for(let i=0;i<21;i++){ctx.fillStyle=i===tip?'#ffdf75':'#e5fff3';ctx.beginPath();ctx.arc(...point(hand[i]),i===tip?w/65:w/160,0,Math.PI*2);ctx.fill();}
    const [x,y]=point(hand[tip]);ctx.strokeStyle=active?'#ffdf75':'#ffffff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,w/38,0,Math.PI*2);ctx.stroke();
   }
-  if(roles&&roles.labels){   // ?labels=1: name each hand. Off by default - the owner wants only the joystick in the panel
+  if(roles&&roles.labels){   // ?labels=1: name each hand. Off by default - only the joystick is shown in the panel
    const shown=hands??[];
    if(roles.model&&roles.model.length===21&&!shown.includes(roles.model)){
     ctx.lineWidth=Math.max(1.5,w/420);ctx.strokeStyle='#5aa9ffcc';

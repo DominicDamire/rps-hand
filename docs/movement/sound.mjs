@@ -1,4 +1,4 @@
-// Synthesized game sounds (owner: "can u add sounds to the game"). Everything is made with WebAudio oscillators
+// Synthesized game sounds. Everything is made with WebAudio oscillators
 // and noise, so there is nothing to download and nothing to keep in the repo. gun.mjs keeps its own bang/clink.
 // The browser only allows audio after a gesture, so ensure() is called from the Start button and from the first punch.
 let ctx = null, master = null;

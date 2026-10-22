@@ -1,8 +1,8 @@
 // The shooting range inside the movement map: a bar-height table with the pistol, cans and ring targets in front of
 // the spawn, a mirror to the front-left, and a body under the camera so the mirror shows a person. The tracked right
 // hand (hand-model.mjs, a child of the camera) picks the gun up, aims and fires through docs/gun.mjs; while the gun
-// is held the hand is drawn in the gripping pose (hand-model's `override`). Added for the owner
-// ("take v62, add a table, a gun, a shooting range and a mirror"); the player's body is body.mjs.
+// is held the hand is drawn in the gripping pose (hand-model's `override`).
+// The player's body is body.mjs.
 import * as THREE from "three";
 import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/objects/Reflector.js";
 import { makeGun, fingersUp } from "../gun.mjs?v=map9";
@@ -36,7 +36,7 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
     gun = await makeGun({ scene, worldObjs: dustMap.meshes, floorY: tableFloor, url: new URL("../gun.glb", import.meta.url).href,
       place: { pos: new THREE.Vector3(spawn.x, tableFloor + TABLE_H, tableZ), yaw: 0 }, hold: Q.has("grab") });
     bag = setupPunch({ scene, camera, handModel, floorY: tableFloor, at: new THREE.Vector3(spawn.x + 0.85, 0, spawn.z - 0.15), getGun: () => gun });   // a heavy bag beside the table, within arm's reach
-    const mw = 8, mh = 4;   // a wall-sized mirror (owner: "much bigger, like 15 times" - about 15x the old 1.1 x 2.0 m area), 6.4 m to the front-left, facing the spawn: the whole body fits with room to walk
+    const mw = 8, mh = 4;   // a wall-sized mirror (about 15x the old 1.1 x 2.0 m area), 6.4 m to the front-left, facing the spawn: the whole body fits with room to walk
     // A PC can afford a proper reflection; a phone cannot. ?mirrorpx= overrides the width.
     const PC = !isPhone();
     const mpx = +Q.get("mirrorpx") || (PC ? 1024 : 384);
