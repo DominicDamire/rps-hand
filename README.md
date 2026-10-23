@@ -12,7 +12,7 @@ Rock-paper-scissors in the browser with live hand tracking: MediaPipe finds the 
 
 - Tracks one hand from the front camera with MediaPipe HandLandmarker in a Web Worker (GPU, with a CPU fallback) and draws the landmarks over the mirrored video.
 - Reads the gesture from the extended fingers: none up = rock, three or more = paper, index and middle only = scissors.
-- Plays a round against a random opponent whose move is drawn when you press **Play round**. After a 3-second countdown it scores only a gesture seen in the last 500 ms and held for at least 400 ms; otherwise it asks you to retry and leaves the score unchanged.
+- Plays a round against a random opponent whose move is drawn when you press **Play round**. After a 3-second countdown it scores only a gesture that is still being tracked (seen within the last 500 ms, or within 2.5 result intervals on a slower tracker) and held for at least 400 ms; otherwise it asks you to retry and leaves the score unchanged.
 - Drives a rigged, textured 3D hand with a short forearm (three.js) from the tracked joints. **VIEW** switches between a mirror view and a first-person view projected from your head position (MediaPipe PoseLandmarker in a second worker).
 - Works without a camera: `?img=victory.jpg` feeds a still photo through the same tracker. If camera access is denied, the page offers the sample and a retry button.
 - Fits phone screens (camera and 3D panes side by side in a strip, controls below, 44 px buttons, the whole camera frame visible) and levels the 3D room with the phone's tilt sensor.
@@ -56,13 +56,13 @@ node tools/product-journey.cjs            # full round, reset, mobile layout, de
 python test_rps_hand.py                   # desktop: bone retargeting, finger-count fallback, still-image self-check
 ```
 
-CI (`.github/workflows/logic-tests.yml`) runs `npm test`, `test:browser` and `test:alignment` on every push. `npm test` currently reports 690 passing checks in 229 files; many of those files are copies inside archived lab versions, so they are not 690 separate features. `web_test.py`, `web_hard_test.py` (labelled photos and clips from `fetch_test_media.py`, run in the system Edge) and `web_shot.py` are older Python harnesses outside CI.
+CI (`.github/workflows/logic-tests.yml`) runs `npm test`, `test:browser` and `test:alignment` on every push. `npm test` currently reports 692 passing checks in 229 files; many of those files are copies inside archived lab versions, so they are not 692 separate features. `web_test.py`, `web_hard_test.py` (labelled photos and clips from `fetch_test_media.py`, run in the system Edge) and `web_shot.py` are older Python harnesses outside CI.
 
 ## Experiments on the same site
 
 Research prototypes, not part of the game:
 
-- [Movement](https://d14life.github.io/rps-hand/movement/): walk the Dust II map with a camera thumb joystick and head look, with a phone-as-camera link, shooting range, punching bag and a ball-joint doll as the player's body.
+- [Movement](https://d14life.github.io/rps-hand/movement/): walk a flat test floor (the map used during development is not included) with a camera thumb joystick and head look, with a phone-as-camera link, shooting range, punching bag and a ball-joint doll as the player's body.
 - [Geometry lab](https://d14life.github.io/rps-hand/hand-pnp-photo/): palm pose (PnP) from a photo-fitted reference hand, alignment checks, JSON export.
 - [Face & hand lab](https://d14life.github.io/rps-hand/hand-demo/): face and hand tracking together, one-hand sweep and depth experiments.
 
@@ -71,7 +71,7 @@ Research prototypes, not part of the game:
 This repository is a fork of the team project **[tagirz500/hands-lapse](https://github.com/tagirz500/hands-lapse)** (first published as `rps-hand`) by **tagirz500** and **ArmanFardin**. Their commits are kept in this history as they authored them.
 
 - **tagirz500** built the original web hand tracker (HandLandmarker in a worker, One Euro filtering with prediction, 3D hand placement from world and image landmarks, two hands with Rapier physics, a first-person view) and its tuning builds, the Python desktop app and its test, the web test harness and test-media script, and in the movement demo the phone-as-camera QR link and multiplayer.
-- **ArmanFardin** built the movement prototype (the Dust II map with walking collisions and stair stepping, the camera thumb joystick, head-look turning and their tests) and the MediaPipe 3D hand-rig phone test in `docs/rig-test/`, a build of bandinopla's three-mediapipe-rig demo.
+- **ArmanFardin** built the movement prototype (walking with map collisions and stair stepping, the camera thumb joystick, head-look turning and their tests).
 
 **Damire Zalyatov's additions** in this fork:
 
@@ -85,7 +85,7 @@ This repository is a fork of the team project **[tagirz500/hands-lapse](https://
 
 ## Licence
 
-Neither the upstream project nor this fork has a licence file, so the project code is not licensed for reuse; copyright stays with its authors. Third-party parts keep their own licences: MediaPipe (Apache-2.0, texts in `docs/head/` and `docs/google-hands/`), three.js and MediaPipe Tasks Vision (loaded from jsDelivr), MQTT.js and QRCode.js (`docs/vendor/`). Most test photos and clips in `docs/test/` come from Wikimedia Commons (listed in `fetch_test_media.py`).
+Neither the upstream project nor this fork has a licence file, so the project code is not licensed for reuse; copyright stays with its authors. Third-party parts keep their own licences: MediaPipe (Apache-2.0, text in `docs/head/`), three.js and MediaPipe Tasks Vision (loaded from jsDelivr), MQTT.js and QRCode.js (both MIT, with their licence texts next to the files in `docs/vendor/`). Most test photos and clips in `docs/test/` come from Wikimedia Commons (listed in `fetch_test_media.py`). The hand-scan meshes (`docs/hand*.glb`) were rigged from a 3D scan of a real hand (hand1.OBJ) supplied by the project owner.
 
 ## Status / limits
 
