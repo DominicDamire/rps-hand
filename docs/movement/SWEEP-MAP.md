@@ -1,4 +1,4 @@
-# Dust II with Sweep tracking
+# Sweep tracking on the movement map
 
 Open sweep.html?v=map9. Reuses Sweep 2.4.18 depth, calibration, constrained two-hand articulation and the current smooth hand geometry. Uses the head/shoulder bust only. The original movement page remains available.
 

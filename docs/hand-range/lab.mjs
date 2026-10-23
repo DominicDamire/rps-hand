@@ -612,7 +612,7 @@ function applyDisplayOffset(s,result){
 if(document.body.dataset.mapLab){
  const {installMapLab}=await import('./map.mjs?v=grip1');
  mapLab=await installMapLab({scene,renderer,rig,tips,driver:directDriver(rig,tips),head:combined,hands:()=>allHands,aspect:()=>captureAspect,stop:stopCamera});
- controls.enabled=false;document.title='Dust II · Final hands + tracked head';document.querySelector('header b').textContent='Dust II · Final hands + tracked head';
+ controls.enabled=false;document.title='Shooting range · Final hands + tracked head';document.querySelector('header b').textContent='Shooting range · Final hands + tracked head';
 }
 
 if(!document.body.dataset.mapLab)firstPerson=installFirstPersonCamera({version:'Sweep',scene,renderer,getHead:()=>combined,isCalibrating:()=>depthExperiment?.recording||depthExperiment?.checking,onViewChange:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();}});

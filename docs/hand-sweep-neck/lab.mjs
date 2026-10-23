@@ -667,7 +667,7 @@ function applyDisplayOffset(s,result){
 if(document.body.dataset.mapLab){
  const {installMapLab}=await import('../movement/sweep-map.mjs?v=map9');
  mapLab=await installMapLab({scene,renderer,rig,tips,driver:directDriver(rig,tips),head:combined,hands:()=>allHands,aspect:()=>captureAspect,stop:stopCamera});
- controls.enabled=false;document.title='Dust II · Sweep hands';document.querySelector('header b').textContent='Dust II · Sweep hands';
+ controls.enabled=false;document.title='Sweep hands';document.querySelector('header b').textContent='Sweep hands';
 }
 
 if(!document.body.dataset.mapLab)firstPerson=installFirstPersonCamera({version:'Sweep',scene,renderer,getHead:()=>combined,getAim:()=>editorGun?.getAim(),getAimHidden:()=>[rig.root,markerGroup,gizmo,modelLines,secondLines],isCalibrating:()=>depthExperiment?.recording||depthExperiment?.checking,onViewChange:()=>{controls.enabled=false;$('viewMode').value='mirror';setViewMode();}});

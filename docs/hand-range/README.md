@@ -1,6 +1,6 @@
 # Final hand shooting range
 
-Entry: `hand-range/`. Reuses the Dust II map, mirror, targets, movement joystick and saved gun composition.
+Entry: `hand-range/`. Reuses the movement map (a flat floor in this repository), mirror, targets, movement joystick and saved gun composition.
 
 - Hands: shared `hand-live-limits/hand-driver.mjs`, original palm-photo proportions and shell-tip extensions. Sweep palm depth; 2D segment fitting; relative finger-depth hint 0.5; straight-depth correction; post-fit joint limits, coupling, contact and jitter filtering. Two hands enabled.
 - Crossing: reversed adjacent landmark order releases the upper-joint-based sideways lock. Base flexion still limits sideways movement for curled knuckles. Crossing allowance is separately adjustable (40 degrees initially); normal base limits remain 30 backwards / 90 forward / 25 sideways.

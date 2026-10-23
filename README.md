@@ -8,6 +8,22 @@ Rock-paper-scissors in the browser with live hand tracking: MediaPipe finds the 
 
 <img src="docs/screenshot-mobile.png" alt="The same page on a 390 px wide phone screen" width="240">
 
+## Modes
+
+Later work built on the same tracker, all running in the browser. The [live page](https://dominicdamire.github.io/rps-hand/#modes) lists them below the game.
+
+| | |
+|---|---|
+| <a href="https://dominicdamire.github.io/rps-hand/hand-pnp-photo/?v=motion5"><img src="docs/modes/pnp-depth-lab.png" alt="PnP depth lab" width="260"></a> | **[PnP depth lab](https://dominicdamire.github.io/rps-hand/hand-pnp-photo/?v=motion5)**<br>Palm pose from a single camera by PnP depth: a fixed-size rigged 3D hand copies your tracked hand live next to a tracked alien head, with a pixel-error readout.<br><sub>Camera</sub> |
+| <a href="https://dominicdamire.github.io/rps-hand/hand-range/?v=range1"><img src="docs/modes/shooting-range.png" alt="Shooting range" width="260"></a> | **[Shooting range](https://dominicdamire.github.io/rps-hand/hand-range/?v=range1)**<br>First-person range with two tracked hands, a head-tracked view, a pistol with a saved grip and five targets.<br><sub>Camera</sub> |
+| <a href="https://dominicdamire.github.io/rps-hand/hand-pnp-gun/?v=motion5"><img src="docs/modes/pnp-gun-lab.png" alt="PnP gun lab" width="260"></a> | **[PnP gun lab](https://dominicdamire.github.io/rps-hand/hand-pnp-gun/?v=motion5)**<br>The PnP hand with a pistol: pick it up by closing three fingers, bend the index to fire.<br><sub>Camera</sub> |
+| <a href="https://dominicdamire.github.io/rps-hand/gun-lab/"><img src="docs/modes/gun-grip-lab.png" alt="Gun grip lab" width="260"></a> | **[Gun grip lab](https://dominicdamire.github.io/rps-hand/gun-lab/)**<br>Pose every finger joint of the gun grip, preview it on the 3D hand and export it as JSON. No camera needed; a camera range is linked from the page.<br><sub>No camera needed</sub> |
+| <a href="https://dominicdamire.github.io/rps-hand/movement/"><img src="docs/modes/movement.png" alt="Movement" width="260"></a> | **[Movement](https://dominicdamire.github.io/rps-hand/movement/)**<br>Walk, shoot and punch a bag with a finger joystick and head look, on a flat test floor, with a phone-as-camera link.<br><sub>Camera</sub> |
+| <a href="https://dominicdamire.github.io/rps-hand/hand-demo/"><img src="docs/modes/alien-head-lab.png" alt="Alien head lab" width="260"></a> | **[Alien head lab](https://dominicdamire.github.io/rps-hand/hand-demo/)**<br>Face and hands tracked together: a 3D alien head, neck and shoulders beside the hands, plus one-hand sweep and depth experiments. Has a sample image.<br><sub>Camera or sample</sub> |
+| <a href="https://dominicdamire.github.io/rps-hand/hand-ninja/"><img src="docs/modes/hand-ninja.png" alt="Hand Ninja" width="260"></a> | **[Hand Ninja](https://dominicdamire.github.io/rps-hand/hand-ninja/)**<br>Fruit Ninja with bare hands: a phone tracks your hands, a PC shows the fruit; pair them with a code or QR. Fast passes slice, fists crush.<br><sub>Phone + PC</sub> |
+
+A camera mode needs camera access on HTTPS or `localhost`; the lab pages also have a sample-image button. Hand Ninja pairs two browsers through the public PeerJS broker, so it needs internet access but no server of ours.
+
 ## What it does
 
 - Tracks one hand from the front camera with MediaPipe HandLandmarker in a Web Worker (GPU, with a CPU fallback) and draws the landmarks over the mirrored video.
@@ -58,14 +74,6 @@ python test_rps_hand.py                   # desktop: bone retargeting, finger-co
 
 CI (`.github/workflows/logic-tests.yml`) runs `npm test`, `test:browser` and `test:alignment` on every push. `npm test` currently reports 692 passing checks in 229 files; many of those files are copies inside archived lab versions, so they are not 692 separate features. `web_test.py`, `web_hard_test.py` (labelled photos and clips from `fetch_test_media.py`, run in the system Edge) and `web_shot.py` are older Python harnesses outside CI.
 
-## Experiments on the same site
-
-Research prototypes, not part of the game:
-
-- [Movement](https://dominicdamire.github.io/rps-hand/movement/): walk a flat test floor (the map used during development is not included) with a camera thumb joystick and head look, with a phone-as-camera link, shooting range, punching bag and a ball-joint doll as the player's body.
-- [Geometry lab](https://dominicdamire.github.io/rps-hand/hand-pnp-photo/): palm pose (PnP) from a photo-fitted reference hand, alignment checks, JSON export.
-- [Face & hand lab](https://dominicdamire.github.io/rps-hand/hand-demo/): face and hand tracking together, one-hand sweep and depth experiments.
-
 ## Credits
 
 This repository is a fork of the team project **[tagirz500/hands-lapse](https://github.com/tagirz500/hands-lapse)** (first published as `rps-hand`) by **tagirz500** and **ArmanFardin**. Their commits are kept in this history as they authored them.
@@ -83,12 +91,14 @@ This repository is a fork of the team project **[tagirz500/hands-lapse](https://
 - Hand-tracking geometry labs (`docs/hand-*`): PnP and sweep fits, depth experiments, touch calibration and joint limits.
 - The playable round layer (`docs/rps-game.mjs`, `docs/rps-ui.mjs`), the mobile layout, camera-denial recovery, the browser tests and CI.
 
+**Third-party components:** [MediaPipe](https://github.com/google-ai-edge/mediapipe) (Apache-2.0) for hand, face and pose tracking, [three.js](https://threejs.org) and three-mesh-bvh (MIT), [PeerJS](https://peerjs.com) and QRCode.js (MIT) for the phone pairing. **Hand Ninja** (`docs/hand-ninja/`) was first published as [tagirz500/hand-ninja](https://github.com/tagirz500/hand-ninja); its files are copied here (one comment reworded).
+
 ## Licence
 
 Neither the upstream project nor this fork has a licence file, so the project code is not licensed for reuse; copyright stays with its authors. Third-party parts keep their own licences: MediaPipe (Apache-2.0, text in `docs/head/`), three.js and MediaPipe Tasks Vision (loaded from jsDelivr), MQTT.js and QRCode.js (both MIT, with their licence texts next to the files in `docs/vendor/`). Most test photos and clips in `docs/test/` come from Wikimedia Commons (listed in `fetch_test_media.py`). The hand-scan meshes (`docs/hand*.glb`) were rigged from a 3D scan of a real hand (hand1.OBJ) supplied by the project owner.
 
 ## Status / limits
 
-Experimental. CI checks one sample photo (`victory.jpg`) in headless Chromium; tracking accuracy and frame rate on real phones have not been measured, and the desktop app has only been checked on still images (`test_rps_hand.py`), not with a live webcam.
+Experimental. The modes above were opened in Chrome with a fake camera fed from a still photo, so tracking quality on a real webcam or phone is unmeasured; Hand Ninja has no automated test in this repository. CI checks one sample photo (`victory.jpg`) in headless Chromium; tracking accuracy and frame rate on real phones have not been measured, and the desktop app has only been checked on still images (`test_rps_hand.py`), not with a live webcam.
 
 Maintained by Damire Zalyatov · base project by tagirz500 and ArmanFardin.

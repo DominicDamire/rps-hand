@@ -12,7 +12,7 @@ export class DustMap {
    const materials=await new MTLLoader().setPath(base).loadAsync('de_dust2.mtl');materials.preload();
    obj=await new OBJLoader().setMaterials(materials).setPath(base).loadAsync('de_dust2.obj');
   }catch(e){
-   // The Dust II map files are not included in this repository. Without them, walk on one flat 80 x 80 m floor so the pages and the shooting range still work.
+   // The map files are not included in this repository. Without them, walk on one flat 80 x 80 m floor so the pages and the shooting range still work.
    console.warn('Map not found, using a flat floor:',e?.message??e);
    const geometry=new THREE.PlaneGeometry(80,80).rotateX(-Math.PI/2);computeBoundsTree.call(geometry);
    const ground=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color:0x8a959d,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1}));ground.raycast=acceleratedRaycast;

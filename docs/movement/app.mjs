@@ -45,7 +45,7 @@ $('quick').onclick=()=>{$('rooms').textContent='looking for a player…';ensureN
 scene.background=new THREE.Color('#abc9d9');scene.fog=new THREE.Fog('#abc9d9',90,180);
 {const q=new URLSearchParams(location.search),r=+q.get('reach'),d=q.get('drop');if(r>0)handView.reach=r;if(d!==null&&Number.isFinite(+d))handView.drop=+d;}window.handView=handView;   // ?reach=1 restores the old 1:1 arm
 const dustMap=new DustMap(scene);const shooter=setupShooter({scene,camera,dustMap,handModel});window.shooter=shooter;window.dustMap=dustMap;const bodyRig=setupBody({scene,camera,handModel,handModelL,video:$('cam'),getRemote:()=>phoneLink});window.bodyRig=bodyRig;window.headLook=headLook;window.movementBuild=90;
-dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Dust II · auto-step on';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
+dustMap.load().then(()=>{camera.position.copy(dustMap.spawn);$('mapStatus').textContent='Auto-step on';}).catch(e=>{$('mapStatus').textContent='Map failed to load';$('error').textContent=e.message;});
 function resize(){renderer.setPixelRatio(Math.min(1,Math.sqrt(900000/(innerWidth*innerHeight))));renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();handView.aspect=camera.aspect;}addEventListener('resize',resize);resize();
 let head=null,lastHeadVideo=-1,lastFrameTime=0,lastHUD=-Infinity,phoneLink=null;const hf={n:0,t:performance.now()},dbg=window.dbg=window.dbg||{};let headSeen=false;
 // Jump on a right-hand tap: a tap = the thumb tip meets

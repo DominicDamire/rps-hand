@@ -46,7 +46,7 @@ export function setupShooter({ scene, camera, dustMap, handModel, hud }) {
     // The player's own head sits on its own layer so the first-person camera does not look at the inside of it. The
     // mirror has to put that layer back, or you see a headless body looking at you.
     try { mirror.getReflectionCamera?.(camera)?.layers.enable(1); } catch (e) { console.warn("mirror layers", e); }
-    // A mirror draws the WHOLE map a second time, every frame, and Dust II is not small: at full rate it cost 25 page fps
+    // A mirror draws the WHOLE map a second time, every frame, and a large map is not small: at full rate it cost 25 page fps
     // and dragged the trackers down with it (hand 12 fps, face inference 89 ms) because they share the GPU. Measured with
     // it hidden: 289 page fps, hand 28, face 22 ms. So: refresh the reflection only when the mirror is actually on screen,
     // and then every third frame. A reflection three frames old is invisible to the eye; the frame rate is not.
