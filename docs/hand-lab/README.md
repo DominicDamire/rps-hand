@@ -16,7 +16,7 @@ Restores the unchanged v80 doll hand geometry, original thumb lengths and attach
 
 Validation: 28 automated tests pass. Real-asset geometry checks fit all four thumb contacts to under 0.2 mm. A clean static hand photo verifies the preview/model mirror direction. Live phone tracking, exact personal proportions and metric camera depth are not guaranteed; 2D overlap can falsely suggest contact. Changes are lab-only. Private camera screenshots are excluded from the repository.
 
-Live: https://d14life.github.io/rps-hand/hand-lab/
+Live: https://dominicdamire.github.io/rps-hand/hand-lab/
 
 A separate desktop editor using the original v80 doll asset and fixed joint attachments. It does not modify the movement game or its saved settings.
 

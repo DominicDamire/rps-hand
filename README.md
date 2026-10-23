@@ -2,7 +2,7 @@
 
 Rock-paper-scissors in the browser with live hand tracking: MediaPipe finds the 21 joints of your hand and a rigged 3D hand copies the pose in real time.
 
-**Live demo:** https://d14life.github.io/rps-hand/ · no camera? [Try the sample image](https://d14life.github.io/rps-hand/?img=victory.jpg)
+**Live demo:** https://dominicdamire.github.io/rps-hand/ · no camera? [Try the sample image](https://dominicdamire.github.io/rps-hand/?img=victory.jpg)
 
 ![RPS Hand in sample mode: the tracked peace sign on the left, the 3D hand copying it on the right](docs/screenshot.png)
 
@@ -27,7 +27,7 @@ HTML and ES modules with no build step · three.js 0.186 · MediaPipe Tasks Visi
 ## Run it
 
 ```sh
-git clone https://github.com/d14life/rps-hand.git
+git clone https://github.com/DominicDamire/rps-hand.git
 cd rps-hand
 python3 -m http.server 8765 --bind 127.0.0.1 --directory docs
 # open http://127.0.0.1:8765/  or, without a camera, http://127.0.0.1:8765/?img=victory.jpg
@@ -62,9 +62,9 @@ CI (`.github/workflows/logic-tests.yml`) runs `npm test`, `test:browser` and `te
 
 Research prototypes, not part of the game:
 
-- [Movement](https://d14life.github.io/rps-hand/movement/): walk a flat test floor (the map used during development is not included) with a camera thumb joystick and head look, with a phone-as-camera link, shooting range, punching bag and a ball-joint doll as the player's body.
-- [Geometry lab](https://d14life.github.io/rps-hand/hand-pnp-photo/): palm pose (PnP) from a photo-fitted reference hand, alignment checks, JSON export.
-- [Face & hand lab](https://d14life.github.io/rps-hand/hand-demo/): face and hand tracking together, one-hand sweep and depth experiments.
+- [Movement](https://dominicdamire.github.io/rps-hand/movement/): walk a flat test floor (the map used during development is not included) with a camera thumb joystick and head look, with a phone-as-camera link, shooting range, punching bag and a ball-joint doll as the player's body.
+- [Geometry lab](https://dominicdamire.github.io/rps-hand/hand-pnp-photo/): palm pose (PnP) from a photo-fitted reference hand, alignment checks, JSON export.
+- [Face & hand lab](https://dominicdamire.github.io/rps-hand/hand-demo/): face and hand tracking together, one-hand sweep and depth experiments.
 
 ## Credits
 

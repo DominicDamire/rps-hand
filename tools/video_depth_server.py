@@ -39,7 +39,7 @@ input_size=args.input_size
 lock = threading.Lock()
 last_source = None
 last_shape = None
-allowed = {'https://d14life.github.io', 'http://127.0.0.1:8776', 'http://localhost:8776', 'http://127.0.0.1:8788', 'http://localhost:8788'}
+allowed = {'https://dominicdamire.github.io', 'http://127.0.0.1:8776', 'http://localhost:8776', 'http://127.0.0.1:8788', 'http://localhost:8788'}
 
 def clear_cache():
     model.transform = None

@@ -1,6 +1,6 @@
 # Combined Hands + Head Lab V18
 
-Live: https://d14life.github.io/rps-hand/hand-combined/?v=18
+Live: https://dominicdamire.github.io/rps-hand/hand-combined/?v=18
 
 This is the combined lab, based on the V17 direct-lines hand code. One scene contains both original doll hands and the existing alien.glb head/shoulder bust. Face orientation, eye gaze and shoulder rotation drive the black bust. No lip morphs or mouth animation are applied.
 

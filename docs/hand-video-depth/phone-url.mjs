@@ -3,7 +3,7 @@
 export function phoneCameraURL(moduleURL,id,quality='720'){
  const url=new URL('video-camera.html',moduleURL);
  if(['127.0.0.1','localhost','[::1]'].includes(url.hostname)){
-  url.href='https://d14life.github.io/rps-hand/hand-video-depth/video-camera.html';
+  url.href='https://dominicdamire.github.io/rps-hand/hand-video-depth/video-camera.html';
  }
  url.searchParams.set('pair',id);
  url.searchParams.set('quality',['480','720','1080'].includes(quality)?quality:'720');

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import {phoneCameraURL} from '../shared-phone/phone-url.mjs';
 const id='handlab-00000000-0000-0000-0000-000000000000';
-for(const base of ['http://127.0.0.1:8788/shared-phone/video-link.mjs','http://localhost:8776/shared-phone/video-link.mjs','https://d14life.github.io/rps-hand/shared-phone/video-link.mjs']){
- const u=phoneCameraURL(base,id,'1080');assert.equal(u.origin,'https://d14life.github.io');assert.equal(u.pathname,'/rps-hand/hand-pnp-photo/video-camera.html');assert.equal(u.searchParams.get('pair'),id);assert.equal(u.searchParams.get('quality'),'1080');
+for(const base of ['http://127.0.0.1:8788/shared-phone/video-link.mjs','http://localhost:8776/shared-phone/video-link.mjs','https://dominicdamire.github.io/rps-hand/shared-phone/video-link.mjs']){
+ const u=phoneCameraURL(base,id,'1080');assert.equal(u.origin,'https://dominicdamire.github.io');assert.equal(u.pathname,'/rps-hand/hand-pnp-photo/video-camera.html');assert.equal(u.searchParams.get('pair'),id);assert.equal(u.searchParams.get('quality'),'1080');
 }
 let peer,received,cameraRequests=0,channel;
 globalThis.window={Peer:true,QRCode:true};globalThis.addEventListener=()=>{};globalThis.removeEventListener=()=>{};
