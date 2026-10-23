@@ -7,8 +7,17 @@ export class DustMap {
  constructor(scene){this.scene=scene;this.ready=false;this.meshes=[];this.ray=new THREE.Raycaster();this.spawn=new THREE.Vector3();this.eye=1.65;}
  async load(){
   const base=new URL('./dust2/',import.meta.url).href;
-  const materials=await new MTLLoader().setPath(base).loadAsync('de_dust2.mtl');materials.preload();
-  const obj=await new OBJLoader().setMaterials(materials).setPath(base).loadAsync('de_dust2.obj');
+  let obj;
+  try{
+   const materials=await new MTLLoader().setPath(base).loadAsync('de_dust2.mtl');materials.preload();
+   obj=await new OBJLoader().setMaterials(materials).setPath(base).loadAsync('de_dust2.obj');
+  }catch(e){
+   // The Dust II map files are not included in this repository. Without them, walk on one flat 80 x 80 m floor so the pages and the shooting range still work.
+   console.warn('Map not found, using a flat floor:',e?.message??e);
+   const geometry=new THREE.PlaneGeometry(80,80).rotateX(-Math.PI/2);computeBoundsTree.call(geometry);
+   const ground=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color:0x8a959d,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1}));ground.raycast=acceleratedRaycast;
+   this.scene.add(ground,new THREE.GridHelper(80,80,0x5c6770,0x6f7a83));this.meshes=[ground];this.spawn.set(0,this.eye,0);this.ready=true;return;
+  }
   obj.rotation.x=-Math.PI/2;obj.scale.setScalar(.0254);this.scene.add(obj);obj.updateMatrixWorld(true);
   obj.traverse(m=>{if(m.isMesh){m.geometry.computeBoundingBox();const many=Array.isArray(m.material),mats=many?m.material:[m.material];const basic=mats.map(old=>new THREE.MeshBasicMaterial({map:old.map,color:old.color,side:THREE.DoubleSide}));m.material=many?basic:basic[0];this.meshes.push(m);}});
   // Collision uses one position-only mesh, without thousands of material groups.

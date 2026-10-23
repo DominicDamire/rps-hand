@@ -76,7 +76,7 @@ const SHOW_LINES = Q.get("lines") === "1";   // green skeleton + dots on the 3D 
 const PALMS_ONLY = Q.get("arms") !== "1";   // default: hands from the wrist only
 const GUN = Q.get("gun") === "1";            // a pistol on a table: close the hand on it to pick it up, curl the index to fire, open the hand to drop it (?gun=0 off, ?grab=1 holds at once)
 const FINGER_FAT = Q.get("fat") ? +Q.get("fat") : 1.3;   // width scale of the rigged hand (fingers looked too thin)
-const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "arm";   // the author's rigged arms model with its own textures (the one model we stick to)   // default: the author's pre-rigged arms (arm_L/arm_R.glb); ?skin=hand.glb = the scan rig, ?skin=thing = the Thing rig, ?skin=0 = capsules
+const SKIN_URL = Q.get("skin") === "0" ? null : Q.get("skin") || "arm";   // the author's rigged arms model with its own textures (the one model we stick to)   // default: the author's pre-rigged arms (arm_L/arm_R.glb); ?skin=hand.glb = the scan rig, ?skin=0 = capsules
 const DS = Q.get("ds") != null ? +Q.get("ds") : 480;   // tracker input width after downscale (?ds=0 = the full camera frame). MediaPipe resizes to 192/224 anyway; 320 lost far hands
 const RVFC = Q.get("rvfc") !== "0";                        // start the tracker from requestVideoFrameCallback (?rvfc=0 = poll currentTime in rAF, the old way)
 const HAND_SHADOW = Q.get("shadow") === "1";               // the skin casts a shadow: a second skinning pass over 79 k triangles per hand, off by default (props still cast)
