@@ -2,6 +2,8 @@
 
 Rock-paper-scissors in the browser with live hand tracking: MediaPipe finds the 21 joints of your hand and a rigged 3D hand copies the pose in real time.
 
+![Demo: a tracked hand goes from scissors to paper to rock and the rigged 3D hand beside it copies each pose](docs/demo.gif)
+
 **Live demo:** https://dominicdamire.github.io/rps-hand/ · no camera? [Try the sample image](https://dominicdamire.github.io/rps-hand/?img=victory.jpg)
 
 ![RPS Hand in sample mode: the tracked peace sign on the left, the 3D hand copying it on the right](docs/screenshot.png)
